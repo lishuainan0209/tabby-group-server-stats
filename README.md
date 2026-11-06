@@ -2,7 +2,7 @@
 
 中文 | [English](README.en.md)
 
-为 [Tabby](https://github.com/Eugeny/tabby) 提供可编辑的服务器指标、悬停详情和多标签组。当前版本为 **1.7.1**，新增 GitHub 预设导入、内置指标排序、磁盘总余量和更明确的登录用户、网络流量详情。
+为 [Tabby](https://github.com/Eugeny/tabby) 提供可编辑的服务器指标、悬停详情和多标签组。当前版本为 **1.7.2**，进一步压缩静态底栏高度，支持网速 MB/s 三位小数及容量数字分列对齐。
 
 本项目基于 [Akkariin 的 tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats) 二次开发，继续使用 MIT 许可证。版本号不代表已经发布到 npm。
 
@@ -85,7 +85,7 @@ CPU、内存、磁盘是单标签；网络是静态竖排标签组，默认显�
 
 “恢复默认”只删除当前内置项的自定义覆盖，保留它的顶层启用开关和排列顺序，不影响其他内置项或自定义标签。网络恢复默认会恢复该组的出厂主、子标签配置。
 
-内置 CPU、内存、磁盘和网络均包含 Linux/macOS 适配，多数其他离线预设面向 Linux。网络下载、上传主值分别是当前接收、发送速率，单位为 KiB/s；各自悬停显示对应方向的累计 GiB 和参与统计的网卡。默认优先选择默认路由网卡，没有可用默认路由时回退到符合条件的非回环网卡。**累计量从接口建立或计数器重置起计算，不是本次 SSH 登录后的流量**。
+内置 CPU、内存、磁盘和网络均包含 Linux/macOS 适配，多数其他离线预设面向 Linux。网络下载、上传主值分别是当前接收、发送速率，显示单位为 MB/s（十进制），固定三位小数并带千位逗号；采集命令仍输出 KiB/s，颜色规则继续按原始数值判断；各自悬停显示对应方向的累计 GiB 和参与统计的网卡。默认优先选择默认路由网卡，没有可用默认路由时回退到符合条件的非回环网卡。**累计量从接口建立或计数器重置起计算，不是本次 SSH 登录后的流量**。
 
 目标系统需要提供 `timeout`、`gtimeout` 或 `setsid` 之一，用于命令超时保护。
 
@@ -161,7 +161,7 @@ npm.cmd run test:ui
 npm.cmd pack
 ```
 
-`npm pack` 会再次执行类型检查、普通测试和正式构建，生成 `tabby-group-server-stats-1.7.1.tgz`；构建文件在 `dist/`。浏览器测试使用真实 Angular 组件与模拟数据，命令测试在本机 shell 运行；真实 SSH 命令验证与 Tabby 分屏验收需要分别记录结果。
+`npm pack` 会再次执行类型检查、普通测试和正式构建，生成 `tabby-group-server-stats-1.7.2.tgz`；构建文件在 `dist/`。浏览器测试使用真实 Angular 组件与模拟数据，命令测试在本机 shell 运行；真实 SSH 命令验证与 Tabby 分屏验收需要分别记录结果。
 
 本 fork 继续使用 `plugin.serverStats` 配置，方便沿用已有指标。**同一个 Tabby 实例只启用原版或本 fork 其中一个**，避免重复采集。推荐先使用独立便携版测试。完整的本地安装命令、验收项目和 npm/Tabby 发布步骤见 [打包、测试与发布](PUBLISHING.zh-CN.md)。
 
@@ -170,3 +170,9 @@ npm.cmd pack
 原项目为 [kasuganosoras/tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats)，原作者 Akkariin，版权声明为 Copyright (c) 2023 Akkariin Meiko。[LICENSE](LICENSE) 保留原始 MIT 全文，[NOTICE](NOTICE) 说明本 fork 的修改和来源。新增 26 款监控图标同样采用 MIT 许可证；依赖及其许可证声明保留各自要求。
 
 问题反馈和改进建议请提交到 [本项目 Issues](https://github.com/lishuainan0209/tabby-group-server-stats/issues)。分享预设时请附命令所需工具、显示含义和来源许可证。
+
+### 1.7.2 显示修正
+
+- 网速由 KiB/s 换算为 MB/s，固定三位小数。
+- 静态竖排标签取消行间空隙，用细线分隔；底栏上下留白缩小。
+- 同组数值右对齐，容量详情中斜杠两侧数字分别对齐，悬停弹窗保留较宽松行距。

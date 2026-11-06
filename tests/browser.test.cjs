@@ -228,18 +228,90 @@ async function main() {
         console.log('PASS hidden failures stay out of static/popup/carousel views and return after a successful sample')
         await mutate(() => {
             const h = window.harness
+            h.ratioPreviewSnapshot = { metrics: h.metrics, group: h.group, stats: h.stats, detailResults: h.detailResults }
+            h.metrics = []
+            const metric = (id, label) => ({ id, label, command: 'printf 1', type: 'text', suffix: 'GiB', detailCommand: 'printf details' })
+            h.group = { id: 'disk-ratios', label: 'P3磁盘', mode: 'overview', layout: 'vertical',
+                main: metric('disk-total', '磁盘总余量'), children: [metric('disk-root', '系统盘'), metric('disk-data', '/data'), metric('disk-other', '/lsn_disk1')] }
+            h.stats = { custom: [
+                { id: 'disk-total', status: 'ok', value: '551' }, { id: 'disk-root', status: 'ok', value: '38' },
+                { id: 'disk-data', status: 'ok', value: '87' }, { id: 'disk-other', status: 'ok', value: '425' },
+            ] }
+            h.detailResults = { 'disk-total': '551.0/8786.0 GiB', 'disk-root': '38.3/936.4 GiB',
+                'disk-data': '87.3/7392.2 GiB', 'disk-other': '425.4/457.4 GiB' }
+        })
+        await group.hover()
+        await page.waitForFunction(() => document.querySelectorAll('.group-details .ratio-numerator').length === 4)
+        const assertRatioColumns = async container => {
+            for (const selector of ['.metric-value', '.ratio-numerator', '.ratio-slash', '.ratio-denominator', '.ratio-unit']) {
+                const edges = await container.locator(selector).evaluateAll(nodes => nodes.map(node => {
+                    const range = document.createRange()
+                    range.selectNodeContents(node)
+                    return range.getBoundingClientRect().right
+                }))
+                assert.equal(edges.length, 4, `Four disk rows must render ${selector}`)
+                assert(edges.every(edge => Math.abs(edge - edges[0]) < 1), `${selector}: actual text must share a right edge across rows`)
+            }
+            const numerators = await container.locator('.ratio-numerator').allTextContents()
+            assert.deepEqual(numerators.map(value => value.trim()), ['551.0', '38.3', '87.3', '425.4'])
+            const denominators = await container.locator('.ratio-denominator').allTextContents()
+            assert.deepEqual(denominators.map(value => value.trim()), ['8786.0', '936.4', '7392.2', '457.4'])
+        }
+        await assertRatioColumns(page.locator('.group-details'))
+        if (process.env.RATIO_SCREENSHOT) await page.screenshot({ path: process.env.RATIO_SCREENSHOT })
+        await page.mouse.move(1040, 650)
+        await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'static' } })
+        await group.hover()
+        await page.waitForFunction(() => document.querySelectorAll('.metric-group .ratio-numerator').length === 4)
+        await assertRatioColumns(group)
+        assert((await group.boundingBox()).height <= 55, 'Four static disk rows stay compact even with expanded capacity details')
+        await mutate(() => {
+            window.harness.detailResults = { 'disk-total': '551.0/8786.0 GiB', 'disk-root': '38.3/936.4GB',
+                'disk-data': '87.3/7392.2 GiB', 'disk-other': '425.4/457.4' }
+        })
+        await page.waitForFunction(() => [...document.querySelectorAll('.metric-group .ratio-unit')].some(node => node.textContent.trim() === 'GB'))
+        for (const selector of ['.ratio-numerator', '.ratio-slash', '.ratio-denominator']) {
+            const edges = await group.locator(selector).evaluateAll(nodes => nodes.map(node => {
+                const range = document.createRange(); range.selectNodeContents(node)
+                return range.getBoundingClientRect().right
+            }))
+            assert.equal(edges.length, 4)
+            assert(edges.every(edge => Math.abs(edge - edges[0]) < 1), `${selector}: mixed or absent units must not displace numeric columns`)
+        }
+        assert.deepEqual((await group.locator('.ratio-unit').allTextContents()).map(value => value.trim()).filter(Boolean), ['GiB', 'GB', 'GiB'])
+        await page.mouse.move(1040, 650)
+        await mutate(() => {
+            const h = window.harness, snapshot = h.ratioPreviewSnapshot
+            h.metrics = snapshot.metrics; h.group = snapshot.group; h.stats = snapshot.stats; h.detailResults = snapshot.detailResults
+            delete h.ratioPreviewSnapshot
+        })
+        console.log('PASS disk values and both sides of capacity ratios align independently in popups and compact static groups')
+        await mutate(() => {
+            const h = window.harness
             h.networkPreviewSnapshot = { metrics: h.metrics, group: h.group, stats: h.stats, detailResults: h.detailResults,
                 previewChinese: h.previewChinese, language: h.config.store.language }
             h.metrics = []
             h.group = { id: 'builtin-net', label: 'Network', mode: 'static', layout: 'vertical',
                 main: { id: 'builtin-net-main', label: 'Network', command: 'printf 0', type: 'text', enabled: false },
                 children: ['rx', 'tx'].map((direction, index) => ({ id: `builtin-net-${direction}`,
-                    label: index ? 'Upload' : 'Download', command: 'printf 1', detailCommand: 'printf details', type: 'text', suffix: 'KiB/s' })) }
-            h.stats = { custom: [{ id: 'builtin-net-rx', status: 'ok', value: '80.500' }, { id: 'builtin-net-tx', status: 'ok', value: '9.250' }] }
+                    label: index ? 'Upload' : 'Download', command: 'printf 1', detailCommand: 'printf details', type: 'text', suffix: 'KiB/s',
+                    colorRules: [{ operator: '>', value: 10000, color: '#ff0000' }, { operator: '>', value: 0.5, color: '#ffa500' }] })) }
+            h.stats = { custom: [{ id: 'builtin-net-rx', status: 'ok', value: '0.819336' }, { id: 'builtin-net-tx', status: 'ok', value: '12345.678' }] }
             h.detailResults = { 'builtin-net-rx': 'Received total: 201.900 GiB (since interface reset; eth0)',
                 'builtin-net-tx': 'Sent total: 35.600 GiB (since interface reset; eth0)' }
             h.previewChinese = true; h.config.store.language = 'zh-CN'
         })
+        const staticHeight = (await group.boundingBox()).height
+        assert(staticHeight <= 27, `Two static network rows must occupy at most 27px, got ${staticHeight}`)
+        assert.equal(await group.evaluate(node => getComputedStyle(node).rowGap), '0px')
+        const separator = await group.locator('.metric-row + .metric-row').evaluate(node => {
+            const css = getComputedStyle(node, '::before')
+            return { height: css.height, columnStart: css.gridColumnStart, columnEnd: css.gridColumnEnd, background: css.backgroundColor }
+        })
+        assert.equal(separator.height, '1px')
+        assert.equal(separator.columnStart, '1')
+        assert.equal(separator.columnEnd, '-1')
+        assert.notEqual(separator.background, 'rgba(0, 0, 0, 0)', 'Static rows need a visible full-width thin separator')
         await group.hover()
         await page.waitForFunction(() => document.querySelector('.metric-group .metric-detail')?.textContent.includes('累计接收'))
         const networkDetails = group.locator('.metric-detail')
@@ -247,8 +319,17 @@ async function main() {
             ['累计接收201.900GiB', '累计发送35.600GiB'])
         assert.deepEqual(await networkDetails.evaluateAll(nodes => nodes.map(node => node.title)),
             ['自网卡建立或计数器重置起 · eth0', '自网卡建立或计数器重置起 · eth0'])
-        assert((await group.innerText()).includes('80.500 KiB/s'))
-        assert((await group.innerText()).includes('9.250 KiB/s'))
+        assert((await group.innerText()).includes('0.001 MB/s'))
+        assert((await group.innerText()).includes('12.642 MB/s'))
+        assert.deepEqual(await group.locator('.metric-value').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).color)),
+            ['rgb(255, 165, 0)', 'rgb(255, 0, 0)'], 'Formatting must not change the original KiB/s values used by color rules')
+        assert(Math.abs((await group.boundingBox()).height - staticHeight) < 1, 'Network hover details must not increase static row height')
+        const networkEdges = await group.locator('.network-amount').evaluateAll(nodes => nodes.map(node => {
+            const range = document.createRange(); range.selectNodeContents(node)
+            return range.getBoundingClientRect().right
+        }))
+        assert.equal(networkEdges.length, 2)
+        assert(Math.abs(networkEdges[0] - networkEdges[1]) < 1, 'Cumulative network numbers must share a right-aligned numeric column')
         assert(!(await group.innerText()).includes('since interface reset'))
         if (process.env.NETWORK_SCREENSHOT) await page.screenshot({ path: process.env.NETWORK_SCREENSHOT })
         await mutate(() => { window.harness.previewChinese = false; window.harness.config.store.language = 'en-US' })

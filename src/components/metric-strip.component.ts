@@ -2,7 +2,7 @@ import { Component, Input, OnChanges, OnDestroy, OnInit, AfterViewChecked, ViewC
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser'
 import { CustomMetric, CustomMetricGroup, evaluateColor, formatFontAwesomeIcon, getSvgPresetPath, isFaIcon, isUrlOrDataUri } from '../config'
 import { StatsService } from '../services/stats.service'
-import { carouselChildren, nextCarouselId, metricStatus, metricIsVisible, visibleGroupMetrics, parseNetworkDetail, DisplayResult } from '../metric-display'
+import { carouselChildren, nextCarouselId, metricStatus, metricIsVisible, visibleGroupMetrics, parseNetworkDetail, parseNumericRatio, formatNetworkRate, isNumericDisplayValue, DisplayResult } from '../metric-display'
 import { BuiltinMetricKey, OrderedMetricItem, orderBuiltinItems } from '../builtin-metrics'
 import { METRIC_COLORS } from '../metric-colors'
 
@@ -20,13 +20,16 @@ import { METRIC_COLORS } from '../metric-colors'
           <span class="meter" *ngIf="metric.type === 'progress' && status(metric) === 'ok'">
             <span [style.width.%]="progress(metric)" [style.background]="color(metric)"></span>
           </span>
-          <span class="metric-value" [style.color]="color(metric)">{{status(metric) === 'unavailable' ? (result(metric).value | translate) : result(metric).value}}<span *ngIf="status(metric) === 'ok'">{{suffix(metric)}}</span></span>
+          <span class="metric-value" [style.color]="color(metric)">{{status(metric) === 'unavailable' ? (result(metric).value | translate) : displayValue(metric)}}<span *ngIf="status(metric) === 'ok'">{{suffix(metric)}}</span></span>
         </span>
         <span class="metric-detail" *ngIf="expanded && metric.detailCommand && status(metric) === 'ok'"
               [class.detail-error]="detailError(metric)" [style.color]="detailError(metric) ? colors.red : color(metric)"
               [attr.title]="detailError(metric) ? details[metric.id] : networkDetail(metric) ? (('Since interface creation or counter reset' | translate) + ' · ' + networkDetail(metric).interfaces) : null">
-            <ng-container *ngIf="networkDetail(metric) as network; else ordinaryDetail">{{network.label | translate}} {{network.amount}} GiB</ng-container>
-            <ng-template #ordinaryDetail>{{detailText(metric) | translate}}{{detailExitCode(metric)}}</ng-template>
+            <span class="network-detail" *ngIf="networkDetail(metric) as network; else ordinaryDetail"><span>{{network.label | translate}} </span><span class="network-amount">{{network.amount}}</span><span class="network-unit"> GiB</span></span>
+            <ng-template #ordinaryDetail>
+              <span class="numeric-ratio" *ngIf="detailRatio(metric) as ratio; else plainDetail"><span class="ratio-numerator">{{ratio.numerator}}</span><span class="ratio-slash">/</span><span class="ratio-denominator">{{ratio.denominator}}</span><span class="ratio-unit">{{ratio.suffix ? ' ' + ratio.suffix : ''}}</span></span>
+              <ng-template #plainDetail>{{detailText(metric) | translate}}{{detailExitCode(metric)}}</ng-template>
+            </ng-template>
         </span>
       </ng-template>
 
@@ -39,6 +42,9 @@ import { METRIC_COLORS } from '../metric-colors'
       </div>
 
       <div *ngIf="item.group as group" class="metric-group" tabindex="0"
+           [style.--ratio-left-width]="ratioColumnWidth(group, 'numerator')" [style.--ratio-right-width]="ratioColumnWidth(group, 'denominator')"
+           [style.--ratio-unit-width]="ratioUnitWidth(group)"
+           [style.--detail-amount-width]="networkAmountWidth(group)"
            [class.vertical]="group.mode === 'static' && group.layout === 'vertical'"
            (mouseenter)="enterGroup(group, $event)" (mouseleave)="leaveGroup(group)"
            (focusin)="enterGroup(group, $event)" (focusout)="blurGroup(group, $event)"
@@ -65,6 +71,9 @@ import { METRIC_COLORS } from '../metric-colors'
           </div>
           <span class="expand-hint" aria-hidden="true">▴</span>
           <div *ngIf="hoveredGroup === group.id" #groupPopup class="group-details" role="region"
+               [style.--ratio-left-width]="ratioColumnWidth(group, 'numerator')" [style.--ratio-right-width]="ratioColumnWidth(group, 'denominator')"
+               [style.--ratio-unit-width]="ratioUnitWidth(group)"
+               [style.--detail-amount-width]="networkAmountWidth(group)"
                [style.left.px]="popup.left" [style.top.px]="popup.top" [style.max-height.px]="popup.maxHeight"
                [style.max-width.px]="popup.width" (mouseenter)="keepGroup(group)" (mouseleave)="leaveGroup(group)">
             <div class="details-title">{{(group.label || 'Metric group') | translate}}</div>
@@ -85,8 +94,13 @@ import { METRIC_COLORS } from '../metric-colors'
       .metric-row:focus-visible, .metric-group:focus-visible { outline: 1px solid #5baaff; outline-offset: 3px; }
       .metric-label { display: inline-flex; gap: 4px; align-items: center; color: #bfc5cd; white-space: nowrap; }
       .metric-label svg, .metric-label img { width: 12px; height: 12px; object-fit: contain; fill: currentColor; }
-      .metric-value { font: 600 11px monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
-      .metric-detail { font: 11px monospace; color: #d1d7e0; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .metric-value { font: 600 11px monospace; font-variant-numeric: tabular-nums; text-align: right; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .metric-detail { font: 11px monospace; font-variant-numeric: tabular-nums; text-align: right; color: #d1d7e0; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .numeric-ratio { display: inline-grid; grid-template-columns: var(--ratio-left-width, max-content) 1ch var(--ratio-right-width, max-content) var(--ratio-unit-width, max-content); align-items: baseline; white-space: pre; }
+      .ratio-unit { text-align: left; }
+      .ratio-numerator, .ratio-denominator, .network-amount { text-align: right; }
+      .ratio-slash { text-align: center; }
+      .network-detail { display: inline-grid; grid-template-columns: max-content var(--detail-amount-width, max-content) max-content; align-items: baseline; white-space: pre; }
       .metric-detail:not(:empty) { border-left: 1px solid #ffffff40; padding-left: 6px; }
       .metric-reading { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
       .meter { display: inline-block; height: 7px; width: 50px; flex: 0 0 50px; overflow: hidden; background: #ffffff26; border-radius: 4px; }
@@ -102,8 +116,10 @@ import { METRIC_COLORS } from '../metric-colors'
       .carousel-active .metric-label { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
       .carousel-active .metric-reading { min-width: 0; max-width: 100%; }
       .carousel-active .metric-value { min-width: 0; }
-      .metric-group.vertical { display: grid; grid-template-columns: max-content max-content minmax(0, max-content); align-items: center; gap: 1px 6px; }
+      .metric-group.vertical { display: grid; grid-template-columns: max-content max-content minmax(0, max-content); align-items: center; gap: 0 6px; }
       .metric-group.vertical > .metric-row { display: contents; }
+      .metric-group.vertical > .metric-row + .metric-row::before { content: ''; grid-column: 1 / -1; height: 1px; background: #ffffff40; }
+      .metric-group.vertical .metric-label, .metric-group.vertical .metric-reading, .metric-group.vertical .metric-value, .metric-group.vertical .metric-detail { line-height: 12px; }
       .metric-group.vertical .metric-label { grid-column: 1; }
       .metric-group.vertical .metric-reading { grid-column: 2; }
       .metric-group.vertical .metric-detail { grid-column: 3; }
@@ -240,9 +256,29 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         const number = parseFloat(this.result(metric).value)
         return Number.isFinite(number) ? Math.min(100, Math.max(0, number / (metric.maxValue || 100) * 100)) : 0
     }
+    private isNetworkRate(metric: CustomMetric): boolean {
+        return metric.suffix?.trim() === 'KiB/s' && this.status(metric) === 'ok' && isNumericDisplayValue(this.result(metric).value)
+    }
+    displayValue(metric: CustomMetric): string {
+        const value = this.result(metric).value
+        return this.isNetworkRate(metric) ? formatNetworkRate(value) : value
+    }
     suffix(metric: CustomMetric): string {
-        const suffix = metric.suffix?.trim() || (metric.type === 'progress' ? '%' : '')
+        const suffix = this.isNetworkRate(metric) ? 'MB/s' : metric.suffix?.trim() || (metric.type === 'progress' ? '%' : '')
         return suffix && !suffix.startsWith('%') ? ' ' + suffix : suffix
+    }
+    detailRatio(metric: CustomMetric) { return this.detailError(metric) ? null : parseNumericRatio(this.details[metric.id] || '') }
+    ratioColumnWidth(group: CustomMetricGroup, column: 'numerator' | 'denominator'): string {
+        return `${Math.max(1, ...this.allMetrics(group).map(metric => this.detailRatio(metric)?.[column].length || 0))}ch`
+    }
+    ratioUnitWidth(group: CustomMetricGroup): string {
+        return `${Math.max(0, ...this.allMetrics(group).map(metric => {
+            const suffix = this.detailRatio(metric)?.suffix
+            return suffix ? suffix.length + 1 : 0
+        }))}ch`
+    }
+    networkAmountWidth(group: CustomMetricGroup): string {
+        return `${Math.max(1, ...this.allMetrics(group).map(metric => this.networkDetail(metric)?.amount.length || 0))}ch`
     }
     detailError(metric: CustomMetric): boolean { return (this.details[metric.id] || '').startsWith('Err:') }
     networkDetail(metric: CustomMetric) {

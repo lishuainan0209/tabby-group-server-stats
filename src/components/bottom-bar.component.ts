@@ -28,7 +28,7 @@ import { BuiltinMetricKey } from '../builtin-metrics'
             width: 100%;
             box-sizing: border-box;
             backdrop-filter: blur(8px);
-            padding: 3px 12px;
+            padding: 1px 12px;
             display: flex;
             flex-wrap: wrap;
             gap: 4px 10px;
@@ -38,7 +38,7 @@ import { BuiltinMetricKey } from '../builtin-metrics'
             color: rgba(255,255,255,0.9);
             user-select: none;
             font-size: 11px;
-            min-height: 26px;
+            min-height: 22px;
         }
         .stat-section { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; height: 20px; }
         .loading-text { color: rgba(255,255,255,0.6); font-size: 10px; font-style: italic; }

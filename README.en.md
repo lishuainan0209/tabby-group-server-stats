@@ -2,7 +2,7 @@
 
 [中文](README.md) | English
 
-Editable server metrics, hover details and metric groups for [Tabby](https://github.com/Eugeny/tabby). The current version is **1.7.1**, adding GitHub preset imports, built-in ordering, aggregate free disk capacity, and clearer login-session and network details.
+Editable server metrics, hover details and metric groups for [Tabby](https://github.com/Eugeny/tabby). The current version is **1.7.2**, with more compact static rows, three-decimal MB/s rates, and aligned capacity columns.
 
 This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
@@ -85,7 +85,7 @@ Use each card's up/down buttons to reorder CPU, memory, disk and network. The or
 
 **Restore defaults** removes only the selected built-in's override, preserving its top-level enable switch and ordering, and leaving other built-ins and custom labels untouched. Restoring network resets that group's main/child definitions to their factory configuration.
 
-Built-in CPU, memory, disk and network commands support Linux/macOS; most other library presets target Linux. Download and upload show the current received/sent rates in KiB/s. Each direction's hover detail shows its own cumulative GiB and the interfaces included. Default-route interfaces are preferred; without a usable default route, eligible non-loopback interfaces are used. **Totals cover the time since interface creation or counter reset, not since the current SSH login.**
+Built-in CPU, memory, disk and network commands support Linux/macOS; most other library presets target Linux. Download and upload show the current received/sent rates in decimal MB/s with three fractional digits and thousands separators. Commands still return KiB/s; thresholds continue to use raw values. Each direction's hover detail shows its own cumulative GiB and the interfaces included. Default-route interfaces are preferred; without a usable default route, eligible non-loopback interfaces are used. **Totals cover the time since interface creation or counter reset, not since the current SSH login.**
 
 The target system needs `timeout`, `gtimeout` or `setsid` for bounded command execution.
 
@@ -161,7 +161,7 @@ npm.cmd run test:ui
 npm.cmd pack
 ```
 
-`npm pack` reruns type checking, unit tests and the production build, producing `tabby-group-server-stats-1.7.1.tgz`; compiled files are in `dist/`. Browser tests use real Angular components with simulated data, while command tests use a local shell. Live SSH command validation and desktop split-pane acceptance need their own recorded results.
+`npm pack` reruns type checking, unit tests and the production build, producing `tabby-group-server-stats-1.7.2.tgz`; compiled files are in `dist/`. Browser tests use real Angular components with simulated data, while command tests use a local shell. Live SSH command validation and desktop split-pane acceptance need their own recorded results.
 
 This fork retains `plugin.serverStats` configuration compatibility. **Enable either the upstream plugin or this fork in a Tabby instance**, to avoid duplicate collection. An isolated portable Tabby installation is recommended for initial testing. See the [packaging, local-installation and publishing guide (Chinese)](PUBLISHING.zh-CN.md) for commands and acceptance checks.
 
@@ -170,3 +170,9 @@ This fork retains `plugin.serverStats` configuration compatibility. **Enable eit
 Original project: [kasuganosoras/tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats), by Akkariin, Copyright (c) 2023 Akkariin Meiko. [LICENSE](LICENSE) preserves the original MIT text, and [NOTICE](NOTICE) describes this fork's attribution and changes. The 26 new monitoring icons use MIT as well; dependencies retain their own licenses and notices.
 
 Report problems or suggest improvements through [this project's Issues](https://github.com/lishuainan0209/tabby-group-server-stats/issues). Shared presets should state required tools, metric meaning and source licenses.
+
+### 1.7.2 display fixes
+
+- Convert KiB/s readings to MB/s with three fractional digits.
+- Remove gaps between static vertical rows, add thin separators, and reduce bottom-bar padding.
+- Right-align numeric columns and both sides of capacity ratios; hover popups retain comfortable spacing.
