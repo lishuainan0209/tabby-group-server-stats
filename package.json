@@ -1,6 +1,6 @@
 {
     "name": "tabby-group-server-stats",
-    "version": "1.7.2",
+    "version": "1.7.3",
     "description": "Server statistics for Tabby with validated custom metrics, hover details and grouped overview, carousel and static layouts",
     "keywords": [
         "tabby-plugin",
@@ -9,11 +9,14 @@
         "monitoring",
         "chartjs"
     ],
-    "author": "Akkariin",
+    "author": {
+        "name": "lishuainan0209",
+        "url": "https://github.com/lishuainan0209"
+    },
     "contributors": [
         {
-            "name": "lishuainan0209",
-            "url": "https://github.com/lishuainan0209"
+            "name": "Akkariin",
+            "url": "https://github.com/kasuganosoras"
         }
     ],
     "license": "MIT",

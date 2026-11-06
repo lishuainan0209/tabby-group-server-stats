@@ -24,7 +24,7 @@ export interface InstantiatedPreset {
 }
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value))
-const localSource = { name: 'Tabby Group Server Stats', url: 'https://github.com/lishuainan0209/tabby-group-server-stats', license: 'MIT' }
+const localSource = { name: 'lishuainan0209 / Tabby Group Server Stats', url: 'https://github.com/lishuainan0209/tabby-group-server-stats', license: 'MIT' }
 
 /** A failed query stays failed; empty or zero-capacity output is never shown as 0%. */
 export function createGpuCommand(index?: number, detail = false): string {

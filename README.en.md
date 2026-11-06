@@ -2,9 +2,9 @@
 
 [中文](README.md) | English
 
-Editable server metrics, hover details and metric groups for [Tabby](https://github.com/Eugeny/tabby). The current version is **1.7.2**, with more compact static rows, three-decimal MB/s rates, and aligned capacity columns.
+Editable server metrics, hover details and metric groups for [Tabby](https://github.com/Eugeny/tabby). The current version is **1.7.3**, with more compact static rows, three-decimal MB/s rates, and aligned capacity columns.
 
-This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
+Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
 **The SSH hotfix from 1.6.1 is retained.** Previously, oversized SSH execution requests could disconnect the entire connection when many metrics were enabled. A fixed short command now receives the script through standard input in 8 KiB chunks, retaining the bounded completion acknowledgment. Transfer failures close only the statistics channel, without deliberately closing the terminal session or automatically rerunning user commands.
 
@@ -161,7 +161,7 @@ npm.cmd run test:ui
 npm.cmd pack
 ```
 
-`npm pack` reruns type checking, unit tests and the production build, producing `tabby-group-server-stats-1.7.2.tgz`; compiled files are in `dist/`. Browser tests use real Angular components with simulated data, while command tests use a local shell. Live SSH command validation and desktop split-pane acceptance need their own recorded results.
+`npm pack` reruns type checking, unit tests and the production build, producing `tabby-group-server-stats-1.7.3.tgz`; compiled files are in `dist/`. Browser tests use real Angular components with simulated data, while command tests use a local shell. Live SSH command validation and desktop split-pane acceptance need their own recorded results.
 
 This fork retains `plugin.serverStats` configuration compatibility. **Enable either the upstream plugin or this fork in a Tabby instance**, to avoid duplicate collection. An isolated portable Tabby installation is recommended for initial testing. See the [packaging, local-installation and publishing guide (Chinese)](PUBLISHING.zh-CN.md) for commands and acceptance checks.
 
@@ -176,3 +176,8 @@ Report problems or suggest improvements through [this project's Issues](https://
 - Convert KiB/s readings to MB/s with three fractional digits.
 - Remove gaps between static vertical rows, add thin separators, and reduce bottom-bar padding.
 - Right-align numeric columns and both sides of capacity ratios; hover popups retain comfortable spacing.
+
+### 1.7.3 attribution update
+
+- Identify lishuainan0209 as this fork's author and maintainer, including fork preset sources.
+- Retain Akkariin's upstream MIT copyright, source links and contributor credit.

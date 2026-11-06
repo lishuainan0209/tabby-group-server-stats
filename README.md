@@ -2,9 +2,9 @@
 
 中文 | [English](README.en.md)
 
-为 [Tabby](https://github.com/Eugeny/tabby) 提供可编辑的服务器指标、悬停详情和多标签组。当前版本为 **1.7.2**，进一步压缩静态底栏高度，支持网速 MB/s 三位小数及容量数字分列对齐。
+为 [Tabby](https://github.com/Eugeny/tabby) 提供可编辑的服务器指标、悬停详情和多标签组。当前版本为 **1.7.3**，进一步压缩静态底栏高度，支持网速 MB/s 三位小数及容量数字分列对齐。
 
-本项目基于 [Akkariin 的 tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats) 二次开发，继续使用 MIT 许可证。版本号不代表已经发布到 npm。
+本 fork 作者及维护者：[lishuainan0209](https://github.com/lishuainan0209)。本项目基于 [Akkariin 的 tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats) 二次开发，继续使用 MIT 许可证。版本号不代表已经发布到 npm。
 
 **保留 1.6.1 的 SSH 热修复**：此前指标较多时，超长 SSH 执行请求可能导致整个连接断开。执行请求已改为固定短命令，脚本通过标准输入按 8 KiB 分块传输，保留完整接收后的有时限确认。传输失败只关闭本次统计通道，不主动关闭终端会话，也不会自动重跑用户命令。
 
@@ -161,7 +161,7 @@ npm.cmd run test:ui
 npm.cmd pack
 ```
 
-`npm pack` 会再次执行类型检查、普通测试和正式构建，生成 `tabby-group-server-stats-1.7.2.tgz`；构建文件在 `dist/`。浏览器测试使用真实 Angular 组件与模拟数据，命令测试在本机 shell 运行；真实 SSH 命令验证与 Tabby 分屏验收需要分别记录结果。
+`npm pack` 会再次执行类型检查、普通测试和正式构建，生成 `tabby-group-server-stats-1.7.3.tgz`；构建文件在 `dist/`。浏览器测试使用真实 Angular 组件与模拟数据，命令测试在本机 shell 运行；真实 SSH 命令验证与 Tabby 分屏验收需要分别记录结果。
 
 本 fork 继续使用 `plugin.serverStats` 配置，方便沿用已有指标。**同一个 Tabby 实例只启用原版或本 fork 其中一个**，避免重复采集。推荐先使用独立便携版测试。完整的本地安装命令、验收项目和 npm/Tabby 发布步骤见 [打包、测试与发布](PUBLISHING.zh-CN.md)。
 
@@ -176,3 +176,8 @@ npm.cmd pack
 - 网速由 KiB/s 换算为 MB/s，固定三位小数。
 - 静态竖排标签取消行间空隙，用细线分隔；底栏上下留白缩小。
 - 同组数值右对齐，容量详情中斜杠两侧数字分别对齐，悬停弹窗保留较宽松行距。
+
+### 1.7.3 署名更新
+
+- 本 fork 的作者和维护者统一为 lishuainan0209，预设来源同步标注。
+- 保留上游作者 Akkariin 的 MIT 版权、来源链接和贡献声明。

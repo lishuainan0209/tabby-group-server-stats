@@ -1,11 +1,12 @@
-Tabby Group Server Stats 1.7.1
+Tabby Group Server Stats
 
 This project is a modified fork of Tabby Server Stats:
 https://github.com/kasuganosoras/tabby-server-stats
 
 Original work: Copyright (c) 2023 Akkariin Meiko.
 Original package author: Akkariin.
-Fork maintainer: lishuainan0209.
+Fork author and maintainer: lishuainan0209.
+Fork modifications: Copyright (c) 2026 lishuainan0209.
 Fork repository: https://github.com/lishuainan0209/tabby-group-server-stats
 
 The original MIT license and copyright notice are preserved in LICENSE.
