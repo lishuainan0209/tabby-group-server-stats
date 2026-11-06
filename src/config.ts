@@ -1,27 +1,9 @@
 import { Injectable } from '@angular/core'
 import { ConfigProvider } from 'tabby-core'
 
-export type ConditionOperator = '>=' | '>' | '<=' | '<' | '==' | '!=' | 'contains' | 'not_contains' | 'starts_with' | 'regex';
-
-export interface ColorCondition {
-    operator: ConditionOperator
-    value: string
-    color: string
-}
-
-export interface CustomMetric {
-    id: string
-    label?: string
-    command: string
-    type: 'progress' | 'text'
-    icon?: string
-    color?: string
-    suffix?: string
-    maxValue?: number
-    interval?: number
-    timeout?: number
-    colorRules?: ColorCondition[]
-}
+import { CustomMetric, CustomMetricGroup, ColorCondition } from './metric-model'
+import { METRIC_COLORS } from './metric-colors'
+export { CustomMetric, CustomMetricGroup, ColorCondition, ConditionOperator, MetricStatus, MetricResult, DisplayScope } from './metric-model'
 
 export { 
     getSvgPresetPath, 
@@ -41,7 +23,7 @@ export interface DefaultMetricsConfig {
     net: boolean
 }
 
-export function evaluateColor(value: any, rules?: ColorCondition[], defaultColor: string = '#2ecc71'): string {
+export function evaluateColor(value: any, rules?: ColorCondition[], defaultColor: string = METRIC_COLORS.green): string {
     if (!rules || rules.length === 0) {
         return defaultColor;
     }
@@ -135,8 +117,10 @@ export class ServerStatsConfigProvider extends ConfigProvider {
                     disk: true,
                     net: true
                 },
+                defaultMetricOverrides: {},
                 showDefaultIcons: true,
-                customMetrics: [] as CustomMetric[] 
+                customMetrics: [] as CustomMetric[],
+                metricGroups: [] as CustomMetricGroup[]
             }
         }
     }

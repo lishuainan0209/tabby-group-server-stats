@@ -1,4 +1,37 @@
+/** Original monitoring glyphs drawn for this fork, distributed under its MIT license.
+ * Filled 24 x 24 paths keep the existing icon renderer and work without an icon font.
+ */
+export const MONITORING_ICON_PATHS: Record<string, string> = {
+    'stats-system-disk': 'M5 2H19V11H14V13H21V22H3V13H10V11H5Z M7 4V9H17V4Z M5 15V20H19V15Z M7 17H11V19H7Z M15 17H17V19H15Z',
+    'stats-data-disk': 'M3 3H10L12 5H21V12H3Z M5 5V10H19V7H11L9 5Z M3 14H21V22H3Z M5 16V20H19V16Z M7 17H11V19H7Z M15 17H17V19H15Z',
+    'stats-disk-space': 'M3 2H21V22H3Z M5 4V20H19V4Z M7 6H17V9H7Z M7 11H17V14H7Z M7 16H12V18H7Z',
+    'stats-disk-read': 'M12 1L18 7H14V13H10V7H6Z M3 15H21V22H3Z M5 17V20H19V17Z M15 18H17V19H15Z',
+    'stats-disk-write': 'M10 1H14V7H18L12 13L6 7H10Z M3 15H21V22H3Z M5 17V20H19V17Z M15 18H17V19H15Z',
+    'stats-disk-io': 'M7 1L12 6H9V12H5V6H2Z M15 1H19V7H22L17 12L12 7H15Z M3 15H21V22H3Z M5 17V20H19V17Z M15 18H17V19H15Z',
+    'stats-gpu': 'M1 3H4V5H22V18H4V21H1V19H2V5H1Z M4 7V16H20V7Z M6 9H10V13H6Z M14 8L18 12L14 15L11 12Z M6 19H17V22H6Z M18 19H20V22H18Z',
+    'stats-vram': 'M2 4H22V18H19V21H5V18H2Z M4 6V16H20V6Z M6 8H10V14H6Z M14 8H18V14H14Z M7 18V20H9V18Z M11 18V20H13V18Z M15 18V20H17V18Z',
+    'stats-cpu': 'M6 2H8V5H11V2H13V5H16V2H18V5H19V6H22V8H19V11H22V13H19V16H22V18H19V19H18V22H16V19H13V22H11V19H8V22H6V19H5V18H2V16H5V13H2V11H5V8H2V6H5V5H6Z M7 7V17H17V7Z M9 9H15V15H9Z',
+    'stats-cpu-load': 'M2 14A10 10 0 0 1 22 14V20H2Z M4 14V18H20V14A8 8 0 0 0 4 14Z M12 11L18 6L15 14A3 3 0 1 1 12 11Z M6 10L8 11L7 13L5 12Z M10 5H12V8H10Z',
+    'stats-io-wait': 'M2 14H11V16H4V20H16V19H18V22H2Z M13 1A9 9 0 1 1 13 19A9 9 0 1 1 13 1Z M13 3A7 7 0 1 0 13 17A7 7 0 1 0 13 3Z M12 5H14V10H18V12H12Z M6 17H9V19H6Z',
+    'stats-memory': 'M2 5H22V18H20V21H17V18H14V21H11V18H8V21H5V18H2Z M4 7V16H20V7Z M5 9H8V14H5Z M10 9H14V14H10Z M16 9H19V14H16Z',
+    'stats-swap': 'M2 3H17V1L22 6L17 11V8H2Z M22 16H7V13L2 18L7 23V21H22Z',
+    'stats-network': 'M9 2H15V8H13V11H21V15H23V22H15V15H19V13H5V15H9V22H1V15H3V11H11V8H9Z M11 4V6H13V4Z M3 17V20H7V17Z M17 17V20H21V17Z',
+    'stats-network-upload': 'M12 1L19 8H14V17H10V8H5Z M2 16H5V20H19V16H22V23H2Z',
+    'stats-network-download': 'M10 1H14V10H19L12 17L5 10H10Z M2 16H5V20H19V16H22V23H2Z',
+    'stats-latency': 'M3 2H17V0L22 5L17 10V7H3Z M21 22H7V24L2 19L7 14V17H21Z M12 8A4 4 0 1 1 12 16A4 4 0 1 1 12 8Z M11 9V13H14V11H13V9Z',
+    'stats-temperature': 'M8 4A4 4 0 0 1 16 4V13A6 6 0 1 1 8 13Z M10 4V14L9 15A4 4 0 1 0 15 15L14 14V4A2 2 0 0 0 10 4Z M11 7H13V15A3 3 0 1 1 11 15Z M18 4H22V6H18Z M18 9H21V11H18Z',
+    'stats-fan': 'M12 10C7 10 4 7 6 4C9 0 14 1 15 6L14 10Z M14 12C14 7 17 4 20 6C24 9 23 14 18 15L14 14Z M12 14C17 14 20 17 18 20C15 24 10 23 9 18L10 14Z M10 12C10 17 7 20 4 18C0 15 1 10 6 9L10 10Z M12 10A2 2 0 1 1 12 14A2 2 0 1 1 12 10Z',
+    'stats-power': 'M13 1L4 14H10L9 23L21 9H14L16 1Z',
+    'stats-process': 'M2 2H22V22H2Z M4 4V20H20V4Z M6 6H9V9H6Z M11 6H18V9H11Z M6 11H9V14H6Z M11 11H16V14H11Z M6 16H9V18H6Z M11 16H18V18H11Z',
+    'stats-service': 'M3 2H21V10H3Z M5 4V8H19V4Z M6 5H8V7H6Z M3 12H12V14H5V18H10V20H3Z M18 11L23 14V20L18 23L13 20V14Z M17 14V20L21 17Z',
+    'stats-health': 'M12 1L21 5V12C21 17 17 21 12 23C7 21 3 17 3 12V5Z M12 3L5 6V12C5 16 8 19 12 21C16 19 19 16 19 12V6Z M7 11H10L12 7L15 14L16 11H18V13H17L15 18L12 12L11 13H7Z',
+    'stats-database': 'M3 5C3 0 21 0 21 5V19C21 24 3 24 3 19Z M5 5C5 7 19 7 19 5C19 3 5 3 5 5Z M5 8V11C8 13 16 13 19 11V8C15 10 9 10 5 8Z M5 14V18C8 20 16 20 19 18V14C15 16 9 16 5 14Z',
+    'stats-container': 'M3 3H21V21H3Z M5 5V19H19V5Z M7 7H10V17H7Z M12 7H15V17H12Z M17 7H18V17H17Z M1 1H6V3H3V6H1Z M18 1H23V6H21V3H18Z M1 18H3V21H6V23H1Z M21 18H23V23H18V21H21Z',
+    'stats-uptime': 'M11 0H14V10H11Z M6 3L8 6A8 8 0 1 0 17 6L19 3A11 11 0 1 1 6 3Z M11 13H13V17H16V19H11Z',
+};
+
 export const TECH_ICON_PATHS: Record<string, string> = {
+    ...MONITORING_ICON_PATHS,
     postgresql: "M23.5594 14.7228a.5269.5269 0 0 0-.0563-.1191c-.139-.2632-.4768-.3418-1.0074-.2321-1.6533.3411-2.2935.1312-2.5256-.0191 1.342-2.0482 2.445-4.522 3.0411-6.8297.2714-1.0507.7982-3.5237.1222-4.7316a1.5641 1.5641 0 0 0-.1509-.235C21.6931.9086 19.8007.0248 17.5099.0005c-1.4947-.0158-2.7705.3461-3.1161.4794a9.449 9.449 0 0 0-.5159-.0816 8.044 8.044 0 0 0-1.3114-.1278c-1.1822-.0184-2.2038.2642-3.0498.8406-.8573-.3211-4.7888-1.645-7.2219.0788C.9359 2.1526.3086 3.8733.4302 6.3043c.0409.818.5069 3.334 1.2423 5.7436.4598 1.5065.9387 2.7019 1.4334 3.582.553.9942 1.1259 1.5933 1.7143 1.7895.4474.1491 1.1327.1441 1.8581-.7279.8012-.9635 1.5903-1.8258 1.9446-2.2069.4351.2355.9064.3625 1.39.3772a.0569.0569 0 0 0 .0004.0041 11.0312 11.0312 0 0 0-.2472.3054c-.3389.4302-.4094.5197-1.5002.7443-.3102.064-1.1344.2339-1.1464.8115-.0025.1224.0329.2309.0919.3268.2269.4231.9216.6097 1.015.6331 1.3345.3335 2.5044.092 3.3714-.6787-.017 2.231.0775 4.4174.3454 5.0874.2212.5529.7618 1.9045 2.4692 1.9043.2505 0 .5263-.0291.8296-.0941 1.7819-.3821 2.5557-1.1696 2.855-2.9059.1503-.8707.4016-2.8753.5388-4.1012.0169-.0703.0357-.1207.057-.1362.0007-.0005.0697-.0471.4272.0307a.3673.3673 0 0 0 .0443.0068l.2539.0223.0149.001c.8468.0384 1.9114-.1426 2.5312-.4308.6438-.2988 1.8057-1.0323 1.5951-1.6698z",
     redis: "M22.71 13.145c-1.66 2.092-3.452 4.483-7.038 4.483-3.203 0-4.397-2.825-4.48-5.12.701 1.484 2.073 2.685 4.214 2.63 4.117-.133 6.94-3.852 6.94-7.239 0-4.05-3.022-6.972-8.268-6.972-3.752 0-8.4 1.428-11.455 3.685C2.59 6.937 3.885 9.958 4.35 9.626c2.648-1.904 4.748-3.13 6.784-3.744C8.12 9.244.886 17.05 0 18.425c.1 1.261 1.66 4.648 2.424 4.648.232 0 .431-.133.664-.365a100.49 100.49 0 0 0 5.54-6.765c.222 3.104 1.748 6.898 6.014 6.898 3.819 0 7.604-2.756 9.33-8.965.2-.764-.73-1.361-1.261-.73zm-4.349-5.013c0 1.959-1.926 2.922-3.685 2.922-.941 0-1.664-.247-2.235-.568 1.051-1.592 2.092-3.225 3.21-4.973 1.972.334 2.71 1.43 2.71 2.619z",
     mongodb: "M17.193 9.555c-1.264-5.58-4.252-7.414-4.573-8.115-.28-.394-.53-.954-.735-1.44-.036.495-.055.685-.523 1.184-.723.566-4.438 3.682-4.74 10.02-.282 5.912 4.27 9.435 4.888 9.884l.07.05A73.49 73.49 0 0111.91 24h.481c.114-1.032.284-2.056.51-3.07.417-.296.604-.463.85-.693a11.342 11.342 0 003.639-8.464c.01-.814-.103-1.662-.197-2.218zm-5.336 8.195s0-8.291.275-8.29c.213 0 .49 10.695.49 10.695-.381-.045-.765-1.76-.765-2.405z",
@@ -90,7 +123,40 @@ export const DEFAULT_METRIC_ICONS = {
     net: 'network-wired'
 } as const;
 
-export const POPULAR_ICON_PRESETS = [
+export interface IconPreset {
+    name: string
+    label: string
+    category?: string
+    keywords?: string[]
+}
+
+export const POPULAR_ICON_PRESETS: IconPreset[] = [
+    { name: 'stats-system-disk', label: '系统盘', category: 'Storage', keywords: ['system disk', 'root', '根目录', '启动盘'] },
+    { name: 'stats-data-disk', label: '数据盘', category: 'Storage', keywords: ['data disk', 'mount', '挂载', '文件', 'data2'] },
+    { name: 'stats-disk-space', label: '磁盘容量', category: 'Storage', keywords: ['disk space', 'capacity', '容量', '已用', '可用', '剩余'] },
+    { name: 'stats-disk-read', label: '磁盘读取', category: 'Storage', keywords: ['disk read', '读取', '读速', '吞吐'] },
+    { name: 'stats-disk-write', label: '磁盘写入', category: 'Storage', keywords: ['disk write', '写入', '写速', '吞吐'] },
+    { name: 'stats-disk-io', label: '磁盘读写', category: 'Storage', keywords: ['disk io', 'iops', '读写', '输入输出'] },
+    { name: 'stats-gpu', label: 'GPU 显卡', category: 'Compute', keywords: ['gpu', 'graphics', '显卡', '图形', '计算卡', 'nvidia'] },
+    { name: 'stats-vram', label: 'GPU 显存', category: 'Compute', keywords: ['gpu memory', 'vram', '显存', 'gddr', 'cuda'] },
+    { name: 'stats-cpu', label: 'CPU 处理器', category: 'Compute', keywords: ['cpu', 'processor', '处理器', '核心'] },
+    { name: 'stats-cpu-load', label: 'CPU 负载', category: 'Compute', keywords: ['cpu load', '负载', '1min', '5min', '15min', 'loadavg'] },
+    { name: 'stats-io-wait', label: 'I/O 等待', category: 'Compute', keywords: ['io wait', 'iowait', 'cpu', '等待', '阻塞'] },
+    { name: 'stats-memory', label: '内存', category: 'Compute', keywords: ['ram', 'memory', '内存', '物理内存'] },
+    { name: 'stats-swap', label: '交换空间', category: 'Compute', keywords: ['swap', '交换', '虚拟内存'] },
+    { name: 'stats-network', label: '网络接口', category: 'Network', keywords: ['network', 'ethernet', '网络', '网卡', '连接'] },
+    { name: 'stats-network-upload', label: '网络发送', category: 'Network', keywords: ['network upload', 'tx', '发送', '上传', '出站'] },
+    { name: 'stats-network-download', label: '网络接收', category: 'Network', keywords: ['network download', 'rx', '接收', '下载', '入站'] },
+    { name: 'stats-latency', label: '网络延迟', category: 'Network', keywords: ['latency', 'ping', 'rtt', '延迟', '往返'] },
+    { name: 'stats-temperature', label: '温度', category: 'System', keywords: ['temperature', 'thermal', '温度', '散热', '传感器'] },
+    { name: 'stats-fan', label: '风扇转速', category: 'System', keywords: ['fan', 'rpm', '风扇', '转速', '散热'] },
+    { name: 'stats-power', label: '功耗', category: 'System', keywords: ['power', 'watt', '功耗', '电力', '瓦'] },
+    { name: 'stats-process', label: '进程', category: 'System', keywords: ['process', 'pid', 'task', '进程', '任务', '线程'] },
+    { name: 'stats-uptime', label: '运行时间', category: 'System', keywords: ['uptime', '运行时间', '开机', '在线时长'] },
+    { name: 'stats-service', label: '服务状态', category: 'Services', keywords: ['service', 'systemd', '服务', '运行状态', '守护进程'] },
+    { name: 'stats-health', label: '健康检查', category: 'Services', keywords: ['health', 'check', '健康', '检查', '心跳'] },
+    { name: 'stats-database', label: '数据库', category: 'Services', keywords: ['database', 'db', '数据库', '连接数'] },
+    { name: 'stats-container', label: '容器', category: 'Services', keywords: ['container', 'docker', '容器', 'pod', 'kubernetes'] },
     // Tech SVG presets
     { name: 'postgresql', label: 'PostgreSQL' },
     { name: 'redis', label: 'Redis' },

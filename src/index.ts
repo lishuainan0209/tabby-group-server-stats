@@ -14,6 +14,7 @@ import { TRANSLATIONS } from './translations'
 import { StatsService } from './services/stats.service'
 import { StatsToolbarButtonProvider } from './toolbar-button.provider'
 import { ServerStatsFloatingPanelComponent } from './components/floating-panel.component'
+import { MetricStripComponent } from './components/metric-strip.component'
 import { ServerStatsBottomBarComponent } from './components/bottom-bar.component'
 import { ServerStatsSettingsComponent, ServerStatsSettingsTabProvider } from './components/settings.component'
 
@@ -47,7 +48,7 @@ const logDebug = (message: string) => {
 
 @NgModule({
     imports: [CommonModule, FormsModule, NgChartsModule, TabbyCoreModule, NgbModule], 
-    declarations: [ServerStatsFloatingPanelComponent, ServerStatsBottomBarComponent, ServerStatsSettingsComponent],
+    declarations: [MetricStripComponent, ServerStatsFloatingPanelComponent, ServerStatsBottomBarComponent, ServerStatsSettingsComponent],
     entryComponents: [ServerStatsFloatingPanelComponent, ServerStatsBottomBarComponent, ServerStatsSettingsComponent],
     providers: [
         { provide: ConfigProvider, useClass: ServerStatsConfigProvider, multi: true },
@@ -386,6 +387,7 @@ export default class ServerStatsModule {
         if ((barRef.instance as any).useExternalController !== undefined) {
             (barRef.instance as any).useExternalController = true
         }
+        (barRef.instance as any).externalSessionResolver = () => this.resolveSessionForElement(sshTabEl)
         if ((barRef.instance as any).bindToSession) {
             (barRef.instance as any).bindToSession(session)
         }
@@ -464,7 +466,10 @@ export default class ServerStatsModule {
 
         const state: any = { last: null }
         let activeSession: any = session
+        let alive = true
+        let pollRevision = 0
         const collector = async () => {
+            if (!alive) return null
             const currentTab = this.resolveTabForElement(sshTabEl)
             if (currentTab) {
                 if (currentTab.frontendIsReady === false || !currentTab.frontend) {
@@ -472,24 +477,34 @@ export default class ServerStatsModule {
                 }
             }
             const resolvedSession = this.resolveSessionForElement(sshTabEl)
-            if (resolvedSession && resolvedSession !== activeSession) {
+            if (resolvedSession !== activeSession) {
                 activeSession = resolvedSession
-                if ((barRef.instance as any).bindToSession) {
-                    (barRef.instance as any).bindToSession(activeSession)
-                }
+                state.last = null
+            }
+            // A pane can move between saved layouts without changing its session.
+            // Refresh its scope before a slow fetch, not only when that fetch ends.
+            if ((barRef.instance as any).bindToSession) {
+                (barRef.instance as any).bindToSession(activeSession)
             }
             if (!activeSession || activeSession.open === false) {
                 return { data: null, session: activeSession, supported: false }
             }
-            const supported = this.statsService.isPlatformSupport(activeSession)
+            const collectingSession = activeSession
+            const supported = this.statsService.isPlatformSupport(collectingSession)
             if (!supported) {
                 return { data: null, session: activeSession, supported: false }
             }
-            const data = await this.statsService.fetchStats(activeSession)
-            return { data, session: activeSession, supported: true }
+            const data = await this.statsService.fetchStats(collectingSession)
+            if (!alive || collectingSession.open === false || activeSession !== collectingSession ||
+                this.resolveSessionForElement(sshTabEl) !== collectingSession) return null
+            const latestTab = this.resolveTabForElement(sshTabEl)
+            if (latestTab && (latestTab.frontendIsReady === false || !latestTab.frontend)) return null
+            return { data, session: collectingSession, supported: true }
         }
 
         const runPoll = async () => {
+            if (!alive) return
+            const revision = pollRevision
             const isEnabled = this.config?.store?.plugin?.serverStats?.enabled
             const displayMode = this.getDisplayMode()
             if (!isEnabled || displayMode !== 'bottomBar') {
@@ -498,8 +513,20 @@ export default class ServerStatsModule {
                 }
                 return
             }
-            const result = await collector()
-            if (!result) {
+            let result: any
+            try {
+                result = await collector()
+            } catch {
+                if (alive && revision === pollRevision) (barRef.instance as any).hideExternal?.()
+                return
+            }
+            if (!alive || revision !== pollRevision) return
+            if (!this.config?.store?.plugin?.serverStats?.enabled || this.getDisplayMode() !== 'bottomBar') {
+                (barRef.instance as any).hideExternal?.()
+                return
+            }
+            if (!result || (result.session && (result.session.open === false ||
+                this.resolveSessionForElement(sshTabEl) !== result.session))) {
                 return
             }
             if (!result.session) {
@@ -525,6 +552,8 @@ export default class ServerStatsModule {
         }
 
         const syncOnConfigChange = () => {
+            if (!alive) return
+            pollRevision++
             const isEnabled = this.config?.store?.plugin?.serverStats?.enabled
             const displayMode = this.getDisplayMode()
             if (!isEnabled || displayMode !== 'bottomBar') {
@@ -544,8 +573,13 @@ export default class ServerStatsModule {
         const configSub = this.config.changed$?.subscribe(() => {
             syncOnConfigChange()
         })
+        const layoutSub = this.app.tabsChanged$?.subscribe(() => { void runPoll() })
 
         const teardown = () => {
+            if (!alive) return
+            alive = false
+            pollRevision++
+            layoutSub?.unsubscribe()
             if (resizeObserver) {
                 try { resizeObserver.disconnect() } catch {}
                 resizeObserver = null

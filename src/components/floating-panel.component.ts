@@ -1,16 +1,15 @@
-import { Component, OnInit, OnDestroy, ViewChild, ChangeDetectorRef, NgZone, HostListener, ViewChildren, QueryList } from '@angular/core'
-import { DomSanitizer, SafeUrl } from '@angular/platform-browser'
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone, HostListener, ViewChild, ElementRef } from '@angular/core'
+import { DomSanitizer } from '@angular/platform-browser'
 import { Subscription } from 'rxjs'
 import { AppService, ConfigService } from 'tabby-core'
-import { BaseChartDirective } from 'ng2-charts'
-import { ChartConfiguration, ChartData, ChartType } from 'chart.js'
 import { StatsService } from '../services/stats.service'
-import { CustomMetric, evaluateColor, formatFontAwesomeIcon, getSvgPresetPath, isUrlOrDataUri, isFaIcon, DEFAULT_METRIC_ICONS } from '../config'
+import { CustomMetric, CustomMetricGroup } from '../config'
+import { BuiltinMetricKey } from '../builtin-metrics'
 
 @Component({
     selector: 'server-stats-floating-panel',
     template: `
-        <div class="stats-container" 
+        <div #panel class="stats-container"
              *ngIf="visible"
              (mousedown)="startDrag($event)"
              [style.top.px]="pos.y" 
@@ -18,102 +17,11 @@ import { CustomMetric, evaluateColor, formatFontAwesomeIcon, getSvgPresetPath, i
              [style.background]="styleConfig.background"
              [style.flex-direction]="styleConfig.layout === 'vertical' ? 'column' : 'row'">
             
-            <!-- CPU -->
-            <div class="chart-wrapper" 
-                 *ngIf="defaultMetrics.cpu"
-                 [style.width.px]="styleConfig.size" 
-                 [style.height.px]="styleConfig.size">
-                <div class="chart-label">
-                    <i *ngIf="showDefaultIcons" [class]="getIconClass(defaultIcons.cpu)" style="margin-right: 3px;"></i>
-                    <span>{{ 'CPU' | translate }}</span>
-                </div>
-                <canvas baseChart [data]="cpuData" [options]="chartOptions" [type]="doughnutChartType"></canvas>
-                <div class="chart-value">{{currentStats.cpu | number:'1.0-0'}}%</div>
-            </div>
-
-            <!-- 内存 -->
-            <div class="chart-wrapper" 
-                 *ngIf="defaultMetrics.ram"
-                 [style.width.px]="styleConfig.size" 
-                 [style.height.px]="styleConfig.size">
-                <div class="chart-label">
-                    <i *ngIf="showDefaultIcons" [class]="getIconClass(defaultIcons.ram)" style="margin-right: 3px;"></i>
-                    <span>{{ 'RAM' | translate }}</span>
-                </div>
-                <canvas baseChart [data]="memData" [options]="chartOptions" [type]="doughnutChartType"></canvas>
-                <div class="chart-value">{{currentStats.mem | number:'1.0-0'}}%</div>
-            </div>
-
-            <!-- 磁盘 -->
-            <div class="chart-wrapper" 
-                 *ngIf="defaultMetrics.disk"
-                 [style.width.px]="styleConfig.size" 
-                 [style.height.px]="styleConfig.size">
-                <div class="chart-label">
-                    <i *ngIf="showDefaultIcons" [class]="getIconClass(defaultIcons.disk)" style="margin-right: 3px;"></i>
-                    <span>{{ 'DISK' | translate }}</span>
-                </div>
-                <canvas baseChart [data]="diskData" [options]="chartOptions" [type]="doughnutChartType" *ngIf="currentStats.disk > 0"></canvas>
-                <div class="chart-value" [class.text-muted]="!currentStats.disk">
-                    {{ currentStats.disk > 0 ? (currentStats.disk | number:'1.0-0') + '%' : '-' }}
-                </div>
-            </div>
-
-            <!-- 自定义指标 -->
-            <ng-container *ngFor="let metric of customMetrics; let i = index">
-                <div class="chart-wrapper" 
-                     [style.width.px]="styleConfig.size" 
-                     [style.height.px]="styleConfig.size">
-                    <div class="chart-label">
-                        <ng-container *ngIf="metric.icon">
-                            <svg *ngIf="getSvgPath(metric.icon)" 
-                                 class="metric-icon"
-                                 viewBox="0 0 24 24" 
-                                 fill="currentColor"
-                                 aria-hidden="true">
-                                <path [attr.d]="getSvgPath(metric.icon)"></path>
-                            </svg>
-                            <img *ngIf="isUrl(metric.icon)" 
-                                 class="metric-icon"
-                                 [src]="getSafeIconUrl(metric.icon)" 
-                                 alt="" />
-                            <i *ngIf="isFa(metric.icon)" 
-                               [class]="getIconClass(metric.icon) + (metric.label ? ' metric-icon-fa me-1' : ' metric-icon-fa')"></i>
-                        </ng-container>
-                        <span *ngIf="metric.label">{{ metric.label }}</span>
-                    </div>
-                    
-                    <ng-container *ngIf="metric.type === 'progress'">
-                         <canvas baseChart [data]="customChartsData[i]" [options]="chartOptions" [type]="doughnutChartType"></canvas>
-                         <div class="chart-value">{{ getCustomValue(i) }}<span class="unit" *ngIf="getMetricSuffix(metric)">{{ getMetricSuffix(metric) }}</span></div>
-                    </ng-container>
-
-                    <ng-container *ngIf="metric.type === 'text'">
-                         <div class="text-value-container" [style.color]="getCustomMetricColor(metric, i)">
-                            {{ getCustomValue(i) }}<span class="unit" *ngIf="getMetricSuffix(metric)">{{ getMetricSuffix(metric) }}</span>
-                         </div>
-                    </ng-container>
-                </div>
-            </ng-container>
-
-            <!-- 网络流量 -->
-            <div class="chart-wrapper" 
-                 *ngIf="defaultMetrics.net"
-                 [style.width.px]="styleConfig.size" 
-                 [style.height.px]="styleConfig.size">
-                <div class="chart-label">
-                    <i *ngIf="showDefaultIcons" [class]="getIconClass(defaultIcons.net)" style="margin-right: 3px;"></i>
-                    <span>{{ 'NET' | translate }}</span>
-                </div>
-                <div class="net-container">
-                    <div class="net-row download">
-                         <span>↓</span> {{ formatSpeed(currentStats.netRx) }}
-                    </div>
-                    <div class="net-row upload">
-                         <span>↑</span> {{ formatSpeed(currentStats.netTx) }}
-                    </div>
-                </div>
-            </div>
+            <server-stats-metric-strip [metrics]="customMetrics" [groups]="metricGroups"
+                [builtinOrder]="builtinOrder"
+                [stats]="currentStats" [session]="metricSession"
+                [style.flex-direction]="styleConfig.layout === 'vertical' ? 'column' : 'row'"
+                (mousedown)="$event.stopPropagation()"></server-stats-metric-strip>
         </div>
     `,
     styles: [`
@@ -124,66 +32,29 @@ import { CustomMetric, evaluateColor, formatFontAwesomeIcon, getSvgPresetPath, i
             right: 20px; 
             z-index: 10000; 
             backdrop-filter: blur(12px);
-            padding: 0px 10px 0px 10px;
+            padding: 10px 14px;
             display: flex; 
             gap: 15px;
             border-radius: 8px;
             border: 1px solid rgba(255,255,255,0.2);
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             min-width: 100px;
+            max-width: calc(100vw - 20px);
+            box-sizing: border-box;
             color: white;
             cursor: move;
             user-select: none;
         }
-        .chart-wrapper { position: relative; display: flex; flex-direction: column; align-items: center; container-type: inline-size; }
-        
-        .chart-label { font-size: 12cqw; font-weight: bold; margin-bottom: 2cqw; color: #aaa; pointer-events: none; margin-top: 5cqw; display: inline-flex; align-items: center; justify-content: center; gap: 3px; }
-        .chart-label .metric-icon {
-            width: 14px !important;
-            height: 14px !important;
-            max-width: 14px;
-            max-height: 14px;
-            flex: 0 0 14px;
-            display: block;
-            object-fit: contain;
-            overflow: hidden;
-        }
-        .chart-label .metric-icon-fa { font-size: inherit; line-height: 1; }
-        .chart-value { position: absolute; top: calc(50% + 10cqw); left: 50%; transform: translate(-50%, -50%); font-size: 25cqw; font-family: monospace; pointer-events: none; color: #fff; font-weight: bold; text-shadow: 0 1px 2px black; }
-        
-        .net-container { 
-            height: 100%; width: 100%; 
-            display: flex; flex-direction: column; justify-content: center; align-items: center; 
-            font-family: monospace; font-weight: bold;
-        }
-        .net-row { font-size: 13cqw; white-space: nowrap; }
-        .net-row span { display: inline-block; width: 8cqw; }
-        .download { color: #2ecc71; margin-bottom: 2cqw; }
-        .upload { color: #e74c3c; }
-        
-        .text-value-container {
-            position: absolute;
-            top: calc(50% + 5cqw); left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 20cqw;
-            font-family: monospace;
-            font-weight: bold;
-            text-align: center;
-            width: 100%;
-            text-shadow: 0 1px 2px black;
-        }
-        .unit { font-size: 0.5em; margin-left: 2px; opacity: 0.8; }
-        
-        canvas { max-width: calc(100% - 32cqw); max-height: calc(100% - 32cqw); pointer-events: none; }
     `]
 })
 export class ServerStatsFloatingPanelComponent implements OnInit, OnDestroy {
-    @ViewChildren(BaseChartDirective) charts: QueryList<BaseChartDirective> | undefined
+    @ViewChild('panel') panel?: ElementRef<HTMLElement>
     visible = false
     currentStats: any = { cpu: 0, mem: 0, disk: 0, netRx: 0, netTx: 0, custom: [] }
     
     customMetrics: CustomMetric[] = []
-    customChartsData: ChartData<'doughnut'>[] = []
+    metricGroups: CustomMetricGroup[] = []
+    builtinOrder: BuiltinMetricKey[] = []
 
     private isDragging = false
     private dragOffset = { x: 0, y: 0 }
@@ -192,17 +63,9 @@ export class ServerStatsFloatingPanelComponent implements OnInit, OnDestroy {
     public styleConfig = { background: 'rgba(20, 20, 20, 0.90)', size: 100, layout: 'vertical' }
     private timerId: any = null
     private tabSubscription: Subscription | null = null
-    public doughnutChartType: ChartType = 'doughnut'
-    public chartOptions: ChartConfiguration<'doughnut'>['options'] = {
-        responsive: true, maintainAspectRatio: false, cutout: '75%', 
-        plugins: { legend: { display: false }, tooltip: { enabled: false } },
-        animation: { duration: 0 },
-        events: [] 
-    }
-    public cpuData = this.createChartData('#e74c3c')
-    public memData = this.createChartData('#f1c40f')
-    public diskData = this.createChartData('#3498db')
-
+    private destroyed = false
+    private displaySession: any = null
+    private viewRevision = 0
     constructor(
         private statsService: StatsService,
         private config: ConfigService,
@@ -212,23 +75,6 @@ export class ServerStatsFloatingPanelComponent implements OnInit, OnDestroy {
         private sanitizer: DomSanitizer
     ) {
         (window as any).serverStatsFloating = this;
-    }
-
-    readonly defaultIcons = DEFAULT_METRIC_ICONS;
-
-    get defaultMetrics() {
-        return this.config?.store?.plugin?.serverStats?.defaultMetrics || { cpu: true, ram: true, disk: true, net: true };
-    }
-
-    get showDefaultIcons(): boolean {
-        return this.config?.store?.plugin?.serverStats?.showDefaultIcons !== false;
-    }
-
-    private createChartData(color: string): ChartData<'doughnut'> {
-        return {
-            labels: ['Used', 'Free'],
-            datasets: [{ data: [0, 100], backgroundColor: [color, 'rgba(255,255,255,0.1)'], borderWidth: 0 }]
-        }
     }
 
     private subscriptions: Subscription[] = []
@@ -242,12 +88,15 @@ export class ServerStatsFloatingPanelComponent implements OnInit, OnDestroy {
         this.subscriptions.push(this.config.changed$.subscribe(() => this.loadConfig()));
 
         this.subscriptions.push(this.statsService.statsUpdated$.subscribe(event => {
-            let activeTab: any = this.app.activeTab;
-            if (activeTab && activeTab['focusedTab']) activeTab = activeTab['focusedTab'];
-            const session = activeTab ? activeTab['session'] : null;
-            if (session && this.statsService.getServerKey(session) === event.serverKey) {
+            if (this.destroyed) return;
+            const session = this.activeSession();
+            this.synchronizeSession(session);
+            if (!this.canDisplay(session)) { this.hide(); return; }
+            if (this.statsService.getServerKey(session) === event.serverKey) {
                 this.visible = true;
                 this.updateCharts(event.stats);
+                this.cdr.detectChanges();
+            } else {
                 this.cdr.detectChanges();
             }
         }));
@@ -270,6 +119,8 @@ export class ServerStatsFloatingPanelComponent implements OnInit, OnDestroy {
     }
 
     loadConfig() {
+        if (this.destroyed) return;
+        this.viewRevision++;
         const conf = this.config?.store?.plugin?.serverStats || {};
         if (conf.location) {
             this.pos = { x: conf.location.x, y: conf.location.y };
@@ -281,21 +132,11 @@ export class ServerStatsFloatingPanelComponent implements OnInit, OnDestroy {
         }
 
         // 加载自定义指标
-        this.customMetrics = conf.customMetrics || [];
-        this.customChartsData = this.customMetrics.map(m => 
-            this.createChartData(m.color || '#00ff00')
-        );
+        this.applyMetricScope(this.activeSession());
+        if (!this.canDisplay(this.activeSession())) this.hide();
 
         setTimeout(() => this.adjustPositionToViewport(), 100);
         this.cdr.detectChanges();
-    }
-
-    formatSpeed(bytes: number): string {
-        if (bytes === 0) return '0 B/s';
-        const k = 1024;
-        const sizes = ['B/s', 'K/s', 'M/s', 'G/s'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 
     startDrag(event: MouseEvent) {
@@ -339,13 +180,12 @@ export class ServerStatsFloatingPanelComponent implements OnInit, OnDestroy {
     }
 
     private adjustPositionToViewport() {
+        if (this.destroyed) return;
         if (this.pos.x === null || this.pos.y === null) return
-        const rect = (this as any)._elementRef?.nativeElement?.getBoundingClientRect
-            ? (this as any)._elementRef.nativeElement.getBoundingClientRect()
-            : { width: this.styleConfig.size * 4 + 60, height: this.styleConfig.size }
+        const rect = this.panel?.nativeElement.getBoundingClientRect() || { width: 240, height: 100 }
         const padding = 10
-        const maxX = window.innerWidth - rect.width - padding
-        const maxY = window.innerHeight - rect.height - padding
+        const maxX = Math.max(padding, window.innerWidth - rect.width - padding)
+        const maxY = Math.max(padding, window.innerHeight - rect.height - padding)
         let x = this.pos.x
         let y = this.pos.y
         if (x < padding) x = padding
@@ -367,33 +207,33 @@ export class ServerStatsFloatingPanelComponent implements OnInit, OnDestroy {
     forceUpdate() { this.checkAndFetch() }
 
     async checkAndFetch() {
+        if (this.destroyed) return;
+        const session = this.activeSession();
+        this.synchronizeSession(session);
         const isEnabled = this.config?.store?.plugin?.serverStats?.enabled;
         const displayMode = this.config?.store?.plugin?.serverStats?.displayMode || 'bottomBar';
         if (displayMode !== 'floatingPanel') {
-            if (this.visible) {
-                this.visible = false;
-                this.cdr.detectChanges();
-            }
+            this.hide();
             return;
         }
         let activeTab: any = this.app.activeTab
         if (!isEnabled || !activeTab) {
-            if (this.visible) {
-                this.visible = false;
-                this.cdr.detectChanges();
-            }
+            this.hide();
             return;
         }
         if (activeTab['focusedTab']) {
             activeTab = activeTab['focusedTab'];
         }
         if (activeTab['frontendIsReady'] === false || !activeTab['frontend']) {
+            this.hide();
             return;
         }
-        const session = activeTab['session'];
+        this.cdr.detectChanges();
+        const revision = this.viewRevision;
         if (session && session.open !== false && this.statsService.isPlatformSupport(session)) {
             try {
                 const data = await this.statsService.fetchStats(session)
+                if (!this.isCurrentRequest(session, revision)) return;
                 if (data) {
                     this.visible = true; 
                     this.updateCharts(data);
@@ -402,122 +242,71 @@ export class ServerStatsFloatingPanelComponent implements OnInit, OnDestroy {
                 }
             } catch (e) {}
         }
-        if (this.visible) {
-            this.visible = false;
-            this.cdr.detectChanges();
+        if (this.isCurrentRequest(session, revision)) this.hide();
+    }
+
+    hoveredCustom: string | null = null
+    private activeSession(): any {
+        let tab: any = this.app.activeTab
+        if (tab?.focusedTab) tab = tab.focusedTab
+        return tab?.session || null
+    }
+    get metricSession(): any { return this.displaySession }
+
+    private canDisplay(session: any): boolean {
+        const conf = this.config?.store?.plugin?.serverStats;
+        let tab: any = this.app.activeTab;
+        if (tab?.focusedTab) tab = tab.focusedTab;
+        return !this.destroyed && !!conf?.enabled && conf.displayMode === 'floatingPanel' &&
+            !!session && session.open !== false && tab?.session === session &&
+            tab.frontendIsReady !== false && !!tab.frontend;
+    }
+
+    private synchronizeSession(session: any) {
+        this.applyMetricScope(session);
+        if (this.displaySession === session) return;
+        this.viewRevision++;
+        this.displaySession = session;
+        this.hoveredCustom = null;
+        this.visible = false;
+        const cached = session?.open !== false && session ? this.statsService.getCachedStats(session) : null;
+        this.updateCharts(cached || { cpu: 0, mem: 0, disk: 0, netRx: 0, netTx: 0, custom: [] });
+        this.visible = !!cached && this.canDisplay(session);
+    }
+
+    private applyMetricScope(session: any) {
+        const conf = this.config?.store?.plugin?.serverStats || {};
+        const visible = this.statsService.getVisibleConfig?.(session) || conf;
+        this.builtinOrder = conf.builtinOrder || [];
+        const metrics = visible.customMetrics || [];
+        const changed = this.customMetrics.map(metric => metric.id).join('|') !== metrics.map(metric => metric.id).join('|');
+        this.customMetrics = metrics;
+        this.metricGroups = visible.metricGroups || [];
+        if (changed) {
+            this.hoveredCustom = null;
         }
     }
 
-    getCustomValue(index: number): string {
-        const metric = this.customMetrics[index];
-        if (!metric) return '-';
-        if (this.currentStats?.custom) {
-            const found = this.currentStats.custom.find((c: any) => c.id === metric.id);
-            if (found && found.value !== undefined && found.value !== null && found.value !== '-') {
-                return found.value;
-            }
-        }
-        let activeTab: any = this.app.activeTab;
-        if (activeTab && activeTab['focusedTab']) activeTab = activeTab['focusedTab'];
-        const session = activeTab ? activeTab['session'] : null;
-        if (session) {
-            const cached = this.statsService.getCachedStats(session);
-            if (cached?.custom) {
-                const found = cached.custom.find((c: any) => c.id === metric.id);
-                if (found && found.value !== undefined && found.value !== null && found.value !== '-') {
-                    return found.value;
-                }
-            }
-        }
-        if (this.currentStats?.custom) {
-            const found = this.currentStats.custom.find((c: any) => c.id === metric.id);
-            if (found && found.value !== undefined && found.value !== null) {
-                return found.value;
-            }
-        }
-        return '-';
+    private isCurrentRequest(session: any, revision: number): boolean {
+        return this.viewRevision === revision && this.displaySession === session && this.canDisplay(session);
     }
 
-    getCustomMetricColor(metric: CustomMetric, index: number): string {
-        const val = this.getCustomValue(index);
-        if (!val || val === '-') {
-            return 'rgba(255, 255, 255, 0.4)';
-        }
-        if (val && typeof val === 'string' && val.startsWith('Err:')) {
-            return '#e74c3c';
-        }
-        return evaluateColor(val, metric.colorRules, metric.color || '#00ff00');
+    private hide() {
+        if (this.destroyed) return;
+        this.viewRevision++;
+        this.synchronizeSession(null);
+        this.visible = false;
+        this.hoveredCustom = null;
+        this.cdr.detectChanges();
     }
-
-    getIconClass(icon?: string): string {
-        return formatFontAwesomeIcon(icon);
-    }
-
-    getSvgPath(icon?: string): string | null {
-        return getSvgPresetPath(icon);
-    }
-
-    isUrl(icon?: string): boolean {
-        return isUrlOrDataUri(icon);
-    }
-
-    isFa(icon?: string): boolean {
-        return isFaIcon(icon);
-    }
-
-    getSafeIconUrl(icon?: string): SafeUrl | string {
-        if (!icon) return '';
-        if (icon.startsWith('data:image/')) {
-            return this.sanitizer.bypassSecurityTrustUrl(icon);
-        }
-        return icon;
-    }
-
-    getMetricSuffix(metric: CustomMetric): string {
-        if (metric.suffix !== undefined && metric.suffix !== null && metric.suffix.trim() !== '') {
-            const s = metric.suffix.trim();
-            return s.startsWith('%') ? s : ' ' + s;
-        }
-        return metric.type === 'progress' ? '%' : '';
-    }
-
-    updateCharts(stats: any) {
-        this.currentStats = stats
-        
-        // 更新基础图表
-        this.cpuData.datasets[0].data = [stats.cpu, 100 - stats.cpu]
-        this.memData.datasets[0].data = [stats.mem, 100 - stats.mem]
-        this.diskData.datasets[0].data = [stats.disk, 100 - stats.disk]
-        this.cpuData = { ...this.cpuData }
-        this.memData = { ...this.memData }
-        this.diskData = { ...this.diskData }
-
-        // 更新自定义图表
-        if (stats.custom && Array.isArray(stats.custom)) {
-            stats.custom.forEach((item: any) => {
-                const index = this.customMetrics.findIndex(m => m.id === item.id);
-                if (index !== -1) {
-                    const metric = this.customMetrics[index];
-                    if (metric && metric.type === 'progress' && this.customChartsData[index]) {
-                        const val = parseFloat(item.value) || 0;
-                        const max = metric.maxValue || 100;
-                        const remain = Math.max(0, max - val);
-                        const color = this.getCustomMetricColor(metric, index);
-                        this.customChartsData[index].datasets[0].data = [val, remain];
-                        this.customChartsData[index].datasets[0].backgroundColor = [color, 'rgba(255,255,255,0.1)'];
-                        this.customChartsData[index] = { ...this.customChartsData[index] };
-                    }
-                }
-            });
-        }
-        
-        // 通知所有图表组件更新
-        if (this.charts) {
-            this.charts.forEach(c => c.update());
-        }
-    }
+    updateCharts(stats: any) { this.currentStats = stats }
 
     ngOnDestroy() {
+        this.destroyed = true;
+        this.viewRevision++;
+        this.displaySession = null;
+        this.hoveredCustom = null;
+        this.visible = false;
         if (this.timerId) clearInterval(this.timerId)
         if (this.tabSubscription) this.tabSubscription.unsubscribe()
         this.subscriptions.forEach(sub => sub.unsubscribe())

@@ -1,0 +1,172 @@
+# Tabby Group Server Stats
+
+[中文](README.md) | English
+
+Editable server metrics, hover details and metric groups for [Tabby](https://github.com/Eugeny/tabby). The current version is **1.7.1**, adding GitHub preset imports, built-in ordering, aggregate free disk capacity, and clearer login-session and network details.
+
+This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
+
+**The SSH hotfix from 1.6.1 is retained.** Previously, oversized SSH execution requests could disconnect the entire connection when many metrics were enabled. A fixed short command now receives the script through standard input in 8 KiB chunks, retaining the bounded completion acknowledgment. Transfer failures close only the statistics channel, without deliberately closing the terminal session or automatically rerunning user commands.
+
+![Offline preset library](docs/images/preset-library.png)
+
+The preview uses example configuration data and the Chinese interface.
+
+## Features
+
+- **Standalone labels:** text or progress bars with individual icons, units, color rules, refresh intervals and timeouts.
+- **Three command stages:** optional object check, primary shell command and optional hover-detail command.
+- **Metric groups:** one main label and multiple children, with overview, carousel, horizontal static and vertical static displays.
+- **Independent switches:** disable a standalone label, an entire group, its main label or individual children without deleting commands or color rules.
+- **Connection scopes:** select saved connections or layouts; each pane in a mixed layout retains its own connection identity.
+- **Editable, reorderable built-ins:** customize CPU, memory, disk and network definitions, move them up or down in both panels, or restore one built-in's defaults.
+- **Offline and GitHub library:** 20 bundled presets—12 standalone labels and 8 groups—with imports from this fork, JSON import/export and search.
+- **Clear section and card borders:** separate built-ins, presets, standalone labels and groups; compact line separators between displayed groups.
+- **English/Chinese UI and 26 original monitoring icons:** searchable categories, existing icon support and custom SVGs.
+
+The bottom bar and floating panel share the same label renderer. Built-ins use the same checks, colors, scopes and details as custom metrics.
+
+## Create a label
+
+Open Tabby Settings → Server Stats, then choose **Add single label**, or find a library preset and click **Add**. Importing from GitHub or JSON loads choices into the library; adding a preset puts it into the active configuration. Use the pencil button to edit an existing item. Within a group, each main/child label opens its own editor.
+
+New labels default to **text** and checks default to **output-text comparison**. Configure commands in this order:
+
+1. **Object check, optional:** compare trimmed standard output or an expected exit code. Without a check, the primary command runs directly.
+2. **Shell command:** periodically collects the primary value.
+3. **Hover detail command, optional:** appends information while hovered and collapses on mouse leave. An empty command makes no detail request.
+
+For a separate filesystem mounted at `/data2`:
+
+```sh
+# Check: choose exit-code comparison, expected value 0
+mountpoint -q /data2
+
+# Primary command: text type, % suffix
+data=$(df -P /data2) || exit 1
+printf '%s\n' "$data" | awk 'NR==2 {gsub(/%/, "", $5); print $5}'
+
+# Hover details
+data=$(df -hP /data2) || exit 1
+printf '%s\n' "$data" | awk 'NR==2 {print "available " $4 " / used " $3}'
+```
+
+Set the unavailable message to “Not mounted”. Checking the mount point prevents an unmounted disk's remaining directory from reporting its parent filesystem instead. A failed check skips both the primary and detail commands. Commands run inside the corresponding pane's session with that connection user's permissions and require the appropriate tools on the target.
+
+Details follow the label's refresh interval, or the global interval when unset: 3 seconds by default, with a minimum of 1 second. Repeated mouse events do not rerun a cached command. A bounded SSH completion acknowledgment protects output from fast-closing channels without automatically retrying user commands. Detail errors appear separately in red and preserve a healthy primary value; successful empty detail output stays empty.
+
+## Groups and visibility
+
+Group names appear in the hover popup, without a repeated prefix in the status bar. The main label is flush left, children are indented, and popup names, values and details align in columns. Thin separators and smaller gaps between groups conserve status-bar width.
+
+- **Overview:** shows the main label; hover opens the full group vertically with details.
+- **Carousel:** rotates through child labels; hover pauses rotation and opens the full group. Skipped children do not consume extra rotation periods.
+- **Horizontal static:** shows main and child labels together; only the hovered label expands its details.
+- **Vertical static:** shows all labels vertically; hovering the group expands their details together.
+
+After the initial results arrive, a carousel reserves the width of its longest candidate. Later, longer output wraps within that fixed width, including in narrow split panes. Collection and rotation have separate intervals. A failed main-label check does not block its children.
+
+| Setting | Normal display and collection | When the object check fails |
+| --- | --- | --- |
+| `enabled: false` | No display or execution; disabling a group affects every member | Checks also stop |
+| `visibleWhenUnavailable: true` (default) | Normal operation | Keep the failure notice in all views |
+| `visibleWhenUnavailable: false` | Normal operation | Hide in every view; keep checking for recovery |
+| `showWhenUnavailable: false` | Normal operation | Skip only in the carousel; other views follow the setting above |
+
+An unavailable child participates in the carousel only when both visibility flags permit it. Turning off global unavailable visibility also turns off carousel participation in settings. **Timeouts, connection failures and primary-command errors are not missing-object results**, and these visibility flags do not hide them. Omitted settings retain legacy behavior: enabled, with failure notices visible. Individual presets may explicitly override these defaults.
+
+Disabling the main label does not disable its children. Disabling one child leaves its siblings active. A group uses its empty-state text when no carousel child is eligible; a group whose every member is disabled or hidden disappears entirely.
+
+## Editable built-ins
+
+CPU, memory and disk are standalone labels. Network is a vertical static group with download/upload children; its main label starts disabled. All use the common commands, checks, details, scopes and color rules rather than a separate hardcoded chart collector.
+
+Use each card's up/down buttons to reorder CPU, memory, disk and network. The order is persisted in `builtinOrder`, shared by the bottom bar and floating panel, and retained after restarting. Custom labels and groups retain their existing relative order.
+
+**Restore defaults** removes only the selected built-in's override, preserving its top-level enable switch and ordering, and leaving other built-ins and custom labels untouched. Restoring network resets that group's main/child definitions to their factory configuration.
+
+Built-in CPU, memory, disk and network commands support Linux/macOS; most other library presets target Linux. Download and upload show the current received/sent rates in KiB/s. Each direction's hover detail shows its own cumulative GiB and the interfaces included. Default-route interfaces are preferred; without a usable default route, eligible non-loopback interfaces are used. **Totals cover the time since interface creation or counter reset, not since the current SSH login.**
+
+The target system needs `timeout`, `gtimeout` or `setsid` for bounded command execution.
+
+## Offline and GitHub preset library
+
+The shipped library works offline. **Import from GitHub** reads [this fork's main-branch presets](https://github.com/lishuainan0209/tabby-group-server-stats/blob/main/presets.json), rather than the upstream project's URL. Successful imports merge into the current library, retaining local and earlier imported entries and replacing matching IDs. A failed fetch leaves the current list intact. Remote `main` reflects what has actually been pushed and may differ from the local version.
+
+GitHub and JSON imports only preview entries: they do not execute commands or add status-bar items until you click **Add**. GitHub downloads have a 15-second timeout and a 2 MiB size limit, and do not upload local configuration or connection information. Search or export the current custom standalone labels and groups; exports omit built-in overrides. The format supports `kind: "metric"` and `kind: "group"`, and accepts the original flat metric array.
+
+The 12 standalone presets cover uptime, temperature, system load, logged-in users, Docker containers, GPU memory, SSH sessions, SSH latency, I/O wait, CPU steal, failed services and service state. The 8 groups are:
+
+**Laboratory-specific presets: P0磁盘, P1磁盘, P1容器磁盘, P2磁盘, P3磁盘 and P4磁盘 are for the author's laboratory only. Other users: please do not download or use these presets.** Their mount paths and saved connection names are specific to the author's laboratory; they are not generic server templates. This usage-scope notice does not apply to the general GPU or CPU-load presets and does not change the rights granted by the MIT license.
+
+| Group | Main label and children | Suggested saved connections |
+| --- | --- | --- |
+| P0磁盘 | Aggregate free capacity; system `/`, then `/data` | P0(ai), P0(s_lsn) |
+| P1磁盘 | Aggregate free capacity; system `/` child only | P1(ai) |
+| P1容器磁盘 | Aggregate free capacity; system `/`, then `/public` | P1(s_lsn) |
+| P2磁盘 | Aggregate free capacity; system `/`, then `/data` | P2(ai), P2(s_lsn) |
+| P3磁盘 | Aggregate free capacity; system `/`, then `/data` and `/lsn_disk1` | P3(ai), P3(s_lsn) |
+| P4磁盘 | Aggregate free capacity; system `/`, then `/data` | P4(ai), P4(s_lsn) |
+| GPU memory | Aggregate GPU memory; eight children GPU 0–7 | All panes |
+| CPU load | Thread count; 1-minute and 5-minute load | All panes |
+
+Each disk group's main label shows **aggregate free GiB** across its readable system and mounted data filesystems, deduplicating filesystems so bind mounts are not counted twice. The system disk is the first child, followed by data mounts; hover shows free/total capacity. Missing mounts are omitted from the aggregate while their child labels retain a notice by default. No readable valid filesystem produces an error, not a misleading zero.
+
+The **Users** preset counts system login records from `who`, including normal tty, pts and console sessions. Hover groups and sorts counts by username, for example `alice ×2, bob ×1`. Empty records produce a primary value of `0` and a detail of `-`; missing tools or execution failures remain errors. This is neither the current connection's username nor a count of every TCP or background SSH connection.
+
+GPU percentages mean **VRAM usage** (`memory.used / memory.total`), not `utilization.gpu`. Details query `memory.free` directly and divide by 1024 to display free/total GiB. The main GPU label keeps a no-GPU notice; nonexistent GPU children are hidden in every view by default.
+
+The P1 host and container are separate presets bound to separate saved connections. They must not be merged merely because they share a host address and use different ports.
+
+If a faulty device blocks an all-GPU query, the aggregate command queries GPU 0–7 individually and sums readable devices. With no readable device it shows “No GPU”; this means the query is unavailable, not proof that no GPU is installed.
+
+Suggested names resolve **when adding** a preset and must uniquely match a local saved profile. Missing or ambiguous names require manual selection, and the scope stays restricted. With no resolved profiles, it remains explicitly selected-empty and neither displays nor executes. Subsequent matching uses local stable profile IDs. Shared exports express connection bindings through names; review your own commands and descriptions before sharing them.
+
+## Default color thresholds
+
+The corresponding built-ins and presets use green `#00ff00`, orange `#ffa500` and red `#ff0000`. Rules match from top to bottom, so **red rules precede orange rules**. Saved custom rules take precedence after editing.
+
+| Metric | Red | Orange | Green |
+| --- | --- | --- | --- |
+| Free capacity per disk (GiB) | `< 20` | `20 ≤ x ≤ 40` | `> 40` |
+| Total free disk capacity (GiB) | `< 50` | `50 ≤ x ≤ 100` | `> 100` |
+| GPU memory usage (%) | `> 80` | `50 < x ≤ 80` | `≤ 50` |
+| RAM usage (%) | `> 80` | `60 < x ≤ 80` | `≤ 60` |
+| Normalized CPU 1min / 5min load (%) | `> 150` | `100 < x ≤ 150` | `≤ 100` |
+
+GPU thresholds measure VRAM use, not GPU compute utilization. CPU load is normalized by the logical processor count and can exceed 100%.
+
+## Connection scopes and mixed panes
+
+A standalone label or whole group can select multiple saved connections or layouts. The default unrestricted scope covers every supported terminal pane. Group members inherit the group's scope; an unmatched pane does not run even the object's check.
+
+Matching uses each pane's **original saved connection ID**, not the focused pane, tab title, host address or a sibling connection. In a `P1 / P2 / P1` layout, P1-bound metrics appear in both P1 panes and P2-bound metrics only in the middle pane. A layout-bound metric applies to all three, executing independently in each session. Multiple selections form a union: choosing P1 plus the whole layout also includes its P2 pane.
+
+Renaming preserves the association. Deleted profiles remain marked unavailable and stop matching; a new profile with the same name does not inherit the old ID. Removing the last selection does not make the metric global—you must explicitly choose all terminal panes.
+
+Saved layouts have IDs separate from the connections inside them. The plugin records a layout's origin when it is opened and retains that marker in recovery data. For **whole-layout bindings only**, an unmarked layout already open before installation, or a newly saved layout, must be reopened once from the saved-profile list. Direct connection-ID bindings need no such reopening.
+
+## Install, develop and publish
+
+After publication, search for `tabby-group-server-stats` in Tabby's plugin settings. Before publication, test a local `.tgz`. A GitHub fork, a successful build, npm publication and Tabby's search index are separate steps.
+
+Development needs Node.js, npm, Git and Tabby. Global Angular CLI/Webpack installations and Python are not required for this project. Keep the lockfile and `.npmrc`, then run from the repository root:
+
+```powershell
+Set-Location -LiteralPath 'D:\tabby-group-server-stats'
+npm.cmd ci
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run test:ui
+npm.cmd pack
+```
+
+`npm pack` reruns type checking, unit tests and the production build, producing `tabby-group-server-stats-1.7.1.tgz`; compiled files are in `dist/`. Browser tests use real Angular components with simulated data, while command tests use a local shell. Live SSH command validation and desktop split-pane acceptance need their own recorded results.
+
+This fork retains `plugin.serverStats` configuration compatibility. **Enable either the upstream plugin or this fork in a Tabby instance**, to avoid duplicate collection. An isolated portable Tabby installation is recommended for initial testing. See the [packaging, local-installation and publishing guide (Chinese)](PUBLISHING.zh-CN.md) for commands and acceptance checks.
+
+## License and contributions
+
+Original project: [kasuganosoras/tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats), by Akkariin, Copyright (c) 2023 Akkariin Meiko. [LICENSE](LICENSE) preserves the original MIT text, and [NOTICE](NOTICE) describes this fork's attribution and changes. The 26 new monitoring icons use MIT as well; dependencies retain their own licenses and notices.
+
+Report problems or suggest improvements through [this project's Issues](https://github.com/lishuainan0209/tabby-group-server-stats/issues). Shared presets should state required tools, metric meaning and source licenses.

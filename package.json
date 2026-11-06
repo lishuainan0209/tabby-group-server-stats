@@ -1,7 +1,7 @@
 {
-    "name": "tabby-server-stats",
-    "version": "1.1.10",
-    "description": "Displays server load stats (CPU, RAM, Disk and Network) for SSH sessions using Chart.js",
+    "name": "tabby-group-server-stats",
+    "version": "1.7.1",
+    "description": "Server statistics for Tabby with validated custom metrics, hover details and grouped overview, carousel and static layouts",
     "keywords": [
         "tabby-plugin",
         "ssh",
@@ -10,21 +10,41 @@
         "chartjs"
     ],
     "author": "Akkariin",
+    "contributors": [
+        {
+            "name": "lishuainan0209",
+            "url": "https://github.com/lishuainan0209"
+        }
+    ],
     "license": "MIT",
+    "homepage": "https://github.com/lishuainan0209/tabby-group-server-stats#readme",
+    "bugs": {
+        "url": "https://github.com/lishuainan0209/tabby-group-server-stats/issues"
+    },
     "main": "dist/index.js",
     "typings": "typings/index.d.ts",
     "scripts": {
-        "build": "webpack --progress --color",
-        "watch": "webpack --watch --progress --color"
+        "build": "webpack --progress --color && tsc -p tsconfig.typings.json",
+        "watch": "webpack --watch --progress --color",
+        "typecheck": "tsc --noEmit",
+        "test": "node --test tests/backend.test.cjs tests/display.test.cjs tests/settings.test.cjs tests/lifecycle.test.cjs tests/scope.test.cjs tests/scope-runtime.test.cjs tests/presets.test.cjs tests/transport.test.cjs tests/preset-github.test.cjs tests/builtin-order.test.cjs tests/login-users.test.cjs tests/network.test.cjs",
+        "test:ui": "node tests/browser.test.cjs",
+        "prepack": "npm run typecheck && npm test && npm run build"
     },
     "files": [
         "dist",
         "typings",
-        "README.md"
+        "README.md",
+        "LICENSE",
+        "NOTICE",
+        "PUBLISHING.zh-CN.md",
+        "README.en.md",
+        "presets.json",
+        "docs/images"
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/kasuganosoras/tabby-server-stats.git"
+        "url": "https://github.com/lishuainan0209/tabby-group-server-stats.git"
     },
     "dependencies": {
         "chart.js": "^4.4.0",
@@ -52,19 +72,22 @@
         "@angular/platform-browser": "^14.0.0",
         "@angular/platform-browser-dynamic": "^14.0.0",
         "@ng-bootstrap/ng-bootstrap": "^14.0.0",
-        "@types/node": "^16.0.0",
         "@popperjs/core": "^2.11.6",
+        "@types/node": "^16.0.0",
         "css-loader": "^6.7.0",
+        "playwright-core": "1.58.2",
+        "reflect-metadata": "0.2.2",
         "rxjs": "^7.5.0",
         "sass": "^1.56.0",
         "sass-loader": "^13.2.0",
         "tabby-core": "latest",
-        "tabby-terminal": "latest",
         "tabby-settings": "latest",
+        "tabby-terminal": "latest",
         "to-string-loader": "^1.2.0",
         "ts-loader": "^9.0.0",
         "typescript": "^4.7.0",
         "webpack": "^5.0.0",
-        "webpack-cli": "^4.0.0"
+        "webpack-cli": "^4.0.0",
+        "zone.js": "0.11.8"
     }
 }

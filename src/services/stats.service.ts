@@ -1,6 +1,9 @@
 import { Injectable } from '@angular/core'
 import { ConfigService } from 'tabby-core'
-import { CustomMetric } from '../config'
+import { CustomMetric, CustomMetricGroup, MetricStatus, allMetrics, metricTimeout, buildMetricCommand, parseMetricResults, shellQuote } from '../metric-model'
+import { filterScopedMetrics, ScopeContext } from '../display-scope'
+import { MetricScopeService } from './metric-scope.service'
+import { getBuiltinDefinitions } from '../builtin-metrics'
 import { exec } from 'child_process'
 import { Subject } from 'rxjs'
 import * as fs from 'fs'
@@ -34,26 +37,36 @@ interface MetricState {
     lastSuccess: number
     value: string
     isFetching: boolean
+    status: MetricStatus
+    detail: string
+    detailAt: number
 }
 
 interface SessionCache {
-    lastBaseFetch: number
-    lastBaseSuccess: number
-    baseStats: { cpu: number; mem: number; disk: number; netRx: number; netTx: number }
+    scopeSignature: string
     metricStates: Map<string, MetricState>
 }
 
 @Injectable({ providedIn: 'root' })
 export class StatsService {
     public static isDebugEnabled = false;
-    private baseStatsCommand = `export LC_ALL=C; PATH=$PATH:/usr/bin:/bin:/usr/sbin:/sbin; OS=$(uname -s 2>/dev/null || echo "Linux"); if [ "$OS" = "Darwin" ]; then cpu=$(ps -A -o %cpu | awk '{s+=$1} END {print s}' 2>/dev/null || echo "0"); mem=$(ps -A -o %mem | awk '{s+=$1} END {print s}' 2>/dev/null || echo "0"); disk=$(df -h / 2>/dev/null | awk 'NR==2{print $5}' | sed 's/%//' || echo "0"); echo "TABBY-STATS-START $cpu 0 0 $mem $disk"; else stats=$( (grep 'cpu ' /proc/stat; awk 'NR>2 {r+=$2; t+=$10} END{print r, t}' /proc/net/dev; sleep 1; grep 'cpu ' /proc/stat; awk 'NR>2 {r+=$2; t+=$10} END{print r, t}' /proc/net/dev) 2>/dev/null | awk 'NR==1 {t1=$2+$3+$4+$5+$6+$7+$8; i1=$5} NR==2 {rx1=$1; tx1=$2} NR==3 {t2=$2+$3+$4+$5+$6+$7+$8; i2=$5} NR==4 {rx2=$1; tx2=$2} END { dt=t2-t1; di=i2-i1; cpu=(dt<=0)?0:(dt-di)/dt*100; rx=rx2-rx1; tx=tx2-tx1; printf "%.1f %.0f %.0f", cpu, rx, tx }' ); mem=$(free 2>/dev/null | awk 'NR==2{printf "%.2f", $3*100/$2 }'); disk=$(df -h / 2>/dev/null | awk 'NR==2{print $5}' | sed 's/%//'); if [ -z "$stats" ]; then stats="0 0 0"; fi; if [ -z "$mem" ]; then mem="0"; fi; if [ -z "$disk" ]; then disk="0"; fi; echo "TABBY-STATS-START $stats $mem $disk"; fi`
     private serverCaches = new Map<string, SessionCache>();
-    private fetchGuards = new Map<string, boolean>();
+    private fetchTasks = new Map<string, Promise<any>>();
+    private detailTasks = new Map<string, Promise<string>>();
+    private sessionKeys = new WeakMap<object, string>();
+    private nextSessionId = 0;
+    private revision = 0;
     public statsUpdated$ = new Subject<{ serverKey: string; stats: any }>();
 
-    constructor(private config: ConfigService) {
+    constructor(private config: ConfigService, private scopes: MetricScopeService = null) {
         this.updateDebugState();
-        this.config.changed$.subscribe(() => this.updateDebugState());
+        this.config.changed$.subscribe(() => {
+            this.updateDebugState();
+            this.revision++;
+            this.serverCaches.clear();
+            this.fetchTasks.clear();
+            this.detailTasks.clear();
+        });
         this.config.ready$.subscribe(() => this.updateDebugState());
     }
 
@@ -62,29 +75,58 @@ export class StatsService {
     }
 
     public getServerKey(session: any): string {
-        if (!session) return 'default';
-        if (session.profile) {
-            if (session.profile.id) return `profile:${session.profile.id}`;
-            if (session.profile.options?.host) {
-                return `host:${session.profile.options.user || ''}@${session.profile.options.host}:${session.profile.options.port || 22}`;
-            }
-            if (session.profile.name) return `name:${session.profile.name}`;
+        if (!session || typeof session !== 'object') return 'default';
+        let key = this.sessionKeys.get(session);
+        if (!key) {
+            // Two connections using one saved profile must not share late results.
+            key = `session:${++this.nextSessionId}`;
+            this.sessionKeys.set(session, key);
         }
-        if (session.ssh?.ssh?.config?.host) {
-            return `ssh:${session.ssh.ssh.config.user || ''}@${session.ssh.ssh.config.host}:${session.ssh.ssh.config.port || 22}`;
+        return key;
+    }
+
+    private scopeContext(session: any): ScopeContext {
+        return this.scopes?.contextForSession(session) || { profileIds: session?.profile?.id ? [session.profile.id] : [] };
+    }
+
+    /** Disabled/out-of-scope commands never run. Unavailable items still refresh to detect recovery. */
+    public getVisibleConfig(session: any): { customMetrics: CustomMetric[]; metricGroups: CustomMetricGroup[] } {
+        const conf = this.config?.store?.plugin?.serverStats || {};
+        const builtins = getBuiltinDefinitions(conf);
+        return filterScopedMetrics({
+            customMetrics: [...builtins.customMetrics, ...(conf.customMetrics || [])],
+            metricGroups: [...builtins.metricGroups, ...(conf.metricGroups || [])]
+        }, this.scopeContext(session), this.config?.store?.profiles || []);
+    }
+
+    private scopeSignature(session: any): string {
+        const context = this.scopeContext(session);
+        const visible = this.getVisibleConfig(session);
+        return JSON.stringify([
+            [...new Set(context.profileIds)].sort(),
+            allMetrics(visible).map(metric => metric.id).sort()
+        ]);
+    }
+
+    private discardSessionCache(key: string) {
+        this.serverCaches.delete(key);
+        this.fetchTasks.delete(key);
+        for (const taskKey of this.detailTasks.keys()) {
+            if (taskKey.startsWith(`${key}:`)) this.detailTasks.delete(taskKey);
         }
-        if (session.savedTitle) return `title:${session.savedTitle}`;
-        return `session:${session.id || 'default'}`;
     }
 
     private getSessionCache(session: any): SessionCache {
         const key = this.getServerKey(session);
+        const scopeSignature = this.scopeSignature(session);
         let cache = this.serverCaches.get(key);
+        if (cache && cache.scopeSignature !== scopeSignature) {
+            this.discardSessionCache(key);
+            cache = undefined;
+        }
         if (!cache) {
             cache = {
-                lastBaseFetch: 0,
-                lastBaseSuccess: 0,
-                baseStats: { cpu: 0, mem: 0, disk: 0, netRx: 0, netTx: 0 },
+                scopeSignature,
                 metricStates: new Map<string, MetricState>()
             };
             this.serverCaches.set(key, cache);
@@ -92,29 +134,62 @@ export class StatsService {
         return cache;
     }
 
-    getCachedStats(session: any): any | null {
-        if (!session) return null;
-        const key = this.getServerKey(session);
-        const cache = this.serverCaches.get(key);
-        if (!cache || (cache.lastBaseFetch === 0 && cache.metricStates.size === 0)) return null;
-        const conf = this.config?.store?.plugin?.serverStats || {};
-        const customMetrics: CustomMetric[] = conf.customMetrics || [];
+    private snapshot(cache: SessionCache, session: any): any {
+        const metrics = allMetrics(this.getVisibleConfig(session));
+        const ids = new Set(metrics.map(metric => metric.id));
+        const numeric = (id: string) => {
+            const state = ids.has(id) ? cache.metricStates.get(id) : undefined;
+            const value = state?.status === 'ok' ? Number.parseFloat(state.value) : 0;
+            return Number.isFinite(value) ? value : 0;
+        };
         return {
-            ...cache.baseStats,
-            custom: customMetrics.map(m => ({
-                id: m.id,
-                value: cache.metricStates.get(m.id)?.value ?? '-'
-            }))
+            // Retain the original public snapshot shape for external consumers.
+            // All values now come from the same editable, scoped definitions.
+            cpu: numeric('builtin-cpu'), mem: numeric('builtin-ram'), disk: numeric('builtin-disk'),
+            netRx: numeric('builtin-net-rx') * 1024, netTx: numeric('builtin-net-tx') * 1024,
+            custom: metrics.map(metric => {
+                const state = cache.metricStates.get(metric.id);
+                return { id: metric.id, value: state?.value ?? '-', status: state?.status ?? 'pending' };
+            })
         };
     }
 
-    isPlatformSupport(session: any): boolean {
-        if (!session || session.open === false) {
-            return false;
+    getCachedStats(session: any): any | null {
+        if (!session || session.open === false) return null;
+        const key = this.getServerKey(session);
+        const cache = this.serverCaches.get(key);
+        if (cache && cache.scopeSignature !== this.scopeSignature(session)) {
+            this.discardSessionCache(key);
+            return null;
         }
-        const sshClient = session.ssh && session.ssh.ssh ? session.ssh.ssh : null;
-        const isSSH = sshClient && typeof sshClient.openSessionChannel === 'function';
-        return isSSH || process.platform === 'linux' || process.platform === 'darwin' || Boolean(this.getLocalShell());
+        return cache ? this.snapshot(cache, session) : null;
+    }
+
+    private getState(cache: SessionCache, metric: CustomMetric): MetricState {
+        let state = cache.metricStates.get(metric.id);
+        if (!state) {
+            state = { lastAttempt: 0, lastSuccess: 0, value: '-', status: 'pending', isFetching: false, detail: '', detailAt: 0 };
+            cache.metricStates.set(metric.id, state);
+        }
+        return state;
+    }
+
+    private isCurrent(session: any, cache: SessionCache, revision: number): boolean {
+        return session.open !== false && this.revision === revision && this.serverCaches.get(this.getServerKey(session)) === cache &&
+            cache.scopeSignature === this.scopeSignature(session);
+    }
+
+    private publish(session: any, cache: SessionCache, revision: number) {
+        if (this.isCurrent(session, cache, revision)) {
+            this.statsUpdated$.next({ serverKey: this.getServerKey(session), stats: this.snapshot(cache, session) });
+        }
+    }
+
+    isPlatformSupport(session: any): boolean {
+        if (!session || session.open === false) return false;
+        const sshClient = session.ssh?.ssh;
+        return Boolean(sshClient && typeof sshClient.openSessionChannel === 'function') ||
+            process.platform === 'linux' || process.platform === 'darwin' || Boolean(this.getLocalShell());
     }
 
     private getLocalShell(): string | null {
@@ -127,447 +202,350 @@ export class StatsService {
         ].find(shell => Boolean(shell && fs.existsSync(shell))) || null;
     }
 
-    async fetchStats(session: any): Promise<any | null> {
-        if (!session || session.open === false) return null;
+    private async execute(session: any, command: string, timeoutMs: number, onChunk?: (buffer: string) => void): Promise<string> {
+        if (!this.isPlatformSupport(session)) throw new Error('Session unavailable');
+        logDebug(`[execute] ${this.getServerKey(session)}, timeout=${timeoutMs}ms, length=${command.length}`);
+        const sshClient = session.ssh?.ssh;
+        if (sshClient && typeof sshClient.openSessionChannel === 'function') {
+            return this.exec(sshClient, command, timeoutMs, onChunk);
+        }
+        return this.execLocal(command, timeoutMs, this.getLocalShell());
+    }
 
-        const serverKey = this.getServerKey(session);
+    async fetchStats(session: any): Promise<any | null> {
+        if (!this.isPlatformSupport(session)) return null;
+        // Refresh context before looking up the task. A pane may have moved to a
+        // different saved layout without changing its session object.
+        this.getSessionCache(session);
+        const key = this.getServerKey(session);
+        const active = this.fetchTasks.get(key);
+        if (active) return active;
+        const task = this.collectStats(session);
+        this.fetchTasks.set(key, task);
+        try {
+            return await task;
+        } finally {
+            if (this.fetchTasks.get(key) === task) this.fetchTasks.delete(key);
+        }
+    }
+
+    private async collectStats(session: any): Promise<any | null> {
         const cache = this.getSessionCache(session);
+        const revision = this.revision;
         const now = Date.now();
         const conf = this.config?.store?.plugin?.serverStats || {};
-        const defaultInterval = Math.max(1, conf.defaultInterval || 3);
-        const defaultMetrics = conf.defaultMetrics || { cpu: true, ram: true, disk: true, net: true };
-        const isAnyDefaultMetricEnabled = Boolean(defaultMetrics.cpu || defaultMetrics.ram || defaultMetrics.disk || defaultMetrics.net);
-        const customMetrics: CustomMetric[] = conf.customMetrics || [];
-
-        // If another request is currently running for this server, return current stats immediately
-        if (this.fetchGuards.get(serverKey)) {
-            return {
-                ...cache.baseStats,
-                custom: customMetrics.map(m => ({
-                    id: m.id,
-                    value: cache.metricStates.get(m.id)?.value ?? '-'
-                }))
-            };
-        }
-
-        const sshClient = session.ssh && session.ssh.ssh ? session.ssh.ssh : null;
-        const isSSH = sshClient && typeof sshClient.openSessionChannel === 'function';
-        const localShell = isSSH ? null : this.getLocalShell();
-        const isLocalSupported = !isSSH && (
-            process.platform === 'linux' || process.platform === 'darwin' || Boolean(localShell)
-        );
-
-        if (!isSSH && !isLocalSupported) {
-            return null;
-        }
-
-        // Check if base stats need updating (with bootstrap fast-retry of 4s if no success yet)
-        const hasInitialBase = cache.lastBaseSuccess > 0;
-        const baseInterval = defaultInterval * 1000;
-        const isBaseDue = isAnyDefaultMetricEnabled && (
-            !hasInitialBase
-                ? (cache.lastBaseFetch === 0 || (now - cache.lastBaseFetch >= 4000))
-                : (now - cache.lastBaseSuccess >= baseInterval)
-        );
-
-        // Check which custom metrics are due
-        const dueCustomMetrics: CustomMetric[] = [];
-        for (const m of customMetrics) {
-            let state = cache.metricStates.get(m.id);
-            if (!state) {
-                state = { lastAttempt: 0, lastSuccess: 0, value: '-', isFetching: false };
-                cache.metricStates.set(m.id, state);
+        const defaultInterval = Number.isFinite(conf.defaultInterval) && conf.defaultInterval > 0 ? conf.defaultInterval : 3;
+        const due = allMetrics(this.getVisibleConfig(session)).filter(metric => {
+            const state = this.getState(cache, metric);
+            const interval = Number.isFinite(metric.interval) && metric.interval! > 0 ? metric.interval! : defaultInterval;
+            return !state.isFetching && !this.detailTasks.has(`${this.getServerKey(session)}:${metric.id}`) &&
+                (state.lastAttempt === 0 || now - state.lastAttempt >= Math.max(1, interval) * 1000);
+        });
+        if (!due.length) return this.snapshot(cache, session);
+        logDebug(`[collect] ${this.getServerKey(session)}, metrics=${due.length}`);
+        const tokens = new Map(due.map((metric, index) => [`m_${index}`, metric]));
+        const consumed = new Set<string>();
+        due.forEach(metric => {
+            const state = this.getState(cache, metric);
+            state.isFetching = true;
+            state.lastAttempt = now;
+        });
+        const onBuffer = (buffer: string) => {
+            if (!this.isCurrent(session, cache, revision)) return;
+            let changed = false;
+            for (const result of parseMetricResults(buffer)) {
+                const metric = tokens.get(result.token);
+                if (!metric || consumed.has(result.token)) continue;
+                consumed.add(result.token);
+                const state = this.getState(cache, metric);
+                // Its complete frame means this metric is no longer running, even
+                // while an unrelated slower sibling keeps the batch channel open.
+                state.isFetching = false;
+                state.status = result.status;
+                state.value = result.status === 'unavailable' ? (metric.unavailableText ?? 'Unavailable') : result.value;
+                logDebug(`[metric] ${metric.id}: ${result.status}`);
+                if (result.status === 'ok') state.lastSuccess = Date.now();
+                else { state.detail = ''; state.detailAt = 0; }
+                changed = true;
             }
-            if (state.isFetching) {
-                continue;
-            }
-
-            const mInterval = (m.interval && m.interval > 0 ? m.interval : defaultInterval) * 1000;
-            const hasInitialValue = state.lastSuccess > 0 && state.value !== '-' && !state.value.startsWith('Err:');
-
-            if (!hasInitialValue) {
-                // Bootstrap/Pending mode: Metric has no valid data on screen yet.
-                // Fetch immediately on connect (lastAttempt === 0), or retry promptly every 5s
-                // until the first successful data point is obtained.
-                if (state.lastAttempt === 0 || (now - state.lastAttempt >= 5000)) {
-                    dueCustomMetrics.push(m);
-                }
-            } else {
-                // Normal mode: Metric has valid data. Respect configured interval based on last successful fetch.
-                if (now - state.lastSuccess >= mInterval) {
-                    dueCustomMetrics.push(m);
-                }
-            }
-        }
-
-        // If neither base nor any custom metric is due, return cached data without firing SSH command
-        if (!isBaseDue && dueCustomMetrics.length === 0) {
-            return {
-                ...cache.baseStats,
-                custom: customMetrics.map(m => ({
-                    id: m.id,
-                    value: cache.metricStates.get(m.id)?.value ?? '-'
-                }))
-            };
-        }
-
-        this.fetchGuards.set(serverKey, true);
-
-        // Mark executing metrics
-        if (isBaseDue) {
-            cache.lastBaseFetch = now;
-        }
-        for (const m of dueCustomMetrics) {
-            const s = cache.metricStates.get(m.id);
-            if (s) {
-                s.isFetching = true;
-                s.lastAttempt = now;
-            }
-        }
-
-        logDebug(`[fetchStats] Server: ${serverKey}, baseDue=${isBaseDue}, dueMetrics=[${dueCustomMetrics.map(m => m.label || m.id).join(', ')}]`);
-
-        const emitCurrentStats = () => {
-            this.statsUpdated$.next({
-                serverKey,
-                stats: {
-                    ...cache.baseStats,
-                    custom: customMetrics.map(m => ({
-                        id: m.id,
-                        value: cache.metricStates.get(m.id)?.value ?? '-'
-                    }))
-                }
-            });
+            if (changed) this.publish(session, cache, revision);
         };
-
-        const onStreamingBuffer = (currentBuffer: string) => {
-            let updated = false;
-
-            if (isBaseDue) {
-                const match = currentBuffer.match(/TABBY-STATS-START\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)\s+([\d\.]+)/);
-                if (match && match.length >= 6) {
-                    const newBase = {
-                        cpu: parseFloat(match[1]) || 0,
-                        netRx: parseFloat(match[2]) || 0,
-                        netTx: parseFloat(match[3]) || 0,
-                        mem: parseFloat(match[4]) || 0,
-                        disk: parseFloat(match[5]) || 0
-                    };
-                    cache.lastBaseSuccess = Date.now();
-                    cache.lastBaseFetch = Date.now();
-                    if (cache.baseStats.disk !== newBase.disk || cache.baseStats.cpu !== newBase.cpu || cache.baseStats.mem !== newBase.mem || cache.baseStats.netRx !== newBase.netRx || cache.baseStats.netTx !== newBase.netTx) {
-                        cache.baseStats = newBase;
-                        updated = true;
-                    }
-                }
-            }
-
-            // Parse custom metrics via atomic single-line protocol: TABBY-CUSTOM-RES:<safeId>:<val>
-            const customLineRegex = /TABBY-CUSTOM-RES:(m_[a-zA-Z0-9_-]+):([^\r\n]*)(?:\r?\n|$)/g;
-            let cMatch: RegExpExecArray | null;
-            while ((cMatch = customLineRegex.exec(currentBuffer)) !== null) {
-                const targetSafeId = cMatch[1];
-                let parsedVal = cMatch[2].replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '').trim();
-
-                const m = dueCustomMetrics.find(metric => ('m_' + metric.id.replace(/[^a-zA-Z0-9_-]/g, '')) === targetSafeId);
-                if (m) {
-                    const state = cache.metricStates.get(m.id);
-                    if (state) {
-                        state.isFetching = false;
-                        state.lastAttempt = Date.now();
-
-                        if (parsedVal.startsWith('Err:')) {
-                            logDebug(`[metric:error] Server: ${serverKey}, ${m.label || m.id}: ${parsedVal}`);
-                            state.value = parsedVal;
-                        } else {
-                            state.lastSuccess = Date.now();
-                            if (state.value !== parsedVal) {
-                                logDebug(`[metric:update] Server: ${serverKey}, ${m.label || m.id} -> ${parsedVal}`);
-                                state.value = parsedVal;
-                                updated = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (updated) {
-                emitCurrentStats();
-            }
-        };
-
-        const formatMetricCmd = (m: CustomMetric) => {
-            const safeId = 'm_' + m.id.replace(/[^a-zA-Z0-9_-]/g, '');
-            const mTimeout = Math.max(1, m.timeout || 30);
-            return (
-                `(\n` +
-                `_out=$(\n` +
-                `if command -v timeout >/dev/null 2>&1; then\n` +
-                `timeout --kill-after=2s ${mTimeout}s /bin/sh <<'EOF_TABBY_${safeId}'\n` +
-                `${m.command}\n` +
-                `EOF_TABBY_${safeId}\n` +
-                `else\n` +
-                `/bin/sh <<'EOF_TABBY_${safeId}'\n` +
-                `${m.command}\n` +
-                `EOF_TABBY_${safeId}\n` +
-                `fi 2>&1\n` +
-                `)\n` +
-                `_code=$?\n` +
-                `if [ $_code -eq 124 ]; then\n` +
-                `_val="Err: Timeout"\n` +
-                `elif [ $_code -eq 0 ]; then\n` +
-                `_val=$(printf '%s\\n' "$_out" | awk 'NF{p=$0} END{print p}' | tr '\\r\\n' '  ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')\n` +
-                `[ -z "$_val" ] && _val="0"\n` +
-                `else\n` +
-                `_msg=$(printf '%s\\n' "$_out" | tr '\\r\\n' '  ' | cut -c 1-60 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')\n` +
-                `_val="Err: \${_msg:-error}"\n` +
-                `fi\n` +
-                `printf 'TABBY-CUSTOM-RES:%s:%s\\n' "${safeId}" "$_val"\n` +
-                `) &`
-            );
-        };
-
+        const parts = ['export LC_ALL=C PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"'];
+        tokens.forEach((metric, token) => parts.push(buildMetricCommand(metric, token)));
+        parts.push('wait', 'echo TABBY-STATS-END');
         try {
-            const parts: string[] = ['export LC_ALL=C PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"'];
-
-            // Run all custom metrics concurrently in parallel subshells so lightweight commands
-            // are never delayed by slower commands, regardless of what commands the user defines.
-            for (const m of dueCustomMetrics) {
-                parts.push(formatMetricCmd(m));
-            }
-
-            // Base stats (which contains sleep 1 for CPU diff) also runs concurrently in background
-            if (isBaseDue) {
-                parts.push(`(\n${this.baseStatsCommand}\n) &`);
-            }
-
-            parts.push('wait');
-            parts.push('echo " TABBY-STATS-END"');
-            const finalCommand = parts.join('\n') + '\n';
-
-            let output: string | null = null;
-            let totalTimeoutSec = 30;
-            for (const m of dueCustomMetrics) {
-                totalTimeoutSec += Math.max(1, m.timeout || 30);
-            }
-            const execTimeoutMs = Math.max(60000, totalTimeoutSec * 1000);
-
-            if (isSSH) {
-                output = await this.exec(sshClient, finalCommand, execTimeoutMs, onStreamingBuffer);
-            } else if (isLocalSupported) {
-                output = await this.execLocal(finalCommand, execTimeoutMs, localShell);
-            }
-
-            if (output) {
-                onStreamingBuffer(output);
-            }
-            emitCurrentStats();
-
-            logDebug(`[fetchStats:done] Server: ${serverKey}, summary: ` + 
-                customMetrics.map(m => `${m.label || m.id}=${cache.metricStates.get(m.id)?.value ?? '-'}`).join(' | '));
-
-            return {
-                ...cache.baseStats,
-                custom: customMetrics.map(m => ({
-                    id: m.id,
-                    value: cache.metricStates.get(m.id)?.value ?? '-'
-                }))
-            };
-
-        } catch (e: any) {
-            logDebug(`[fetchStats:error] Server: ${serverKey}, error: ${e?.message || e}`);
-            for (const m of dueCustomMetrics) {
-                const state = cache.metricStates.get(m.id);
-                if (state) {
-                    state.isFetching = false;
-                    state.lastAttempt = now;
-                    // Do not erase existing valid numbers on temporary SSH drop
-                    if (!state.value || state.value === '-') {
-                        state.value = e && e.message && e.message.includes('Timeout') ? 'Err: Timeout' : '-';
+            const timeout = Math.max(15, ...due.map(metric => metricTimeout(metric) * 2 + 5)) * 1000;
+            const buffer = await this.execute(session, parts.join('\n') + '\n', timeout, onBuffer);
+            onBuffer(buffer);
+            // A channel that closes without a complete result is an error, not a fresh cached value.
+            if (this.isCurrent(session, cache, revision)) {
+                tokens.forEach((metric, token) => {
+                    if (!consumed.has(token)) {
+                        const state = this.getState(cache, metric);
+                        state.status = 'error'; state.value = 'Err: No result'; state.detail = ''; state.detailAt = 0;
                     }
-                }
+                });
             }
-            return {
-                ...cache.baseStats,
-                custom: customMetrics.map(m => ({
-                    id: m.id,
-                    value: cache.metricStates.get(m.id)?.value ?? '-'
-                }))
-            };
+        } catch (error: any) {
+            logDebug(`[collect:error] ${error?.message || error}`);
+            if (this.isCurrent(session, cache, revision)) {
+                tokens.forEach((metric, token) => {
+                    if (!consumed.has(token)) {
+                        const state = this.getState(cache, metric);
+                        state.status = 'error';
+                        state.value = this.executionErrorValue(error);
+                        state.detail = ''; state.detailAt = 0;
+                    }
+                });
+            }
         } finally {
-            for (const m of dueCustomMetrics) {
-                const s = cache.metricStates.get(m.id);
-                if (s) s.isFetching = false;
+            due.forEach(metric => { this.getState(cache, metric).isFetching = false; });
+            this.publish(session, cache, revision);
+        }
+        return this.isCurrent(session, cache, revision) ? this.snapshot(cache, session) : null;
+    }
+
+    /** Hover details share the metric's refresh interval and deduplicate in-flight requests. */
+    async fetchDetails(session: any, metrics: CustomMetric[]): Promise<Record<string, string>> {
+        if (!this.isPlatformSupport(session)) return {};
+        const key = this.getServerKey(session);
+        const revision = this.revision;
+        const cache = this.getSessionCache(session);
+        const active = this.fetchTasks.get(key);
+        const current = new Map(allMetrics(this.getVisibleConfig(session)).map(metric => [metric.id, metric]));
+        // A streamed result can be expanded immediately. Only wait for the batch
+        // when a requested metric itself has not completed its current command.
+        const waitingForRequestedMetric = metrics.some(input => {
+            const metric = current.get(input.id);
+            if (!metric?.detailCommand?.trim()) return false;
+            const state = cache.metricStates.get(metric.id);
+            return !state || state.isFetching || state.status === 'pending';
+        });
+        if (active && waitingForRequestedMetric) await active;
+        if (!this.isCurrent(session, cache, revision)) return {};
+        const results: Record<string, string> = {};
+        await Promise.all(metrics.map(async input => {
+            const metric = current.get(input.id);
+            if (!metric?.detailCommand?.trim()) return;
+            const state = this.getState(cache, metric);
+            if (state.status === 'unavailable' || state.status === 'error') { results[metric.id] = ''; return; }
+            const configuredDefault = this.config?.store?.plugin?.serverStats?.defaultInterval;
+            const defaultInterval = Number.isFinite(configuredDefault) && configuredDefault > 0 ? configuredDefault : 3;
+            const interval = Number.isFinite(metric.interval) && metric.interval! > 0 ? metric.interval! : defaultInterval;
+            if (state.detailAt && Date.now() - state.detailAt < Math.max(1, interval) * 1000) { results[metric.id] = state.detail; return; }
+            const taskKey = `${key}:${metric.id}`;
+            let task = this.detailTasks.get(taskKey);
+            if (!task) {
+                task = this.collectDetail(session, metric, cache, revision);
+                this.detailTasks.set(taskKey, task);
             }
-            this.fetchGuards.delete(serverKey);
+            try { results[metric.id] = await task; }
+            finally { if (this.detailTasks.get(taskKey) === task) this.detailTasks.delete(taskKey); }
+        }));
+        return this.isCurrent(session, cache, revision) ? results : {};
+    }
+
+    private async collectDetail(session: any, metric: CustomMetric, cache: SessionCache, revision: number): Promise<string> {
+        const state = this.getState(cache, metric);
+        try {
+            const script = ['export LC_ALL=C PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"',
+                buildMetricCommand(metric, 'detail', 'detail'), 'wait', 'echo TABBY-STATS-END', ''].join('\n');
+            const buffer = await this.execute(session, script, (metricTimeout(metric) * 2 + 5) * 1000);
+            if (!this.isCurrent(session, cache, revision)) return '';
+            const result = parseMetricResults(buffer).find(result => result.token === 'detail');
+            if (result?.status === 'unavailable') {
+                state.status = 'unavailable'; state.value = metric.unavailableText ?? 'Unavailable';
+                state.detail = ''; state.detailAt = 0;
+                this.publish(session, cache, revision);
+                return '';
+            }
+            state.detail = result?.value ?? 'Err: No result';
+            if (!result || result.status === 'error') logDebug(`[detail:error] ${metric.id}: ${state.detail}; stdout=${buffer.length} bytes`);
+            state.detailAt = Date.now();
+            return state.detail;
+        } catch (error: any) {
+            if (!this.isCurrent(session, cache, revision)) return '';
+            state.detail = this.executionErrorValue(error);
+            state.detailAt = Date.now();
+            logDebug(`[detail:error] ${metric.id}: ${state.detail}`);
+            return state.detail;
         }
     }
+
+    private executionErrorValue(error: any): string {
+        const message = String(error?.message || error);
+        if (message.includes('Timeout')) return 'Err: Timeout';
+        const diagnostic = message.match(/^Stats: (No output|Incomplete output|No result|Remote error(?:: [\s\S]*)?)$/);
+        return diagnostic ? `Err: ${diagnostic[1]}` : 'Err: Connection';
+    }
+
 
     private execLocal(cmd: string, timeoutMs: number = 45000, shell?: string | null): Promise<string> {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             exec(cmd, { timeout: timeoutMs, ...(shell ? { shell } : {}) }, (error, stdout) => {
-                if (error) {
-                    logDebug(`[execLocal:error] ${error.message}`);
-                    resolve('');
-                } else {
-                    resolve(stdout);
-                }
+                if (error) reject(new Error(error.killed ? 'Stats: Timeout' : error.message));
+                else resolve(stdout);
             });
         });
     }
 
-    private async exec(sshClient: any, cmd: string, timeoutMs: number = 45000, onChunk?: (buffer: string) => void): Promise<string> {
-        const startTime = Date.now();
-        logDebug(`[exec:start] timeout=${timeoutMs}ms, cmdLength=${cmd.length}`);
-        const shellCommand = `/bin/sh -c 'eval "$(printf %b "${Array.from(Buffer.from(cmd), byte => String.raw`\\0${byte.toString(8).padStart(3, '0')}`).join('')}")"'`;
-
-        let timeoutTimer: any = null;
-        const timeout = new Promise<never>((_, reject) => {
-            timeoutTimer = setTimeout(() => {
-                logDebug(`[exec:timeout] Reached ${timeoutMs}ms limit`);
-                reject(new Error('Stats: Timeout'));
-            }, timeoutMs);
-        });
-
-        const run = async () => {
+    private exec(sshClient: any, cmd: string, timeoutMs: number = 45000, onChunk?: (buffer: string) => void): Promise<string> {
+        const needsAcknowledgement = cmd.includes('TABBY-STATS-END');
+        // russh discards a channel's event buffer on Close. Keep this dedicated
+        // exec shell alive until the client receives END; merely waiting longer
+        // on the client cannot recover data delivered after that buffer deletion.
+        // The server-side wait is bounded even if the client disappears.
+        const watchdogRead = `
+_tabby_reader=$$
+(
+    trap 'kill "$_tabby_sleep" 2>/dev/null; exit 0' TERM
+    sleep 5 & _tabby_sleep=$!
+    wait "$_tabby_sleep"
+    kill -TERM "$_tabby_reader" 2>/dev/null
+) </dev/null >/dev/null 2>&1 &
+_tabby_watchdog=$!
+trap 'kill "$_tabby_watchdog" 2>/dev/null; exit 0' TERM
+IFS= read -r _tabby_ack
+kill "$_tabby_watchdog" 2>/dev/null
+wait "$_tabby_watchdog" 2>/dev/null
+exit 0
+`;
+        const acknowledgementWait = `
+# TABBY-STATS-ACK-WAIT
+if command -v timeout >/dev/null 2>&1 && timeout -k 1 1 /bin/sh -c ':' >/dev/null 2>&1; then
+    timeout -k 1 5 /bin/sh -c 'IFS= read -r _tabby_ack' || :
+elif command -v gtimeout >/dev/null 2>&1 && gtimeout -k 1 1 /bin/sh -c ':' >/dev/null 2>&1; then
+    gtimeout -k 1 5 /bin/sh -c 'IFS= read -r _tabby_ack' || :
+else
+    /bin/sh -c ${shellQuote(watchdogRead)}
+fi
+`;
+        // Keep the SSH exec request tiny: embedding a batch here can exceed the
+        // server's packet/argv limits and disconnect every channel in the session.
+        // A compound command is parsed completely before it executes, so command
+        // stdin cannot consume later script lines. Nothing follows its closing
+        // brace: the next stdin bytes are exclusively the client's acknowledgment.
+        const shellCommand = '/bin/sh -s';
+        const script = Buffer.from(`{\n${cmd}\n${needsAcknowledgement ? acknowledgementWait : ''}\nexit\n}\n`, 'utf8');
+        return new Promise((resolve, reject) => {
             let channel: any = null;
-            try {
-                const newChannel = await sshClient.openSessionChannel();
-                channel = await sshClient.activateChannel(newChannel);
-                logDebug(`[exec:channel] Activated channel`);
-            } catch (err: any) {
-                logDebug(`[exec:channel:error] ${err?.message || err}`);
-                throw err;
-            }
-
-            return new Promise<string>((resolve, reject) => {
-                let buffer = '';
-                let stderrBuffer = '';
-                let resolved = false;
-                const subs: any[] = [];
-                const decoder = new TextDecoder('utf-8');
-
-                const cleanup = () => {
-                    subs.forEach(s => {
-                        try { s.unsubscribe(); } catch(e){}
-                    });
-                    if (channel) {
-                        try { channel.close(); } catch(e){}
-                    }
-                };
-
-                const finish = (reason: string) => {
-                    if (resolved) return;
-                    resolved = true;
-                    const elapsed = Date.now() - startTime;
-                    logDebug(`[exec:finish] Reason=${reason}, duration=${elapsed}ms, stdoutLen=${buffer.length}, stderrLen=${stderrBuffer.length}`);
-                    cleanup();
-                    resolve(buffer);
-                };
-
-                const processData = (chunk: any) => {
-                    let text = '';
-                    if (typeof chunk === 'string') {
-                        text = chunk;
-                    } else if (Buffer.isBuffer(chunk)) {
-                        text = chunk.toString('utf8');
-                    } else if (chunk instanceof ArrayBuffer || ArrayBuffer.isView(chunk)) {
-                        text = decoder.decode(chunk, { stream: true });
-                    } else {
-                        text = String(chunk);
-                    }
-
-                    buffer += text;
-
-                    if (onChunk) {
-                        try {
-                            onChunk(buffer);
-                        } catch (err) {
-                            logDebug(`[exec:onChunk:error] ${err}`);
-                        }
-                    }
-
-                    if (!resolved && buffer.includes('TABBY-STATS-END')) {
-                        finish('end_tag');
-                    }
-                };
-
-                // STDOUT
-                if (channel.data$) {
-                    subs.push(channel.data$.subscribe({
-                        next: (data: any) => processData(data),
-                        error: (err: any) => {
-                            logDebug(`[exec:data$:error] ${err}`);
-                            if (!resolved) {
-                                cleanup();
-                                reject(err);
-                            }
-                        },
-                        complete: () => {
-                            logDebug(`[exec:data$:complete]`);
-                            setTimeout(() => finish('data_complete'), 100);
-                        }
-                    }));
-                } else {
-                    cleanup();
-                    reject(new Error('Channel has no data$ observable'));
-                    return;
+            let completed = false;
+            let buffer = '';
+            let stderr = '';
+            let closing = false;
+            let acknowledging = false;
+            let uploadComplete = false;
+            let endReceived = false;
+            let drainTimer: ReturnType<typeof setTimeout> | undefined;
+            let acknowledgementTimer: ReturnType<typeof setTimeout> | undefined;
+            const subscriptions: any[] = [];
+            const decoder = new TextDecoder('utf-8');
+            const errorDecoder = new TextDecoder('utf-8');
+            const finish = (error?: Error) => {
+                if (completed) return;
+                completed = true;
+                clearTimeout(timer);
+                clearTimeout(drainTimer);
+                clearTimeout(acknowledgementTimer);
+                buffer += decoder.decode();
+                stderr += errorDecoder.decode();
+                // A remote shell can fail before our wrapper emits a result. Keep
+                // its diagnostic separate from a successful (possibly empty) value.
+                const expectedProtocol = cmd.includes('TABBY-METRIC-RESULT:') || cmd.includes('TABBY-STATS-START');
+                const hasResult = parseMetricResults(buffer).length > 0 || /(?:^|\n)TABBY-STATS-START[^\r\n]*\r?\n/.test(buffer);
+                if (!error && expectedProtocol && !hasResult) {
+                    const remoteError = stderr.replace(/[\x00-\x1f\x7f]+/g, ' ').trim().slice(0, 500);
+                    const reason = remoteError ? `Remote error: ${remoteError}` :
+                        !buffer.trim() ? 'No output' : buffer.includes('TABBY-METRIC-RESULT:') ? 'Incomplete output' : 'No result';
+                    error = new Error(`Stats: ${reason}`);
                 }
-
-                // STDERR
-                if (channel.extendedData$) {
-                    subs.push(channel.extendedData$.subscribe({
-                        next: (data: any) => {
-                            let text = '';
-                            if (typeof data === 'string') text = data;
-                            else if (Buffer.isBuffer(data)) text = data.toString('utf8');
-                            else if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) text = decoder.decode(data, { stream: true });
-                            else text = String(data);
-                            stderrBuffer += text;
-                            logDebug(`[exec:stderr] ${text.trim()}`);
-                        },
-                        error: (err: any) => logDebug(`[exec:extendedData$:error] ${err}`)
-                    }));
+                for (const subscription of subscriptions) {
+                    try { subscription.unsubscribe(); } catch {}
                 }
-
-                // EOF / CLOSED events
-                if (channel.eof$) {
-                    subs.push(channel.eof$.subscribe(() => {
-                        logDebug(`[exec:eof$] Remote sent EOF (awaiting buffer processing/channel close)`);
-                    }));
+                try { Promise.resolve(channel?.close()).catch(() => {}); } catch {}
+                if (error) reject(error); else resolve(buffer);
+            };
+            const timer = setTimeout(() => finish(new Error('Stats: Timeout')), timeoutMs);
+            const acknowledgeOutput = () => {
+                if (completed || acknowledging) return;
+                if (!needsAcknowledgement) { finish(); return; }
+                if (!endReceived) {
+                    endReceived = true;
+                    clearTimeout(timer);
+                    clearTimeout(drainTimer);
+                    // END may arrive while the final upload write is resolving.
+                    // Bound this wait too, without replacing complete results.
+                    acknowledgementTimer = setTimeout(() => finish(), 1000);
                 }
-                if (channel.closed$) {
-                    subs.push(channel.closed$.subscribe(() => {
-                        logDebug(`[exec:closed$] Remote channel closed`);
-                        setTimeout(() => finish('closed'), 100);
-                    }));
+                if (!uploadComplete) return;
+                acknowledging = true;
+                try {
+                    const acknowledgment = channel.write(Buffer.from('TABBY-STATS-ACK\n'));
+                    Promise.resolve(acknowledgment).then(() => finish(), () => finish());
+                } catch { finish(); }
+            };
+            const drain = () => {
+                closing = true;
+                clearTimeout(drainTimer);
+                // russh delivers close and stdout through separate observables.
+                // Drain until stdout has been quiet, not a fixed delay measured
+                // from an earlier close notification that may precede final data.
+                drainTimer = setTimeout(() => finish(), 100);
+            };
+            const subscribe = (observable: any, observer: any) => {
+                const subscription = observable.subscribe(observer);
+                // Buffered observables may synchronously finish during subscribe.
+                if (completed) subscription.unsubscribe(); else subscriptions.push(subscription);
+            };
+            const open = async () => {
+                const pendingChannel = await sshClient.openSessionChannel();
+                if (completed) { try { pendingChannel?.close(); } catch {} return; }
+                channel = await sshClient.activateChannel(pendingChannel);
+                if (completed) { try { channel?.close(); } catch {} return; }
+                if (!channel.data$) throw new Error('Channel has no data observable');
+                subscribe(channel.data$, {
+                    next: (chunk: any) => {
+                        if (completed) return;
+                        if (typeof chunk === 'string') buffer += chunk;
+                        else if (Buffer.isBuffer(chunk) || chunk instanceof ArrayBuffer || ArrayBuffer.isView(chunk)) {
+                            buffer += decoder.decode(chunk, { stream: true });
+                        } else buffer += String(chunk);
+                        onChunk?.(buffer);
+                        if (/(?:^|\n)TABBY-STATS-END\r?\n/.test(buffer)) acknowledgeOutput();
+                        else if (closing) drain();
+                    },
+                    error: (error: Error) => finish(error),
+                    complete: drain
+                });
+                if (completed) return;
+                if (channel.closed$) subscribe(channel.closed$, drain);
+                if (channel.extendedData$) subscribe(channel.extendedData$, {
+                    next: (event: any) => {
+                        // russh's extendedData$ emits [SSH extended-data type, bytes].
+                        const chunk = Array.isArray(event) ? event[1] : event;
+                        if (typeof chunk === 'string') stderr += chunk;
+                        else if (Buffer.isBuffer(chunk) || chunk instanceof ArrayBuffer || ArrayBuffer.isView(chunk)) stderr += errorDecoder.decode(chunk, { stream: true });
+                        stderr = stderr.slice(-2048);
+                        if (closing) drain();
+                    }, error: (error: Error) => finish(error)
+                });
+                if (completed) return;
+                if (typeof channel.write !== 'function') throw new Error('SSH channel does not support stdin upload');
+                if (typeof channel.requestExec === 'function') await channel.requestExec(shellCommand);
+                else if (typeof channel.exec === 'function') await channel.exec(shellCommand);
+                else throw new Error('Channel has no exec method');
+                // Await bounded writes to honor channel backpressure and keep
+                // UTF-8 byte sequences intact across transport packet boundaries.
+                for (let offset = 0; offset < script.length; offset += 8192) {
+                    if (completed || closing) return;
+                    await channel.write(script.subarray(offset, offset + 8192));
                 }
-
-                if (typeof channel.requestExec === 'function') {
-                    channel.requestExec(shellCommand).catch((err: any) => {
-                        logDebug(`[exec:requestExec:error] ${err?.message || err}`);
-                        cleanup();
-                        reject(err);
-                    });
-                } else if (typeof channel.exec === 'function') {
-                    channel.exec(shellCommand).catch((err: any) => {
-                        logDebug(`[exec:exec:error] ${err?.message || err}`);
-                        cleanup();
-                        reject(err);
-                    });
-                } else {
-                    cleanup();
-                    reject(new Error('Channel has no requestExec or exec method'));
-                }
-            });
-        };
-
-        try {
-            return await Promise.race([run(), timeout]);
-        } finally {
-            if (timeoutTimer) {
-                clearTimeout(timeoutTimer);
-            }
-        }
+                if (completed) return;
+                uploadComplete = true;
+                if (endReceived) acknowledgeOutput();
+                else if (!needsAcknowledgement && typeof channel.eof === 'function') await channel.eof();
+            };
+            open().catch((error: Error) => finish(error));
+        });
     }
 }

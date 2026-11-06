@@ -1,142 +1,1610 @@
 [
   {
-    "label": "Uptime",
-    "command": "awk '{d=int($1/86400); h=int(($1%86400)/3600); print d\"d \"h\"h\"}' /proc/uptime 2>/dev/null || echo \"-\"",
-    "type": "text",
-    "icon": "clock",
-    "color": "#00b894",
-    "interval": 60,
-    "suffix": ""
+    "id": "single-uptime",
+    "kind": "metric",
+    "label": "运行时间",
+    "labels": {
+      "en": "Uptime",
+      "zh": "运行时间"
+    },
+    "description": "系统持续运行时间。",
+    "descriptions": {
+      "en": "System uptime.",
+      "zh": "系统持续运行时间。"
+    },
+    "metric": {
+      "label": "Uptime",
+      "command": "awk '{d=int($1/86400); h=int(($1%86400)/3600); print d\"d \"h\"h\"}' /proc/uptime 2>/dev/null || echo \"-\"",
+      "type": "text",
+      "icon": "stats-uptime",
+      "color": "#00ff00",
+      "interval": 60,
+      "suffix": "",
+      "id": "single-uptime",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
   },
   {
-    "label": "Temp",
-    "command": "cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null | awk '{print int($1/1000)}' || echo 0",
-    "type": "text",
-    "icon": "thermometer-half",
-    "color": "#00b894",
-    "interval": 5,
-    "suffix": "°C",
-    "colorRules": [
-      {
-        "operator": ">=",
-        "value": "80",
-        "color": "#ff7675"
+    "id": "single-temperature",
+    "kind": "metric",
+    "label": "温度",
+    "labels": {
+      "en": "Temperature",
+      "zh": "温度"
+    },
+    "description": "第一个温度传感器读数。",
+    "descriptions": {
+      "en": "Temperature from the first thermal zone.",
+      "zh": "第一个温度传感器读数。"
+    },
+    "metric": {
+      "label": "Temp",
+      "command": "awk '{printf \"%.1f\\n\",$1/1000}' /sys/class/thermal/thermal_zone0/temp",
+      "type": "text",
+      "icon": "stats-temperature",
+      "color": "#00ff00",
+      "interval": 5,
+      "suffix": "°C",
+      "colorRules": [
+        {
+          "operator": ">=",
+          "value": "80",
+          "color": "#ff0000"
+        },
+        {
+          "operator": ">=",
+          "value": "65",
+          "color": "#ffa500"
+        }
+      ],
+      "id": "single-temperature",
+      "checkCommand": "test -r /sys/class/thermal/thermal_zone0/temp",
+      "checkMode": "exitCode",
+      "checkExpected": "0",
+      "unavailableText": "Unavailable",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "single-load",
+    "kind": "metric",
+    "label": "系统负载",
+    "labels": {
+      "en": "Load",
+      "zh": "系统负载"
+    },
+    "description": "系统的一分钟平均负载。",
+    "descriptions": {
+      "en": "One-minute system load.",
+      "zh": "系统的一分钟平均负载。"
+    },
+    "metric": {
+      "label": "Load",
+      "command": "cat /proc/loadavg | awk '{print $1}'",
+      "type": "text",
+      "icon": "stats-cpu-load",
+      "color": "#00ff00",
+      "interval": 5,
+      "suffix": "",
+      "id": "single-load",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "single-users",
+    "kind": "metric",
+    "label": "登录用户",
+    "labels": {
+      "en": "Users",
+      "zh": "登录用户"
+    },
+    "description": "系统记录的登录会话数量；悬停按用户名汇总会话数，包含终端与控制台登录，不等同于全部 TCP 或后台 SSH 连接。",
+    "descriptions": {
+      "en": "Login sessions recorded by the system. Hover to group session counts by username, including terminal and console logins; this is not a count of all TCP or background SSH connections.",
+      "zh": "系统记录的登录会话数量；悬停按用户名汇总会话数，包含终端与控制台登录，不等同于全部 TCP 或后台 SSH 连接。"
+    },
+    "metric": {
+      "label": "Users",
+      "command": "_tabby_who=$(LC_ALL=C who 2>/dev/null) || exit 1; printf '%s\\n' \"$_tabby_who\" | awk 'NF {count++} END {print count+0}'",
+      "checkCommand": "command -v who >/dev/null 2>&1",
+      "checkMode": "exitCode",
+      "checkExpected": "0",
+      "unavailableText": "Unavailable",
+      "detailCommand": "_tabby_who=$(LC_ALL=C who 2>/dev/null) || exit 1; _tabby_users=$(printf '%s\\n' \"$_tabby_who\" | awk 'NF {count[$1]++} END {for(user in count) printf \"%s\\t%d\\n\",user,count[user]}') || exit 1; _tabby_users=$(printf '%s\\n' \"$_tabby_users\" | LC_ALL=C sort) || exit 1; printf '%s\\n' \"$_tabby_users\" | awk -F '\\t' 'NF {printf \"%s%s ×%d\",n++?\", \":\"\",$1,$2} END {if(!n) printf \"-\"; printf \"\\n\"}'",
+      "type": "text",
+      "icon": "users",
+      "color": "#00ff00",
+      "interval": 10,
+      "suffix": "",
+      "id": "single-users",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "single-docker",
+    "kind": "metric",
+    "label": "Docker 容器",
+    "labels": {
+      "en": "Docker",
+      "zh": "Docker 容器"
+    },
+    "description": "运行中的 Docker 容器数量。",
+    "descriptions": {
+      "en": "Number of running Docker containers.",
+      "zh": "运行中的 Docker 容器数量。"
+    },
+    "metric": {
+      "label": "Docker",
+      "command": "docker ps -q 2>/dev/null | wc -l",
+      "type": "text",
+      "icon": "stats-container",
+      "color": "#00ff00",
+      "interval": 10,
+      "suffix": " run",
+      "id": "single-docker",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "single-gpu-memory",
+    "kind": "metric",
+    "label": "GPU 显存",
+    "labels": {
+      "en": "GPU memory",
+      "zh": "GPU 显存"
+    },
+    "description": "总显存使用率；悬停显示剩余/总显存（GiB）。",
+    "descriptions": {
+      "en": "Total VRAM usage percentage; hover for free/total GiB.",
+      "zh": "总显存使用率；悬停显示剩余/总显存（GiB）。"
+    },
+    "metric": {
+      "id": "single-gpu-memory",
+      "label": "GPU",
+      "type": "text",
+      "icon": "stats-vram",
+      "suffix": "%",
+      "color": "#00ff00",
+      "interval": 20,
+      "timeout": 60,
+      "command": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
+      "detailCommand": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",free/1024,total/1024}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
+      "checkCommand": "tabby_gpu_exists() { gpu_data=$(nvidia-smi \"$@\" --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || return 1; printf '%s\\n' \"$gpu_data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 ~ /^[0-9]+$/) found=1} END {exit !found}'; }; tabby_gpu_exists || (for gpu_index in 0 1 2 3 4 5 6 7; do tabby_gpu_exists --id=\"$gpu_index\" && exit 0; done; exit 1)",
+      "checkMode": "exitCode",
+      "checkExpected": "0",
+      "unavailableText": "无GPU",
+      "showWhenUnavailable": true,
+      "visibleWhenUnavailable": true,
+      "colorRules": [
+        {
+          "operator": ">",
+          "value": "80",
+          "color": "#ff0000"
+        },
+        {
+          "operator": ">",
+          "value": "50",
+          "color": "#ffa500"
+        }
+      ],
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "single-ssh-sessions",
+    "kind": "metric",
+    "label": "SSH 会话",
+    "labels": {
+      "en": "SSH Sessions",
+      "zh": "SSH 会话"
+    },
+    "description": "已建立的 SSH 会话数量。",
+    "descriptions": {
+      "en": "Established SSH session count.",
+      "zh": "已建立的 SSH 会话数量。"
+    },
+    "metric": {
+      "label": "SSH Sessions",
+      "command": "ss -tnp | grep sshd | grep ESTAB | wc -l",
+      "type": "text",
+      "icon": "terminal",
+      "color": "#00ff00",
+      "interval": 10,
+      "suffix": "",
+      "id": "single-ssh-sessions",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "single-ssh-latency",
+    "kind": "metric",
+    "label": "SSH 延迟",
+    "labels": {
+      "en": "SSH latency",
+      "zh": "SSH 延迟"
+    },
+    "description": "当前 SSH 连接的往返延迟。",
+    "descriptions": {
+      "en": "Round-trip latency for this SSH connection.",
+      "zh": "当前 SSH 连接的往返延迟。"
+    },
+    "metric": {
+      "label": "Ping",
+      "command": "set -- $SSH_CONNECTION; v=$(ss -ti \"dst $1 and dport = $2\" 2>/dev/null | grep -o \"rtt:[0-9.]*\" | head -n1 | cut -d: -f2); awk -v v=\"${v:-0}\" \"BEGIN{printf \\\"%.1f\\\", v}\"",
+      "type": "text",
+      "icon": "stats-latency",
+      "color": "#00ff00",
+      "interval": 5,
+      "suffix": " ms",
+      "id": "single-ssh-latency",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "single-i-o-wait",
+    "kind": "metric",
+    "label": "I/O 等待",
+    "labels": {
+      "en": "I/O Wait",
+      "zh": "I/O 等待"
+    },
+    "description": "一秒采样中 CPU 等待 I/O 的时间百分比。",
+    "descriptions": {
+      "en": "CPU time spent waiting for I/O, sampled over one second.",
+      "zh": "一秒采样中 CPU 等待 I/O 的时间百分比。"
+    },
+    "metric": {
+      "label": "I/O Wait",
+      "command": "a=$(awk '/^cpu / { t=0; for(i=2;i<=9;i++) t+=$i; print t,$6; found=1; exit } END { if(!found) exit 1 }' /proc/stat) || exit 1; sleep 1; b=$(awk '/^cpu / { t=0; for(i=2;i<=9;i++) t+=$i; print t,$6; found=1; exit } END { if(!found) exit 1 }' /proc/stat) || exit 1; printf '%s\\n%s\\n' \"$a\" \"$b\" | awk 'NR==1 { t1=$1; v1=$2 } NR==2 { dt=$1-t1; v=$2; result=dt>0?(v-v1)*100/dt:0; if(result<0) result=0; if(result>100) result=100; printf \"%.1f\\n\",result }'",
+      "type": "text",
+      "icon": "stats-io-wait",
+      "color": "#00ff00",
+      "interval": 10,
+      "suffix": "%",
+      "id": "single-i-o-wait",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "single-steal",
+    "kind": "metric",
+    "label": "CPU 被占用时间",
+    "labels": {
+      "en": "Steal",
+      "zh": "CPU 被占用时间"
+    },
+    "description": "一秒采样中被虚拟机监控器占用的 CPU 时间百分比。",
+    "descriptions": {
+      "en": "CPU time taken by the hypervisor, sampled over one second.",
+      "zh": "一秒采样中被虚拟机监控器占用的 CPU 时间百分比。"
+    },
+    "metric": {
+      "label": "Steal",
+      "command": "a=$(awk '/^cpu / { t=0; for(i=2;i<=9;i++) t+=$i; print t,$9; found=1; exit } END { if(!found) exit 1 }' /proc/stat) || exit 1; sleep 1; b=$(awk '/^cpu / { t=0; for(i=2;i<=9;i++) t+=$i; print t,$9; found=1; exit } END { if(!found) exit 1 }' /proc/stat) || exit 1; printf '%s\\n%s\\n' \"$a\" \"$b\" | awk 'NR==1 { t1=$1; v1=$2 } NR==2 { dt=$1-t1; v=$2; result=dt>0?(v-v1)*100/dt:0; if(result<0) result=0; if(result>100) result=100; printf \"%.1f\\n\",result }'",
+      "type": "text",
+      "icon": "stats-cpu",
+      "color": "#00ff00",
+      "interval": 10,
+      "suffix": "%",
+      "id": "single-steal",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "single-failed-units",
+    "kind": "metric",
+    "label": "失败的服务",
+    "labels": {
+      "en": "Failed Units",
+      "zh": "失败的服务"
+    },
+    "description": "systemd 失败单元数量。",
+    "descriptions": {
+      "en": "Failed systemd units.",
+      "zh": "systemd 失败单元数量。"
+    },
+    "metric": {
+      "label": "Failed Units",
+      "command": "systemctl --failed --no-legend 2>/dev/null | wc -l",
+      "type": "text",
+      "icon": "stats-health",
+      "color": "#00ff00",
+      "interval": 30,
+      "suffix": "",
+      "colorRules": [
+        {
+          "operator": ">=",
+          "value": "1",
+          "color": "#ff0000"
+        }
+      ],
+      "id": "single-failed-units",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "single-services",
+    "kind": "metric",
+    "label": "服务状态",
+    "labels": {
+      "en": "Services",
+      "zh": "服务状态"
+    },
+    "description": "服务检查示例；使用前请按服务器修改服务名称。",
+    "descriptions": {
+      "en": "Example service checks; edit service names to fit the server.",
+      "zh": "服务检查示例；使用前请按服务器修改服务名称。"
+    },
+    "metric": {
+      "label": "Services",
+      "command": "down=$(for s in kong nginx mongod asterisk redis rabbitmq-server; do systemctl is-active --quiet $s 2>/dev/null || echo $s; done | xargs); if ! systemctl list-units --type=service --state=active 2>/dev/null | grep -q postgres; then down=\"${down:+$down }postgres\"; fi; [ -z \"$down\" ] && echo \"OK\" || echo \"DOWN: $down\"",
+      "type": "text",
+      "icon": "stats-service",
+      "color": "#00ff00",
+      "interval": 30,
+      "suffix": "",
+      "colorRules": [
+        {
+          "operator": "==",
+          "value": "OK",
+          "color": "#00ff00"
+        },
+        {
+          "operator": "contains",
+          "value": "DOWN",
+          "color": "#ff0000"
+        }
+      ],
+      "id": "single-services",
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "tabby-server-stats (adapted)",
+      "url": "https://github.com/kasuganosoras/tabby-server-stats",
+      "license": "MIT"
+    }
+  },
+  {
+    "id": "gpu-memory-group",
+    "kind": "group",
+    "label": "GPU 显存",
+    "labels": {
+      "en": "GPU memory",
+      "zh": "GPU 显存"
+    },
+    "description": "显存使用率；悬停显示剩余/总显存。自动隐藏不存在的 GPU 0–7。",
+    "descriptions": {
+      "en": "VRAM use percentage; hover for free/total GiB. Missing GPUs 0–7 are hidden.",
+      "zh": "显存使用率；悬停显示剩余/总显存（GiB）。自动隐藏不存在的 GPU 0–7。"
+    },
+    "source": {
+      "name": "Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "group": {
+      "id": "gpu-memory-group",
+      "label": "GPU 显存",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
       },
-      {
-        "operator": ">=",
-        "value": "65",
-        "color": "#fdcb6e"
-      }
-    ]
-  },
-  {
-    "label": "Load",
-    "command": "cat /proc/loadavg | awk '{print $1}'",
-    "type": "text",
-    "icon": "chart-line",
-    "color": "#fdcb6e",
-    "interval": 5,
-    "suffix": ""
-  },
-  {
-    "label": "Users",
-    "command": "who 2>/dev/null | grep -c pts || true",
-    "type": "text",
-    "icon": "users",
-    "color": "#0984e3",
-    "interval": 10,
-    "suffix": ""
-  },
-  {
-    "label": "Docker",
-    "command": "docker ps -q 2>/dev/null | wc -l",
-    "type": "text",
-    "icon": "docker",
-    "color": "#0db7ed",
-    "interval": 10,
-    "suffix": " run"
-  },
-  {
-    "label": "GPU",
-    "command": "nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null || echo 0",
-    "type": "progress",
-    "icon": "microchip",
-    "color": "#76b900",
-    "interval": 5,
-    "maxValue": 100,
-    "suffix": "%"
-  },
-  {
-    "label": "SSH Sessions",
-    "command": "ss -tnp | grep sshd | grep ESTAB | wc -l",
-    "type": "text",
-    "icon": "terminal",
-    "color": "#00ff00",
-    "interval": 10,
-    "suffix": ""
-  },
-  {
-    "label": "Ping",
-    "command": "set -- $SSH_CONNECTION; v=$(ss -ti \"dst $1 and dport = $2\" 2>/dev/null | grep -o \"rtt:[0-9.]*\" | head -n1 | cut -d: -f2); awk -v v=\"${v:-0}\" \"BEGIN{printf \\\"%.1f\\\", v}\"",
-    "type": "text",
-    "icon": "wifi",
-    "color": "#00cec9",
-    "interval": 5,
-    "suffix": " ms"
-  },
-  {
-    "label": "I/O Wait",
-    "command": "grep '^cpu ' /proc/stat > /tmp/cpu1; sleep 1; grep '^cpu ' /proc/stat >> /tmp/cpu1; awk 'NR==1{io1=$6;t1=$2+$3+$4+$5+$6+$7} NR==2{printf \"%.2f\",($6-io1)*100/($2+$3+$4+$5+$6+$7-t1)}' /tmp/cpu1",
-    "type": "text",
-    "icon": "hdd",
-    "color": "#fdcb6e",
-    "interval": 10,
-    "suffix": "%"
-  },
-  {
-    "label": "Steal",
-    "command": "awk '/^cpu /{print $9, $2+$3+$4+$5+$6+$7+$8+$9+$10}' /proc/stat > /tmp/c1; sleep 1; awk '/^cpu /{print $9, $2+$3+$4+$5+$6+$7+$8+$9+$10}' /proc/stat > /tmp/c2; awk 'NR==1{s1=$1;t1=$2} NR==2{printf \"%.2f%%\\n\", ($1-s1)/($2-t1)*100}' /tmp/c1 /tmp/c2",
-    "type": "text",
-    "icon": "tachometer-alt",
-    "color": "#dd27f5",
-    "interval": 10,
-    "suffix": ""
-  },
-  {
-    "label": "Failed Units",
-    "command": "systemctl --failed --no-legend 2>/dev/null | wc -l",
-    "type": "text",
-    "icon": "exclamation-triangle",
-    "color": "#00b894",
-    "interval": 30,
-    "suffix": "",
-    "colorRules": [
-      {
-        "operator": ">=",
-        "value": "1",
-        "color": "#ff7675"
-      }
-    ]
-  },
-  {
-    "label": "Services",
-    "command": "down=$(for s in kong nginx mongod asterisk redis rabbitmq-server; do systemctl is-active --quiet $s 2>/dev/null || echo $s; done | xargs); if ! systemctl list-units --type=service --state=active 2>/dev/null | grep -q postgres; then down=\"${down:+$down }postgres\"; fi; [ -z \"$down\" ] && echo \"OK\" || echo \"DOWN: $down\"",
-    "type": "text",
-    "icon": "server",
-    "color": "#00b894",
-    "interval": 30,
-    "suffix": "",
-    "colorRules": [
-      {
-        "operator": "==",
-        "value": "OK",
-        "color": "#00b894"
+      "main": {
+        "id": "gpu-main",
+        "label": "GPU",
+        "type": "text",
+        "icon": "stats-vram",
+        "suffix": "%",
+        "color": "#00ff00",
+        "interval": 20,
+        "timeout": 60,
+        "command": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
+        "detailCommand": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",free/1024,total/1024}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
+        "checkCommand": "tabby_gpu_exists() { gpu_data=$(nvidia-smi \"$@\" --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || return 1; printf '%s\\n' \"$gpu_data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 ~ /^[0-9]+$/) found=1} END {exit !found}'; }; tabby_gpu_exists || (for gpu_index in 0 1 2 3 4 5 6 7; do tabby_gpu_exists --id=\"$gpu_index\" && exit 0; done; exit 1)",
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "unavailableText": "无GPU",
+        "showWhenUnavailable": true,
+        "visibleWhenUnavailable": true,
+        "colorRules": [
+          {
+            "operator": ">",
+            "value": "80",
+            "color": "#ff0000"
+          },
+          {
+            "operator": ">",
+            "value": "50",
+            "color": "#ffa500"
+          }
+        ]
       },
-      {
-        "operator": "contains",
-        "value": "DOWN",
-        "color": "#ff7675"
+      "children": [
+        {
+          "id": "gpu-0",
+          "label": "GPU 0",
+          "type": "text",
+          "icon": "stats-vram",
+          "suffix": "%",
+          "color": "#00ff00",
+          "interval": 20,
+          "timeout": 60,
+          "command": "data=$(nvidia-smi --id=0 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
+          "detailCommand": "data=$(nvidia-smi --id=0 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",free/1024,total/1024}'",
+          "checkCommand": "data=$(nvidia-smi --id=0 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"0\") found=1} END {exit !found}'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "无GPU",
+          "showWhenUnavailable": false,
+          "visibleWhenUnavailable": false,
+          "colorRules": [
+            {
+              "operator": ">",
+              "value": "80",
+              "color": "#ff0000"
+            },
+            {
+              "operator": ">",
+              "value": "50",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "gpu-1",
+          "label": "GPU 1",
+          "type": "text",
+          "icon": "stats-vram",
+          "suffix": "%",
+          "color": "#00ff00",
+          "interval": 20,
+          "timeout": 60,
+          "command": "data=$(nvidia-smi --id=1 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
+          "detailCommand": "data=$(nvidia-smi --id=1 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",free/1024,total/1024}'",
+          "checkCommand": "data=$(nvidia-smi --id=1 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"1\") found=1} END {exit !found}'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "无GPU",
+          "showWhenUnavailable": false,
+          "visibleWhenUnavailable": false,
+          "colorRules": [
+            {
+              "operator": ">",
+              "value": "80",
+              "color": "#ff0000"
+            },
+            {
+              "operator": ">",
+              "value": "50",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "gpu-2",
+          "label": "GPU 2",
+          "type": "text",
+          "icon": "stats-vram",
+          "suffix": "%",
+          "color": "#00ff00",
+          "interval": 20,
+          "timeout": 60,
+          "command": "data=$(nvidia-smi --id=2 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
+          "detailCommand": "data=$(nvidia-smi --id=2 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",free/1024,total/1024}'",
+          "checkCommand": "data=$(nvidia-smi --id=2 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"2\") found=1} END {exit !found}'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "无GPU",
+          "showWhenUnavailable": false,
+          "visibleWhenUnavailable": false,
+          "colorRules": [
+            {
+              "operator": ">",
+              "value": "80",
+              "color": "#ff0000"
+            },
+            {
+              "operator": ">",
+              "value": "50",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "gpu-3",
+          "label": "GPU 3",
+          "type": "text",
+          "icon": "stats-vram",
+          "suffix": "%",
+          "color": "#00ff00",
+          "interval": 20,
+          "timeout": 60,
+          "command": "data=$(nvidia-smi --id=3 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
+          "detailCommand": "data=$(nvidia-smi --id=3 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",free/1024,total/1024}'",
+          "checkCommand": "data=$(nvidia-smi --id=3 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"3\") found=1} END {exit !found}'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "无GPU",
+          "showWhenUnavailable": false,
+          "visibleWhenUnavailable": false,
+          "colorRules": [
+            {
+              "operator": ">",
+              "value": "80",
+              "color": "#ff0000"
+            },
+            {
+              "operator": ">",
+              "value": "50",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "gpu-4",
+          "label": "GPU 4",
+          "type": "text",
+          "icon": "stats-vram",
+          "suffix": "%",
+          "color": "#00ff00",
+          "interval": 20,
+          "timeout": 60,
+          "command": "data=$(nvidia-smi --id=4 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
+          "detailCommand": "data=$(nvidia-smi --id=4 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",free/1024,total/1024}'",
+          "checkCommand": "data=$(nvidia-smi --id=4 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"4\") found=1} END {exit !found}'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "无GPU",
+          "showWhenUnavailable": false,
+          "visibleWhenUnavailable": false,
+          "colorRules": [
+            {
+              "operator": ">",
+              "value": "80",
+              "color": "#ff0000"
+            },
+            {
+              "operator": ">",
+              "value": "50",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "gpu-5",
+          "label": "GPU 5",
+          "type": "text",
+          "icon": "stats-vram",
+          "suffix": "%",
+          "color": "#00ff00",
+          "interval": 20,
+          "timeout": 60,
+          "command": "data=$(nvidia-smi --id=5 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
+          "detailCommand": "data=$(nvidia-smi --id=5 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",free/1024,total/1024}'",
+          "checkCommand": "data=$(nvidia-smi --id=5 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"5\") found=1} END {exit !found}'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "无GPU",
+          "showWhenUnavailable": false,
+          "visibleWhenUnavailable": false,
+          "colorRules": [
+            {
+              "operator": ">",
+              "value": "80",
+              "color": "#ff0000"
+            },
+            {
+              "operator": ">",
+              "value": "50",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "gpu-6",
+          "label": "GPU 6",
+          "type": "text",
+          "icon": "stats-vram",
+          "suffix": "%",
+          "color": "#00ff00",
+          "interval": 20,
+          "timeout": 60,
+          "command": "data=$(nvidia-smi --id=6 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
+          "detailCommand": "data=$(nvidia-smi --id=6 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",free/1024,total/1024}'",
+          "checkCommand": "data=$(nvidia-smi --id=6 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"6\") found=1} END {exit !found}'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "无GPU",
+          "showWhenUnavailable": false,
+          "visibleWhenUnavailable": false,
+          "colorRules": [
+            {
+              "operator": ">",
+              "value": "80",
+              "color": "#ff0000"
+            },
+            {
+              "operator": ">",
+              "value": "50",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "gpu-7",
+          "label": "GPU 7",
+          "type": "text",
+          "icon": "stats-vram",
+          "suffix": "%",
+          "color": "#00ff00",
+          "interval": 20,
+          "timeout": 60,
+          "command": "data=$(nvidia-smi --id=7 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
+          "detailCommand": "data=$(nvidia-smi --id=7 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",free/1024,total/1024}'",
+          "checkCommand": "data=$(nvidia-smi --id=7 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"7\") found=1} END {exit !found}'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "无GPU",
+          "showWhenUnavailable": false,
+          "visibleWhenUnavailable": false,
+          "colorRules": [
+            {
+              "operator": ">",
+              "value": "80",
+              "color": "#ff0000"
+            },
+            {
+              "operator": ">",
+              "value": "50",
+              "color": "#ffa500"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "id": "disks-P0磁盘",
+    "kind": "group",
+    "label": "P0磁盘",
+    "group": {
+      "id": "disk-group",
+      "label": "P0磁盘",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "main": {
+        "id": "disk-total",
+        "label": "磁盘总余量",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " GiB",
+        "interval": 20,
+        "timeout": 60,
+        "checkCommand": "",
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "unavailableText": "未挂载",
+        "showWhenUnavailable": true,
+        "visibleWhenUnavailable": true,
+        "command": "_disk_rows=$(\nfor _disk_path in '/' '/data'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.0f\\n\",int(available/1048576)}'",
+        "detailCommand": "_disk_rows=$(\nfor _disk_path in '/' '/data'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",available/1048576,total/1048576}'",
+        "colorRules": [
+          {
+            "operator": "<",
+            "value": "50",
+            "color": "#ff0000"
+          },
+          {
+            "operator": "<=",
+            "value": "100",
+            "color": "#ffa500"
+          }
+        ]
+      },
+      "children": [
+        {
+          "id": "disk-root",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "disk-mount-0",
+          "label": "/data",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "mountpoint -q -- '/data'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/data' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/data' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        }
+      ],
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
       }
+    },
+    "source": {
+      "name": "Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "description": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。",
+    "descriptions": {
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Total free capacity across valid unique filesystems; children show the system disk first, then data mounts. Hover for free/total capacity; missing mounts remain visible.",
+      "zh": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。"
+    },
+    "profileNames": [
+      "P0(ai)",
+      "P0(s_lsn)"
     ]
+  },
+  {
+    "id": "disks-P1磁盘",
+    "kind": "group",
+    "label": "P1磁盘",
+    "group": {
+      "id": "disk-group",
+      "label": "P1磁盘",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "main": {
+        "id": "disk-total",
+        "label": "磁盘总余量",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " GiB",
+        "interval": 20,
+        "timeout": 60,
+        "checkCommand": "",
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "unavailableText": "未挂载",
+        "showWhenUnavailable": true,
+        "visibleWhenUnavailable": true,
+        "command": "_disk_rows=$(\nfor _disk_path in '/'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.0f\\n\",int(available/1048576)}'",
+        "detailCommand": "_disk_rows=$(\nfor _disk_path in '/'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",available/1048576,total/1048576}'",
+        "colorRules": [
+          {
+            "operator": "<",
+            "value": "50",
+            "color": "#ff0000"
+          },
+          {
+            "operator": "<=",
+            "value": "100",
+            "color": "#ffa500"
+          }
+        ]
+      },
+      "children": [
+        {
+          "id": "disk-root",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        }
+      ],
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "description": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。",
+    "descriptions": {
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Total free capacity across valid unique filesystems; children show the system disk first, then data mounts. Hover for free/total capacity; missing mounts remain visible.",
+      "zh": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。"
+    },
+    "profileNames": [
+      "P1(ai)"
+    ],
+    "labels": {
+      "en": "P1 host disks",
+      "zh": "P1磁盘"
+    }
+  },
+  {
+    "id": "disks-P1容器磁盘",
+    "kind": "group",
+    "label": "P1容器磁盘",
+    "group": {
+      "id": "disk-group",
+      "label": "P1容器磁盘",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "main": {
+        "id": "disk-total",
+        "label": "磁盘总余量",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " GiB",
+        "interval": 20,
+        "timeout": 60,
+        "checkCommand": "",
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "unavailableText": "未挂载",
+        "showWhenUnavailable": true,
+        "visibleWhenUnavailable": true,
+        "command": "_disk_rows=$(\nfor _disk_path in '/' '/public'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.0f\\n\",int(available/1048576)}'",
+        "detailCommand": "_disk_rows=$(\nfor _disk_path in '/' '/public'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",available/1048576,total/1048576}'",
+        "colorRules": [
+          {
+            "operator": "<",
+            "value": "50",
+            "color": "#ff0000"
+          },
+          {
+            "operator": "<=",
+            "value": "100",
+            "color": "#ffa500"
+          }
+        ]
+      },
+      "children": [
+        {
+          "id": "disk-root",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "disk-mount-0",
+          "label": "/public",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "mountpoint -q -- '/public'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/public' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/public' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        }
+      ],
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "description": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。",
+    "descriptions": {
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Total free capacity across valid unique filesystems; children show the system disk first, then data mounts. Hover for free/total capacity; missing mounts remain visible.",
+      "zh": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。"
+    },
+    "profileNames": [
+      "P1(s_lsn)"
+    ],
+    "labels": {
+      "en": "P1 container disks",
+      "zh": "P1容器磁盘"
+    }
+  },
+  {
+    "id": "disks-P2磁盘",
+    "kind": "group",
+    "label": "P2磁盘",
+    "group": {
+      "id": "disk-group",
+      "label": "P2磁盘",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "main": {
+        "id": "disk-total",
+        "label": "磁盘总余量",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " GiB",
+        "interval": 20,
+        "timeout": 60,
+        "checkCommand": "",
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "unavailableText": "未挂载",
+        "showWhenUnavailable": true,
+        "visibleWhenUnavailable": true,
+        "command": "_disk_rows=$(\nfor _disk_path in '/' '/data'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.0f\\n\",int(available/1048576)}'",
+        "detailCommand": "_disk_rows=$(\nfor _disk_path in '/' '/data'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",available/1048576,total/1048576}'",
+        "colorRules": [
+          {
+            "operator": "<",
+            "value": "50",
+            "color": "#ff0000"
+          },
+          {
+            "operator": "<=",
+            "value": "100",
+            "color": "#ffa500"
+          }
+        ]
+      },
+      "children": [
+        {
+          "id": "disk-root",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "disk-mount-0",
+          "label": "/data",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "mountpoint -q -- '/data'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/data' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/data' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        }
+      ],
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "description": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。",
+    "descriptions": {
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Total free capacity across valid unique filesystems; children show the system disk first, then data mounts. Hover for free/total capacity; missing mounts remain visible.",
+      "zh": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。"
+    },
+    "profileNames": [
+      "P2(ai)",
+      "P2(s_lsn)"
+    ]
+  },
+  {
+    "id": "disks-P3磁盘",
+    "kind": "group",
+    "label": "P3磁盘",
+    "group": {
+      "id": "disk-group",
+      "label": "P3磁盘",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "main": {
+        "id": "disk-total",
+        "label": "磁盘总余量",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " GiB",
+        "interval": 20,
+        "timeout": 60,
+        "checkCommand": "",
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "unavailableText": "未挂载",
+        "showWhenUnavailable": true,
+        "visibleWhenUnavailable": true,
+        "command": "_disk_rows=$(\nfor _disk_path in '/' '/data' '/lsn_disk1'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.0f\\n\",int(available/1048576)}'",
+        "detailCommand": "_disk_rows=$(\nfor _disk_path in '/' '/data' '/lsn_disk1'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",available/1048576,total/1048576}'",
+        "colorRules": [
+          {
+            "operator": "<",
+            "value": "50",
+            "color": "#ff0000"
+          },
+          {
+            "operator": "<=",
+            "value": "100",
+            "color": "#ffa500"
+          }
+        ]
+      },
+      "children": [
+        {
+          "id": "disk-root",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "disk-mount-0",
+          "label": "/data",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "mountpoint -q -- '/data'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/data' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/data' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "disk-mount-1",
+          "label": "/lsn_disk1",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "mountpoint -q -- '/lsn_disk1'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/lsn_disk1' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/lsn_disk1' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        }
+      ],
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "description": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。",
+    "descriptions": {
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Total free capacity across valid unique filesystems; children show the system disk first, then data mounts. Hover for free/total capacity; missing mounts remain visible.",
+      "zh": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。"
+    },
+    "profileNames": [
+      "P3(ai)",
+      "P3(s_lsn)"
+    ]
+  },
+  {
+    "id": "disks-P4磁盘",
+    "kind": "group",
+    "label": "P4磁盘",
+    "group": {
+      "id": "disk-group",
+      "label": "P4磁盘",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "main": {
+        "id": "disk-total",
+        "label": "磁盘总余量",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " GiB",
+        "interval": 20,
+        "timeout": 60,
+        "checkCommand": "",
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "unavailableText": "未挂载",
+        "showWhenUnavailable": true,
+        "visibleWhenUnavailable": true,
+        "command": "_disk_rows=$(\nfor _disk_path in '/' '/data'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.0f\\n\",int(available/1048576)}'",
+        "detailCommand": "_disk_rows=$(\nfor _disk_path in '/' '/data'; do\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    _disk_device=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    case \"$_disk_device\" in ''|*[!0-9]*) continue;; esac\n    _disk_data=$(df -Pk -- \"$_disk_path\" 2>/dev/null) || continue\n    _disk_values=$(printf '%s\\n' \"$_disk_data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || continue\n    _disk_current=$(stat -Lc '%d' -- \"$_disk_path\" 2>/dev/null) || continue\n    [ \"$_disk_device\" = \"$_disk_current\" ] || continue\n    if [ \"$_disk_path\" != / ]; then mountpoint -q -- \"$_disk_path\" 2>/dev/null || continue; fi\n    printf '%s %s\\n' \"$_disk_device\" \"$_disk_values\"\ndone\n)\nprintf '%s\\n' \"$_disk_rows\" | awk 'NF {if(NF!=3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ || $2<=0 || $3>$2) {bad=1; next} if(!seen[$1]++) {total+=$2; available+=$3; count++}} END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GiB\\n\",available/1048576,total/1048576}'",
+        "colorRules": [
+          {
+            "operator": "<",
+            "value": "50",
+            "color": "#ff0000"
+          },
+          {
+            "operator": "<=",
+            "value": "100",
+            "color": "#ffa500"
+          }
+        ]
+      },
+      "children": [
+        {
+          "id": "disk-root",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        },
+        {
+          "id": "disk-mount-0",
+          "label": "/data",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " GiB",
+          "interval": 20,
+          "timeout": 60,
+          "checkCommand": "mountpoint -q -- '/data'",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "未挂载",
+          "showWhenUnavailable": true,
+          "visibleWhenUnavailable": true,
+          "command": "data=$(df -Pk -- '/data' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.0f\\n\",int($2/1048576)}'",
+          "detailCommand": "data=$(df -Pk -- '/data' 2>/dev/null) || exit 1; values=$(printf '%s\\n' \"$data\" | awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ || $2<=0 || $4>$2) bad=1; else {total=$2; available=$4; found=1}} NR>2 && NF {bad=1} END {if(bad || !found) exit 1; printf \"%.0f %.0f\\n\",total,available}') || exit 1; printf '%s\\n' \"$values\" | awk '{printf \"%.1f/%.1f GiB\\n\",$2/1048576,$1/1048576}'",
+          "colorRules": [
+            {
+              "operator": "<",
+              "value": "20",
+              "color": "#ff0000"
+            },
+            {
+              "operator": "<=",
+              "value": "40",
+              "color": "#ffa500"
+            }
+          ]
+        }
+      ],
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      }
+    },
+    "source": {
+      "name": "Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "description": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。",
+    "descriptions": {
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Total free capacity across valid unique filesystems; children show the system disk first, then data mounts. Hover for free/total capacity; missing mounts remain visible.",
+      "zh": "作者实验室自用，其他人请勿下载使用。主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。"
+    },
+    "profileNames": [
+      "P4(ai)",
+      "P4(s_lsn)"
+    ]
+  },
+  {
+    "id": "cpu-load-group",
+    "kind": "group",
+    "label": "CPU负载",
+    "labels": {
+      "en": "CPU load",
+      "zh": "CPU负载"
+    },
+    "description": "线程数与按处理器数量归一化的 1 分钟、5 分钟负载。",
+    "descriptions": {
+      "en": "Runnable/total task count and 1-minute / 5-minute load normalized by processor count.",
+      "zh": "线程数与按处理器数量归一化的 1 分钟、5 分钟负载。"
+    },
+    "source": {
+      "name": "Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "group": {
+      "id": "cpu-load-group",
+      "label": "CPU负载",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "emptyText": "",
+      "main": {
+        "type": "text",
+        "color": "#00ff00",
+        "maxValue": 100,
+        "suffix": "",
+        "icon": "stats-cpu-load",
+        "colorRules": [],
+        "checkCommand": "",
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "unavailableText": "Unavailable",
+        "detailCommand": "",
+        "showWhenUnavailable": true,
+        "id": "cpu-load-main",
+        "label": "线程数",
+        "command": "awk '{print $4}' /proc/loadavg"
+      },
+      "children": [
+        {
+          "type": "text",
+          "color": "#00ff00",
+          "maxValue": 100,
+          "suffix": "%",
+          "icon": "stats-cpu-load",
+          "colorRules": [
+            {
+              "operator": ">",
+              "value": "150",
+              "color": "#ff0000"
+            },
+            {
+              "operator": ">",
+              "value": "100",
+              "color": "#ffa500"
+            }
+          ],
+          "checkCommand": "",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "Unavailable",
+          "detailCommand": "awk -v cores=$(nproc) '{split($4, a, \"/\"); printf \"%d/%d\\n\", a[1], cores}' /proc/loadavg",
+          "showWhenUnavailable": true,
+          "id": "cpu-load-0",
+          "label": "1min",
+          "command": "awk '{printf \"%d\\n\", ($1/'$(nproc)')*100}' /proc/loadavg"
+        },
+        {
+          "type": "text",
+          "color": "#00ff00",
+          "maxValue": 100,
+          "suffix": "%",
+          "icon": "stats-cpu-load",
+          "colorRules": [
+            {
+              "operator": ">",
+              "value": "150",
+              "color": "#ff0000"
+            },
+            {
+              "operator": ">",
+              "value": "100",
+              "color": "#ffa500"
+            }
+          ],
+          "checkCommand": "",
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "unavailableText": "Unavailable",
+          "detailCommand": "awk -v cores=$(nproc) '{printf \"%d/%d\\n\", $2, cores}' /proc/loadavg",
+          "showWhenUnavailable": true,
+          "id": "cpu-load-1",
+          "label": "5min",
+          "command": "awk '{printf \"%d\\n\", ($2/'$(nproc)')*100}' /proc/loadavg"
+        }
+      ],
+      "displayScope": {
+        "mode": "all",
+        "profileIds": []
+      }
+    }
   }
 ]

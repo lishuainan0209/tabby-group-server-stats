@@ -1,0 +1,57 @@
+Tabby Group Server Stats 1.7.1
+
+This project is a modified fork of Tabby Server Stats:
+https://github.com/kasuganosoras/tabby-server-stats
+
+Original work: Copyright (c) 2023 Akkariin Meiko.
+Original package author: Akkariin.
+Fork maintainer: lishuainan0209.
+Fork repository: https://github.com/lishuainan0209/tabby-group-server-stats
+
+The original MIT license and copyright notice are preserved in LICENSE.
+This fork is also distributed under the MIT license.
+
+The fork adds object checks, hover-detail commands and grouped metrics
+with overview, carousel, horizontal and vertical displays. Standalone
+metrics, whole groups and their main/child members can be disabled without
+deleting their configuration. Unavailable-object visibility is configurable
+for all displays, with a separate carousel-only setting.
+
+Saved connection and layout scopes use stable local IDs, apply to both
+display and collection, and match each pane independently in mixed layouts.
+Removed targets never broaden a restricted scope to all panes.
+
+Built-in CPU, memory, disk and network definitions are editable through the
+same model as custom metrics. Per-item defaults can be restored. Both
+panels use the common label display and persist the same configurable
+built-in ordering. Inline editors, aligned hover rows, stable carousel
+widths, section/card borders and compact group separators improve use.
+
+The offline JSON library supports standalone and grouped presets, portable
+connection-name bindings, import/export, bilingual descriptions and source
+metadata. Adapted upstream presets retain their MIT source attribution.
+Added presets include separate host/container disk groups, GPU memory
+groups and CPU load groups. Optional GitHub import reads this fork's main
+branch and merges library previews without activating downloaded commands.
+Bundled disk groups aggregate valid unique filesystems, with the system
+disk as their first child. Login-session details aggregate the system's
+who records by username. Linux/macOS network metrics separate received
+and sent rates and cumulative interface counters. Corresponding presets
+also define consistent green, orange and red threshold rules.
+
+The 26 added monitoring SVG icons are original artwork created for this
+fork and are distributed under the same MIT license. The searchable icon
+picker and interface support English and Chinese.
+
+SSH output handling includes bounded completion acknowledgments; hover
+detail caching follows each metric's refresh interval without automatically
+rerunning user commands to recover missing output.
+
+The SSH transport hotfix introduced in 1.6.1 is retained. Earlier oversized
+exec requests could disconnect the shared SSH connection. A fixed short
+exec request now streams scripts through standard input in 8 KiB chunks,
+avoiding oversized packets and shell arguments. Completion acknowledgment
+follows the full upload; transfer failures close only the statistics channel.
+
+Third-party dependencies retain their respective licenses. Preserve any
+license notice files emitted alongside the compiled files in dist/.
