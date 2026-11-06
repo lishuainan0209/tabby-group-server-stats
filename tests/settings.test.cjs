@@ -434,7 +434,7 @@ test('successful library imports preserve earlier choices and update repeated ID
   assert.equal(JSON.stringify(config.store.plugin), beforeConfig, 'Preview imports do not persist or activate commands');
 });
 
-test('preset library import only previews; additions regenerate IDs and preserve restricted missing targets', () => {
+test('preset library import only previews; repeated additions are blocked and missing targets stay restricted', () => {
   const { config, editor } = scopeFixture();
   const imported = [{ id: 'lab', kind: 'group', label: 'Lab disks', profileNames: ['Missing machine'], group: {
     id: 'group-original', label: 'Lab disks', mode: 'overview', layout: 'vertical',
@@ -447,7 +447,13 @@ test('preset library import only previews; additions regenerate IDs and preserve
   editor.addPreset(editor.presets[0]);
   const groups = config.store.plugin.serverStats.metricGroups;
   const ids = groups.flatMap(group => [group.id, group.main.id, ...group.children.map(child => child.id)]);
-  assert.equal(new Set(ids).size, 6);
+  assert.equal(groups.length, 1);
+  assert.equal(new Set(ids).size, 3);
+  assert.equal(editor.isPresetAdded(editor.presets[0]), true);
+  assert.match(editor.presetMessage, /already added/);
+  groups[0].label = 'Renamed'; groups[0].enabled = false;
+  editor.addPreset(editor.presets[0]);
+  assert.equal(config.store.plugin.serverStats.metricGroups.length, 1);
   assert(!ids.includes('group-original'));
   assert.equal(groups[0].displayScope.mode, 'selected');
   assert.equal(groups[0].displayScope.profileIds.length, 0);
@@ -463,10 +469,11 @@ test('exported library uses portable profile names without connection options an
   assert(!JSON.stringify(library).includes('ssh:p1'));
   config.store.plugin.serverStats.customMetrics[0].displayScope.profileIds = [];
   const empty = JSON.parse(editor.currentPresetLibrary());
+  config.store.plugin.serverStats.customMetrics = [];
   editor.loadPresetLibrary(empty);
   editor.addPreset(editor.presets[0]);
-  assert.equal(config.store.plugin.serverStats.customMetrics[1].displayScope.mode, 'selected');
-  assert.equal(config.store.plugin.serverStats.customMetrics[1].displayScope.profileIds.length, 0);
+  assert.equal(config.store.plugin.serverStats.customMetrics[0].displayScope.mode, 'selected');
+  assert.equal(config.store.plugin.serverStats.customMetrics[0].displayScope.profileIds.length, 0);
 });
 
 test('export omits unnamed deleted profile IDs and reimport keeps their scope restricted', () => {
@@ -526,15 +533,19 @@ test('bilingual preset metadata survives editing and export while user renames r
   assert.equal(exported.group.displayScope.mode, 'selected');
   config.store.language = 'zh-CN';
   editor.addPreset(exported);
-  assert.equal(editor.metricGroups[1].label, 'GPU 显存');
-  editor.editGroup(1);
+  assert.equal(editor.metricGroups.length, 1, 'Reimporting an installed preset must not duplicate it');
+  config.store.plugin.serverStats.metricGroups = [];
+  editor.addPreset(exported);
+  assert.equal(editor.metricGroups[0].label, 'GPU 显存');
+  editor.editGroup(0);
   editor.currentGroup.label = 'My custom GPU';
   editor.saveGroup();
   const renamed = JSON.parse(editor.currentPresetLibrary()).find(entry => entry.label === 'My custom GPU');
   assert.equal(renamed.labels, undefined);
+  config.store.plugin.serverStats.metricGroups = [];
   editor.addPreset(renamed);
-  assert.equal(editor.metricGroups[2].label, 'My custom GPU');
-  assert.equal(editor.metricGroups[2].displayScope.profileIds.length, 0);
+  assert.equal(editor.metricGroups[0].label, 'My custom GPU');
+  assert.equal(editor.metricGroups[0].displayScope.profileIds.length, 0);
 });
 
 test('scope: legacy single defaults to all panes without mutating saved configuration', () => {

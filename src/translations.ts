@@ -366,6 +366,8 @@ const GROUP_TRANSLATIONS: Array<[string, string, string]> = [
     ['Every member needs a label or icon and a metric command. Intervals and timeouts must be positive; exit codes must be whole numbers from 0 to 255.', '每个标签都需要名称或图标，以及功能命令。频率、超时须不小于 1；退出码须为 0～255 的整数。', 'Cada membro precisa de nome ou ícone e comando. Intervalos e tempos limite devem ser positivos; códigos de saída devem ser inteiros de 0 a 255.'],
     ['Move up', '上移', 'Mover para Cima'],
     ['Move down', '下移', 'Mover para Baixo'],
+    ['Already added', '已添加', 'Já adicionado'],
+    ['This preset is already added. Edit or enable the existing item.', '此预设已添加，请编辑或启用已有项目。', 'Esta predefinição já foi adicionada. Edite ou ative o item existente.'],
     ['Edit', '编辑', 'Editar'],
     ['Remove', '删除', 'Remover']
 ];

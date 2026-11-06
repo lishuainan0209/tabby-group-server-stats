@@ -9,7 +9,7 @@ require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileMo
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2017 }
 }).outputText, filename)
 const { getBuiltinDefaults, getBuiltinDefinition, getBuiltinDefinitions, createCpuSampleCommand, createNetworkRateCommand } = require('../src/builtin-metrics.ts')
-const { createGpuGroupPreset, createDiskGroupPreset, createDiskTotalCommand, createGpuCommand, createGpuCheckCommand, getBundledPresets, normalizePresetLibrary, instantiatePreset, exportPresetLibrary } = require('../src/preset-library.ts')
+const { createGpuGroupPreset, createDiskGroupPreset, createDiskTotalCommand, createGpuCommand, createGpuCheckCommand, getBundledPresets, normalizePresetLibrary, instantiatePreset, exportPresetLibrary, findInstalledPreset, presetDefinitionFingerprint } = require('../src/preset-library.ts')
 const gitExecPath = process.platform === 'win32' ? spawnSync('git', ['--exec-path'], { encoding: 'utf8' }).stdout?.trim() : ''
 const gitShell = gitExecPath ? path.resolve(gitExecPath, '../../..', 'bin/sh.exe') : ''
 const shell = process.env.TEST_SH || (process.platform === 'win32' ? [gitShell, 'C:\\Program Files\\Git\\bin\\sh.exe', 'S:\\Git\\bin\\sh.exe'].find(file => file && fs.existsSync(file)) : '/bin/sh')
@@ -288,6 +288,97 @@ test('shared library removes local binding IDs and keeps the offline single/grou
     assert.deepEqual(JSON.parse(shared)[0].profileNames, ['My profile'])
     assert.equal(normalizePresetLibrary([{ command: 'printf 1', label: 'Legacy' }])[0].metric.type, 'text')
     assert.throws(() => normalizePresetLibrary({ invalid: true }))
+})
+
+test('preset origin prevents repeated installation after rename, disable and rule or scope edits', () => {
+    const preset = createGpuGroupPreset()
+    const config = instantiatePreset(preset, [], () => 'installed-gpu')
+    const group = config.metricGroups[0]
+    assert.deepEqual(group.presetOrigin, { id: preset.id, source: preset.source.url, kind: 'group' })
+    assert.equal(group.main.presetOrigin, undefined)
+    assert(group.children.every(child => child.presetOrigin === undefined))
+    group.label = 'My renamed GPUs'
+    group.enabled = false
+    group.main.command = 'printf custom'
+    group.main.colorRules = []
+    group.displayScope = { mode: 'selected', profileIds: ['different-local-target'] }
+    assert.deepEqual(findInstalledPreset(preset, config, []), { kind: 'group', id: group.id })
+    preset.source.name = 'New translated source title'
+    preset.source.url += '.git/'
+    assert.deepEqual(findInstalledPreset(preset, config, []), { kind: 'group', id: group.id })
+    config.metricGroups = []
+    assert.equal(findInstalledPreset(preset, config, []), null, 'Removing a preset permits adding it again')
+})
+
+test('source namespaces separate different libraries with the same preset ID', () => {
+    const first = createGpuGroupPreset()
+    const second = JSON.parse(JSON.stringify(first))
+    second.source.url = 'https://example.com/another-library'
+    const config = instantiatePreset(first, [])
+    assert.equal(findInstalledPreset(second, config), null)
+    delete config.metricGroups[0].presetOrigin
+    config.metricGroups[0].presetMetadata = { source: first.source }
+    assert.equal(findInstalledPreset(second, config), null, 'Known old sources must not be collapsed across libraries')
+})
+
+test('legacy matching uses commands and actual target IDs, not names, colors or member order', () => {
+    const preset = createDiskGroupPreset('P3磁盘', ['/data', '/lsn_disk1'], ['P3'])
+    const profiles = [{ id: 'p3-id', name: 'P3' }, { id: 'p4-id', name: 'P4' }]
+    const config = instantiatePreset(preset, profiles)
+    const group = config.metricGroups[0]
+    delete group.presetOrigin
+    group.label = 'Renamed disks'
+    group.enabled = false
+    group.main.color = '#123456'
+    group.children.reverse()
+    group.children[0].label = 'Renamed mount'
+    group.main.command = '\r\n' + group.main.command.replace(/\n/g, '\r\n') + '\r\n'
+    assert.deepEqual(findInstalledPreset(preset, config, profiles), { kind: 'group', id: group.id })
+    group.displayScope.profileIds = ['p4-id']
+    assert.equal(findInstalledPreset(preset, config, profiles), null, 'Same disk commands on another machine are distinct')
+    group.displayScope.profileIds = ['p3-id']
+    group.children[0].detailCommand += '\nprintf different'
+    assert.equal(findInstalledPreset(preset, config, profiles), null, 'Different commands are not a duplicate just because the name matches')
+})
+
+test('legacy comparison normalizes check defaults while respecting units and empty selected scopes', () => {
+    const preset = { id: 'single', kind: 'metric', label: 'Metric', metric: { id: 'single', command: 'printf 50', type: 'text', suffix: '%', checkCommand: 'test -d /data' } }
+    const config = instantiatePreset(preset, [])
+    const metric = config.customMetrics[0]
+    delete metric.presetOrigin
+    metric.checkMode = 'exitCode'; metric.checkExpected = '0'
+    assert.deepEqual(findInstalledPreset(preset, config), { kind: 'metric', id: metric.id })
+    metric.suffix = 'GiB'
+    assert.equal(findInstalledPreset(preset, config), null)
+    const selected = { ...preset, profileNames: ['missing-machine'] }
+    const old = instantiatePreset(selected, [])
+    delete old.customMetrics[0].presetOrigin
+    assert.equal(findInstalledPreset(selected, old), null, 'Old empty bindings lack enough information to establish identity safely')
+    const current = instantiatePreset(selected, [])
+    assert.deepEqual(findInstalledPreset(selected, current), { kind: 'metric', id: current.customMetrics[0].id })
+})
+
+test('anonymous and reordered flat libraries identify content instead of positional generated IDs', () => {
+    const first = normalizePresetLibrary([{ label: 'Same name', command: 'printf 1' }, { label: 'Same name', command: 'printf 2' }])
+    const config = instantiatePreset(first[0], [])
+    assert.equal(findInstalledPreset(first[1], config), null)
+    const reordered = normalizePresetLibrary([{ label: 'Other', command: 'printf 3' }, { label: 'Renamed', command: 'printf 1' }])
+    assert.deepEqual(findInstalledPreset(reordered[1], config), { kind: 'metric', id: config.customMetrics[0].id })
+    const unrelated = normalizePresetLibrary([{ label: 'Same name', command: 'printf 4' }])[0]
+    assert.equal(findInstalledPreset(unrelated, config), null)
+    assert.equal(findInstalledPreset({ ...first[0], profileNames: [] }, config), null, 'Anonymous selected-empty is distinct from global')
+})
+
+test('export and reimport preserve origin even when portable entry IDs change', () => {
+    const preset = createGpuGroupPreset()
+    const config = instantiatePreset(preset, [])
+    const entry = { ...preset, id: 'new-export-local-id', group: config.metricGroups[0] }
+    const exported = normalizePresetLibrary(JSON.parse(exportPresetLibrary([entry])))[0]
+    assert.deepEqual(exported.group.presetOrigin, config.metricGroups[0].presetOrigin)
+    assert.deepEqual(findInstalledPreset(exported, config), { kind: 'group', id: config.metricGroups[0].id })
+    const imported = instantiatePreset(exported, [])
+    assert.deepEqual(findInstalledPreset(preset, imported), { kind: 'group', id: imported.metricGroups[0].id })
+    assert.equal(presetDefinitionFingerprint(imported.metricGroups[0], 'group'), presetDefinitionFingerprint(config.metricGroups[0], 'group'))
 })
 
 test('built-in overrides are independent drafts, preserve stable IDs and honor legacy flags/icons', () => {

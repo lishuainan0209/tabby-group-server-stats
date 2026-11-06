@@ -22,6 +22,94 @@ export interface InstantiatedPreset {
     metricGroups: CustomMetricGroup[]
     missingProfileNames: string[]
 }
+export interface PresetOrigin { id: string; source: string; kind: 'metric' | 'group' }
+type PresetTarget = (CustomMetric | CustomMetricGroup) & {
+    presetOrigin?: PresetOrigin
+    presetMetadata?: { source?: { url?: string } }
+}
+
+/** Source labels can be translated or renamed; only the URL is an identity. */
+function canonicalPresetSource(url: unknown): string {
+    if (typeof url !== 'string') return ''
+    return url.trim().replace(/\/+$/, '').replace(/\.git$/i, '').replace(/^https?:\/\//i, 'https://')
+}
+
+function normalizeCommand(value: unknown): string {
+    return typeof value === 'string' ? value.replace(/\r\n?/g, '\n').trim() : ''
+}
+
+function metricDefinition(metric: CustomMetric): unknown[] {
+    const check = normalizeCommand(metric.checkCommand)
+    const mode = metric.checkMode === 'output' ? 'output' : 'exitCode'
+    return [normalizeCommand(metric.command), normalizeCommand(metric.detailCommand),
+        check, check ? mode : '', check ? (metric.checkExpected ?? (mode === 'output' ? '' : '0')).trim() : '',
+        // Units change the meaning of a reading; labels, colors and layout do not.
+        metric.suffix?.trim() || (metric.type === 'progress' ? '%' : '')]
+}
+
+function definitionBody(item: CustomMetric | CustomMetricGroup, kind: 'metric' | 'group'): unknown {
+    if (kind === 'metric') return metricDefinition(item as CustomMetric)
+    const group = item as CustomMetricGroup
+    return [metricDefinition(group.main), group.children.map(metric => JSON.stringify(metricDefinition(metric))).sort()]
+}
+
+/** A conservative legacy fallback: actual commands and targets, never display names. */
+export function presetDefinitionFingerprint(item: CustomMetric | CustomMetricGroup, kind: 'metric' | 'group'): string {
+    const scope = item.displayScope?.mode === 'selected' ? ['selected', [...new Set(item.displayScope.profileIds || [])].sort()] : ['all']
+    return JSON.stringify([kind, definitionBody(item, kind), scope])
+}
+
+// Content-derived anonymous IDs are stable when a flat JSON library is reordered.
+// Two independent 32-bit accumulators avoid storing entire shell scripts in config.
+function contentId(value: string): string {
+    let first = 2166136261, second = 5381
+    for (let index = 0; index < value.length; index++) {
+        const character = value.charCodeAt(index)
+        first = Math.imul(first ^ character, 16777619)
+        second = Math.imul(second, 33) ^ character
+    }
+    return `content-${(first >>> 0).toString(16)}-${(second >>> 0).toString(16)}`
+}
+
+function presetOrigin(entry: MetricPreset): PresetOrigin {
+    const target = (entry.kind === 'group' ? entry.group! : entry.metric!) as PresetTarget
+    const existing = target.presetOrigin
+    if (existing?.kind === entry.kind && typeof existing.id === 'string' && existing.id && typeof existing.source === 'string') {
+        return { id: existing.id, kind: entry.kind, source: canonicalPresetSource(existing.source) }
+    }
+    const source = canonicalPresetSource(entry.source?.url)
+    const generated = /^(?:legacy|preset)-\d+$/.test(entry.id)
+    // An anonymous file has no durable namespace for its IDs. Include its
+    // definition so unrelated libraries with the same ID cannot block each other.
+    const requestedNames = entry.profileNames ?? (target.displayScope?.mode === 'selected' ? Object.values(target.displayScope.profileNames || {}) : undefined)
+    const portableScope = requestedNames === undefined ? ['all'] : ['selected', [...new Set(requestedNames)].sort()]
+    const id = generated || !source ? contentId(JSON.stringify([entry.kind, definitionBody(target, entry.kind), portableScope])) : entry.id
+    return { id, source, kind: entry.kind }
+}
+
+/** Same preset remains installed after renaming, disabling or editing its rules. */
+export function findInstalledPreset(preset: MetricPreset, config: { customMetrics?: CustomMetric[]; metricGroups?: CustomMetricGroup[] }, profiles: PresetProfile[] = []): { kind: 'metric' | 'group'; id: string } | null {
+    const entry = normalizePresetLibrary([preset])[0]
+    const origin = presetOrigin(entry)
+    const installed = (entry.kind === 'metric' ? config.customMetrics || [] : config.metricGroups || []) as PresetTarget[]
+    const direct = installed.find(item => item.presetOrigin?.kind === origin.kind && item.presetOrigin.id === origin.id &&
+        canonicalPresetSource(item.presetOrigin.source) === origin.source)
+    if (direct) return { kind: entry.kind, id: direct.id }
+
+    const candidate = instantiatePreset(entry, profiles, () => 'comparison-only')
+    const target = (entry.kind === 'metric' ? candidate.customMetrics[0] : candidate.metricGroups[0]) as PresetTarget
+    const fingerprint = presetDefinitionFingerprint(target, entry.kind)
+    // Old selected-empty scopes lost their intended missing connection names.
+    // Without a saved origin, guessing equivalence could hide an unrelated preset.
+    if (target.displayScope?.mode === 'selected' && !target.displayScope.profileIds.length) return null
+    const legacy = installed.find(item => {
+        if (item.presetOrigin) return false
+        const source = canonicalPresetSource(item.presetMetadata?.source?.url)
+        if (source && origin.source && source !== origin.source) return false
+        return presetDefinitionFingerprint(item, entry.kind) === fingerprint
+    })
+    return legacy ? { kind: entry.kind, id: legacy.id } : null
+}
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value))
 const localSource = { name: 'lishuainan0209 / Tabby Group Server Stats', url: 'https://github.com/lishuainan0209/tabby-group-server-stats', license: 'MIT' }
@@ -178,11 +266,16 @@ export function instantiatePreset(preset: MetricPreset, profiles: PresetProfile[
             scope.profileNames![matches[0].id!] = matches[0].name!
         }
     }
-    const metric = (value: CustomMetric): CustomMetric => ({ ...clone(value), id: makeId(), displayScope: undefined })
-    if (entry.kind === 'metric') return { customMetrics: [{ ...metric(entry.metric!), displayScope: scope }], metricGroups: [], missingProfileNames }
+    const metric = (value: CustomMetric): CustomMetric => {
+        const result = { ...clone(value), id: makeId(), displayScope: undefined } as PresetTarget
+        delete result.presetOrigin
+        return result as CustomMetric
+    }
+    const origin = presetOrigin(entry)
+    if (entry.kind === 'metric') return { customMetrics: [{ ...metric(entry.metric!), displayScope: scope, presetOrigin: origin } as CustomMetric], metricGroups: [], missingProfileNames }
     const group = entry.group!
-    return { customMetrics: [], metricGroups: [{ ...clone(group), id: makeId(), displayScope: scope,
-        main: metric(group.main), children: group.children.map(metric) }], missingProfileNames }
+    return { customMetrics: [], metricGroups: [{ ...clone(group), id: makeId(), displayScope: scope, presetOrigin: origin,
+        main: metric(group.main), children: group.children.map(metric) } as CustomMetricGroup], missingProfileNames }
 }
 
 /** Strip local binding IDs; shared presets contain commands plus portable profile names. */

@@ -576,6 +576,28 @@ async function main() {
         assert.equal(await page.locator('.builtin-card').first().locator('.builtin-move-up').isDisabled(), true)
         assert.equal(await page.locator('.builtin-card').last().locator('.builtin-move-down').isDisabled(), true)
         console.log('PASS built-in move buttons update saved order and a recreated settings component restores it')
+        await page.locator('.preset-search').fill('Uptime')
+        const uptimePreset = page.locator('.preset-card').filter({ hasText: 'Uptime' })
+        await uptimePreset.waitFor()
+        const singlesBeforePreset = await page.evaluate(() => window.harness.config.store.plugin.serverStats.customMetrics.length)
+        await mutate(() => { window.harness.singleDuplicateSnapshot = JSON.stringify(window.harness.config.store.plugin.serverStats.customMetrics) })
+        await uptimePreset.locator('.preset-add').evaluate(button => { button.click(); button.click() })
+        assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.customMetrics.length), singlesBeforePreset + 1,
+            'Two immediate Add events must create exactly one single label')
+        await page.waitForFunction(button => button.disabled, await uptimePreset.locator('.preset-add').elementHandle(), { timeout: 5000 })
+        assert.equal(await uptimePreset.locator('.preset-add').isDisabled(), true)
+        assert.equal((await uptimePreset.locator('.preset-add').innerText()).trim(), 'Already added')
+        await mutate(() => {
+            const metric = window.harness.config.store.plugin.serverStats.customMetrics.at(-1)
+            metric.label = 'Renamed uptime'; metric.enabled = false
+        })
+        assert.equal(await uptimePreset.locator('.preset-add').isDisabled(), true, 'Renaming or disabling an imported single label does not permit a duplicate')
+        await mutate(() => {
+            window.harness.config.store.plugin.serverStats.customMetrics = JSON.parse(window.harness.singleDuplicateSnapshot)
+            delete window.harness.singleDuplicateSnapshot
+        })
+        assert.equal(await uptimePreset.locator('.preset-add').isDisabled(), false, 'Deleting the single label allows adding that preset again')
+        console.log('PASS single preset Add prevents immediate repeats and remains blocked after rename/disable until deletion')
         await page.locator('.preset-search').fill('GPU')
         const gpuPreset = page.locator('.preset-card').filter({ hasText: 'GPU memory' }).filter({ hasText: 'Metric Group' })
         await gpuPreset.waitFor()
@@ -585,7 +607,13 @@ async function main() {
             await page.locator('.preset-library').screenshot({ path: process.env.PRESETS_SCREENSHOT })
             await mutate(() => { window.harness.config.store.language = 'en'; window.harness.previewChinese = false })
         }
-        await gpuPreset.locator('.preset-add').click()
+        const groupsBeforeGpu = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.length)
+        await gpuPreset.locator('.preset-add').evaluate(button => { button.click(); button.click() })
+        assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.length), groupsBeforeGpu + 1,
+            'Two immediate Add events must create exactly one metric group')
+        await page.waitForFunction(button => button.disabled, await gpuPreset.locator('.preset-add').elementHandle(), { timeout: 5000 })
+        assert.equal(await gpuPreset.locator('.preset-add').isDisabled(), true)
+        assert.equal((await gpuPreset.locator('.preset-add').innerText()).trim(), 'Already added')
         const importedGpu = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.at(-1))
         assert.equal(importedGpu.main.type, 'text')
         assert.equal(importedGpu.main.suffix, '%')
@@ -594,6 +622,24 @@ async function main() {
         assert(importedGpu.children.every(m => m.visibleWhenUnavailable === false && m.showWhenUnavailable === false))
         assert(importedGpu.main.command.includes('memory.used,memory.total,memory.free'))
         assert.equal(importedGpu.presetMetadata.source.license, 'MIT')
+        await mutate(() => {
+            const h = window.harness, group = h.config.store.plugin.serverStats.metricGroups.at(-1)
+            h.gpuDuplicateSnapshot = JSON.stringify(group)
+            group.label = 'Renamed disabled GPU'; group.enabled = false
+            h.config.store.language = 'zh-CN'; h.previewChinese = true
+        })
+        const localizedGpuPreset = page.locator('.preset-card').filter({ hasText: 'GPU 显存' }).filter({ hasText: '标签组' })
+        assert.equal(await localizedGpuPreset.locator('.preset-add').isDisabled(), true)
+        assert.equal((await localizedGpuPreset.locator('.preset-add').innerText()).trim(), '已添加')
+        await localizedGpuPreset.locator('.preset-add').evaluate(button => { button.click(); button.click() })
+        assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.length), groupsBeforeGpu + 1)
+        await mutate(() => {
+            const h = window.harness, conf = h.config.store.plugin.serverStats
+            conf.metricGroups[conf.metricGroups.length - 1] = JSON.parse(h.gpuDuplicateSnapshot)
+            delete h.gpuDuplicateSnapshot
+            h.config.store.language = 'en'; h.previewChinese = false
+        })
+        console.log('PASS group preset Add is idempotent and localized Already added remains disabled after rename/disable')
         await page.locator('.preset-search').fill('P3')
         const labPreset = page.locator('.preset-card').filter({ hasText: 'P3' })
         assert.equal((await labPreset.locator('.preset-lab-badge').innerText()).trim(), "Author's lab only")
@@ -754,6 +800,13 @@ async function main() {
         const groupsBeforeImport = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.length)
         await page.locator('.preset-library input[type="file"]').setInputFiles({ name: 'shared-presets.json', mimeType: 'application/json', buffer: Buffer.from(exported) })
         await page.waitForFunction(() => document.querySelector('.preset-message')?.textContent.includes('Library loaded'))
+        assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.length), groupsBeforeImport)
+        const reloadedGpuPresets = page.locator('.preset-card').filter({ hasText: 'GPU memory' }).filter({ hasText: 'Metric Group' })
+        assert((await reloadedGpuPresets.count()) > 0)
+        for (const button of await reloadedGpuPresets.locator('.preset-add').all()) {
+            assert.equal(await button.isDisabled(), true, 'An exported/reimported copy of an installed preset must still be marked added')
+            await button.evaluate(node => node.click())
+        }
         assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.length), groupsBeforeImport)
         console.log('PASS library export removes local binding IDs, retains bilingual/source metadata, and import only previews')
         await mutate(() => { window.harness.config.store.language = 'zh-CN'; window.harness.previewChinese = true })

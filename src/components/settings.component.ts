@@ -3,7 +3,7 @@ import { DomSanitizer, SafeUrl } from '@angular/platform-browser'
 import { ConfigService, PlatformService, TranslateService } from 'tabby-core'
 import { SettingsTabProvider } from 'tabby-settings'
 import { BuiltinMetricKey, getBuiltinDefinition, normalizeBuiltinOrder } from '../builtin-metrics'
-import { MetricPreset, getBundledPresets, normalizePresetLibrary, instantiatePreset, exportPresetLibrary } from '../preset-library'
+import { MetricPreset, getBundledPresets, normalizePresetLibrary, instantiatePreset, exportPresetLibrary, findInstalledPreset } from '../preset-library'
 import { DEFAULT_GITHUB_PRESETS_URL, fetchGitHubPresets, PresetGitHubError } from '../preset-github'
 import { METRIC_COLORS } from '../metric-colors'
 import { TRANSLATIONS } from '../translations'
@@ -155,7 +155,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                         <strong>{{ presetText(p, 'label') }}</strong>
                         <span class="badge bg-secondary">{{ (p.kind === 'group' ? 'Metric Group' : 'Single Labels') | translate }}</span>
                         <span class="badge preset-lab-badge" *ngIf="p.audience === 'author-lab'" translate>Author's lab only</span>
-                        <button type="button" class="btn btn-outline-primary btn-sm preset-add" (click)="addPreset(p)" translate>Add</button>
+                        <button type="button" class="btn btn-outline-primary btn-sm preset-add" [disabled]="isPresetAdded(p)" (click)="addPreset(p)">{{(isPresetAdded(p) ? 'Already added' : 'Add') | translate}}</button>
                     </div>
                     <p class="preset-description mb-2" *ngIf="presetText(p, 'description')">{{ presetText(p, 'description') }}</p>
                     <div class="command-box group-command" [title]="presetMain(p)?.command">{{ presetMain(p)?.command }}</div>
@@ -1530,9 +1530,17 @@ export class ServerStatsSettingsComponent {
         this.presetMissingNames = [];
     }
 
+    isPresetAdded(preset: MetricPreset): boolean {
+        return !!findInstalledPreset(preset, this.config.store.plugin.serverStats, this.config.store.profiles || []);
+    }
+
     addPreset(preset: MetricPreset | Partial<CustomMetric>) {
         const normalized = 'kind' in preset ? preset as MetricPreset : normalizePresetLibrary([preset])[0];
         if (!normalized) return;
+        if (this.isPresetAdded(normalized)) {
+            this.presetMessage = 'This preset is already added. Edit or enable the existing item.';
+            return;
+        }
         const imported = instantiatePreset(normalized, this.config.store.profiles || [], () => this.newId('metric'));
         // Only an explicitly bilingual preset title is localized on addition.
         // User-supplied names and mount paths are otherwise kept exactly as entered.

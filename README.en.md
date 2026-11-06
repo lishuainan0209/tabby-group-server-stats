@@ -2,7 +2,7 @@
 
 [中文](README.md) | English
 
-Editable server metrics, hover details and metric groups for [Tabby](https://github.com/Eugeny/tabby). The current version is **1.7.3**, with more compact static rows, three-decimal MB/s rates, and aligned capacity columns.
+SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current version is **1.7.3**, adding duplicate-preset protection while retaining compact rows, three-decimal MB/s rates and aligned capacity columns.
 
 Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
@@ -20,7 +20,7 @@ The preview uses example configuration data and the Chinese interface.
 - **Independent switches:** disable a standalone label, an entire group, its main label or individual children without deleting commands or color rules.
 - **Connection scopes:** select saved connections or layouts; each pane in a mixed layout retains its own connection identity.
 - **Editable, reorderable built-ins:** customize CPU, memory, disk and network definitions, move them up or down in both panels, or restore one built-in's defaults.
-- **Offline and GitHub library:** 20 bundled presets—12 standalone labels and 8 groups—with imports from this fork, JSON import/export and search.
+- **Offline and GitHub library:** 20 bundled presets—12 standalone labels and 8 groups—with imports from this fork, JSON import/export and search; repeated clicks do not add another copy of an existing preset.
 - **Clear section and card borders:** separate built-ins, presets, standalone labels and groups; compact line separators between displayed groups.
 - **English/Chinese UI and 26 original monitoring icons:** searchable categories, existing icon support and custom SVGs.
 
@@ -95,6 +95,8 @@ The shipped library works offline. **Import from GitHub** reads [this fork's mai
 
 GitHub and JSON imports only preview entries: they do not execute commands or add status-bar items until you click **Add**. GitHub downloads have a 15-second timeout and a 2 MiB size limit, and do not upload local configuration or connection information. Search or export the current custom standalone labels and groups; exports omit built-in overrides. The format supports `kind: "metric"` and `kind: "group"`, and accepts the original flat metric array.
 
+**Add each preset once.** Newly added standalone labels and groups record their source and stable preset ID. Renaming or disabling an item does not allow another copy to be added from the same preset. Legacy configuration without source markers is checked using commands and display scope rather than its name alone. This protection does not automatically delete historical duplicates: back up local configuration before removing unwanted copies.
+
 The 12 standalone presets cover uptime, temperature, system load, logged-in users, Docker containers, GPU memory, SSH sessions, SSH latency, I/O wait, CPU steal, failed services and service state. The 8 groups are:
 
 **Laboratory-specific presets: P0磁盘, P1磁盘, P1容器磁盘, P2磁盘, P3磁盘 and P4磁盘 are for the author's laboratory only. Other users: please do not download or use these presets.** Their mount paths and saved connection names are specific to the author's laboratory; they are not generic server templates. This usage-scope notice does not apply to the general GPU or CPU-load presets and does not change the rights granted by the MIT license.
@@ -148,7 +150,11 @@ Saved layouts have IDs separate from the connections inside them. The plugin rec
 
 ## Install, develop and publish
 
-After publication, search for `tabby-group-server-stats` in Tabby's plugin settings. Before publication, test a local `.tgz`. A GitHub fork, a successful build, npm publication and Tabby's search index are separate steps.
+In **Tabby Settings → Plugins → Available**, search for **`maintainer:lishuainan0209`**, install **`group-server-stats`**, then restart Tabby. Filtering by maintainer makes the package easier to find when a newly published package appears low in a long result list. You can also search for `tabby-group-server-stats`; Tabby omits the `tabby-` prefix from the displayed name.
+
+The description and keywords cover server monitoring, GPU memory, disk, network and metric groups. npm matches package names, descriptions, README content and keywords; npm controls result ordering, so metadata changes do not guarantee a particular ranking or immediate visibility. [npm search documentation](https://docs.npmjs.com/searching-for-and-choosing-packages-to-download/)
+
+See the [npm package page](https://www.npmjs.com/package/tabby-group-server-stats) for public versions. Test unpublished local versions with a `.tgz`. A GitHub fork, a successful build, npm publication and Tabby's search index are separate steps.
 
 Development needs Node.js, npm, Git and Tabby. Global Angular CLI/Webpack installations and Python are not required for this project. Keep the lockfile and `.npmrc`, then run from the repository root:
 
@@ -177,7 +183,9 @@ Report problems or suggest improvements through [this project's Issues](https://
 - Remove gaps between static vertical rows, add thin separators, and reduce bottom-bar padding.
 - Right-align numeric columns and both sides of capacity ratios; hover popups retain comfortable spacing.
 
-### 1.7.3 attribution update
+### 1.7.3 attribution, duplicate presets and discovery
 
 - Identify lishuainan0209 as this fork's author and maintainer, including fork preset sources.
 - Retain Akkariin's upstream MIT copyright, source links and contributor credit.
+- Prevent duplicate preset additions using source and stable ID, including renamed or disabled items; use commands and scope to recognize legacy entries.
+- Add relevant bilingual metadata and document installation through maintainer search, without promising a search ranking.

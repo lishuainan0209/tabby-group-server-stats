@@ -1,13 +1,24 @@
 {
     "name": "tabby-group-server-stats",
     "version": "1.7.3",
-    "description": "Server statistics for Tabby with validated custom metrics, hover details and grouped overview, carousel and static layouts",
+    "description": "Tabby server monitoring: CPU, memory, disk, network and GPU metrics with grouped labels and hover details. Tabby 服务器监控：显存、磁盘、网络、自定义指标与多标签组。",
     "keywords": [
         "tabby-plugin",
+        "tabby",
+        "server-stats",
+        "server-monitoring",
         "ssh",
+        "metrics",
         "stats",
         "monitoring",
-        "chartjs"
+        "gpu",
+        "disk",
+        "memory",
+        "network",
+        "metric-groups",
+        "服务器监控",
+        "显存",
+        "标签组"
     ],
     "author": {
         "name": "lishuainan0209",

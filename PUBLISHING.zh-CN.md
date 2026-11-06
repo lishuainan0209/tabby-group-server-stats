@@ -2,7 +2,7 @@
 
 本文面向 `tabby-group-server-stats 1.7.3` 的维护者。源码目录为 `D:\tabby-group-server-stats`；功能与预设说明见 [中文 README](README.md) / [English README](README.en.md)。
 
-1.7.3 统一 fork 作者和维护者为 lishuainan0209，并保留上游 MIT 版权与贡献声明；包含 1.7.2 的显示修正。
+1.7.3 统一 fork 作者和维护者为 lishuainan0209，加入预设重复添加保护，并完善中英文搜索元数据与安装说明；保留上游 MIT 版权与贡献声明，包含 1.7.2 的显示修正。
 
 1.7.0 增加 GitHub 预设导入、内置项持久化排序、清晰分区与卡片边框、紧凑组分隔，并更新磁盘汇总、登录会话名单、双向网络速率及累计量和默认颜色阈值。版本号不表示已经推送或发布。
 
@@ -108,8 +108,9 @@ npm.cmd install --prefix "$pluginRoot" --omit=dev --legacy-peer-deps "$archive"
 10. **范围生命周期**：重命名保持关联；删除后不转为全局，同名新连接不继承。指定范围为空仍不显示。仅针对整个布局绑定，未标记的旧布局或刚保存的新布局重开一次，再检查恢复、分屏和移动窗格。
 11. **离线与 GitHub 库**：20 项（12 单标签、8 组）可离线搜索、加载和添加；GitHub 与 JSON 导入均只预览、点击添加才生效，保留当前及此前导入的条目并按同 ID 更新。检查 15 秒超时、2 MiB 上限、HTTP/JSON 错误时原列表不变。导出/导入保留类型、颜色规则、开关、来源与双语描述，不携带本地范围 ID。缺失或重名连接提示补选，保持指定范围为空而非全局。
 12. **磁盘与 GPU**：所有磁盘组主标签为总余量、系统盘为第一子标签；只汇总可读有效文件系统，同一文件系统的绑定挂载不重复计数。P1 宿主模板只绑定 P1(ai)、仅系统盘；P1 容器模板绑定 P1(s_lsn)、包含 `/public`。P0/P2/P4 检查 `/data`，P3 检查 `/data` 和 `/lsn_disk1`。GPU 主值为显存占比，详情用 `memory.free / 1024` 的 GiB；无设备主标签提示、缺失子 GPU 隐藏。
-13. **登录用户与网络**：登录用户主值包含正常 tty/pts/console 会话，悬停按用户名稳定汇总；空数据为 `0`/`-`，命令失败不冒充空数据。网络按默认路由网卡优先、无路由时回退非回环网卡；Linux/macOS 下载和上传分别验证速率 KiB/s、累计 GiB 与网卡名称。累计量自接口建立或计数器重置起算，不是本次 SSH 登录后的流量。
+13. **登录用户与网络**：登录用户主值包含正常 tty/pts/console 会话，悬停按用户名稳定汇总；空数据为 `0`/`-`，命令失败不冒充空数据。网络按默认路由网卡优先、无路由时回退非回环网卡；Linux/macOS 下载和上传分别验证原始速率 KiB/s、显示速率 MB/s（三位小数）、累计 GiB 与网卡名称，颜色判断保持使用原始速率。累计量自接口建立或计数器重置起算，不是本次 SSH 登录后的流量。
 14. **阈值与双语**：红色规则先于橙色。逐一验证边界：单盘 20/40 GiB、总余量 50/100 GiB、GPU 显存 50/80%、RAM 60/80%、CPU 1min/5min 负载 100/150%；比较方向与包含边界应符合 README 表格。检查中英文切换、26 个图标搜索分类及自定义 SVG。
+15. **预设重复添加**：同来源、同稳定 ID 的单标签或标签组只添加一次；改名和禁用后仍能识别。旧配置结合命令与显示范围匹配，不仅凭标题去重；不同范围的旧配置不能被误判。防止新增重复项与清理历史副本分别验收，清理本地副本前保留配置备份。
 
 ## 发布到 npm
 
@@ -136,4 +137,13 @@ npm.cmd view tabby-group-server-stats version dist.tarball --registry=https://re
 
 Tabby 1.0.238 的插件管理器通过 npm 的 `tabby-plugin` 关键词搜索，并过滤以 `tabby-` 开头的包名。本项目使用非 scoped 的 `tabby-group-server-stats`，且包含所需关键词。[插件管理器源码](https://github.com/Eugeny/tabby/blob/v1.0.238/tabby-plugin-manager/src/services/pluginManager.service.ts)
 
-发布成功且 npm 搜索索引更新后，在 Tabby 设置 → 插件搜索 `group-server-stats`，安装并重启。索引可能不会立即更新；先用 `npm view` 确认版本和元数据，再刷新插件列表。推送 GitHub 或上传 GitHub Release 本身不会发布 npm 包。[Tabby 插件开发说明](https://github.com/Eugeny/tabby/blob/master/HACKING.md#plugins)
+发布成功且 npm 搜索索引更新后，在 Tabby 设置 → 插件 → 可用中搜索 **`maintainer:lishuainan0209`**，选择 **`group-server-stats`** 安装并重启。也可搜索包名，但新包可能排在大量结果后面；Tabby 的显示名称省略了 `tabby-` 前缀。先用 `npm view` 确认公开版本和元数据，再刷新插件列表。推送 GitHub 或上传 GitHub Release 本身不会发布 npm 包。[Tabby 插件开发说明](https://github.com/Eugeny/tabby/blob/master/HACKING.md#plugins)
+
+发布验收可以直接查询 Tabby 使用的搜索接口，确认结果包含目标版本：
+
+```powershell
+$searchUrl = 'https://registry.npmjs.com/-/v1/search?text=keywords%3Atabby-plugin%20maintainer%3Alishuainan0209&size=250'
+(Invoke-RestMethod -Uri $searchUrl).objects.package | Select-Object name, version
+```
+
+`description` 和 `keywords` 只填写项目实际功能；本项目覆盖 Tabby、SSH 服务器监控、CPU、内存、GPU 显存、磁盘、网络、自定义指标和多标签组。npm 根据包名、描述、README 和关键词进行匹配，排序由 npm 决定。维护相关元数据有助于表达用途，但不能保证名次或索引更新时间；不要把下载量、GitHub 星标或重复发布写成必然提升排名的方法。[npm 搜索说明](https://docs.npmjs.com/searching-for-and-choosing-packages-to-download/)
