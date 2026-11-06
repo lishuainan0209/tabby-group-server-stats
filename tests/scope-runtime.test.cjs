@@ -196,3 +196,179 @@ test('ancestor traversal handles nested layouts and malformed parent cycles with
     assert.deepEqual(ids(service, child), ['P1', 'inner', 'outer'])
     service.ngOnDestroy()
 })
+
+// Saved split layouts contain a snapshot of the original SSH profile. Tabby
+// restores that snapshot even when the current saved connection has a new ID.
+function sshPane(id, options = {}) {
+    const child = pane(id)
+    child.profile = { id, type: 'ssh', name: 'Saved SSH connection', options: {
+        host: 'node.example.test', port: 2201, user: 'analyst', ...options,
+    } }
+    child.session.profile = child.profile
+    return child
+}
+
+function savedSSH(id, options = {}) {
+    return sshPane(id, options).profile
+}
+
+test('stale layout SSH snapshot also matches its unique current saved connection', () => {
+    const child = sshPane('old-container', { host: ' NODE.EXAMPLE.TEST ', port: '2201' })
+    const { service, config } = setup([layout('mixed-layout', [child])])
+    config.store.profiles = [savedSSH('current-container'), { id: 'mixed-layout', type: 'split-layout' }]
+    const context = service.contextForSession(child.session)
+    assert.deepEqual(context.profileIds.sort(), ['current-container', 'mixed-layout', 'old-container'])
+    assert.equal(matchesScope({ mode: 'selected', profileIds: ['current-container'] }, context, config.store.profiles), true)
+    // The alias is runtime context only: never mutate saved layout snapshots.
+    assert.equal(child.profile.id, 'old-container')
+    assert.equal(child.profile.options.port, '2201')
+    service.ngOnDestroy()
+})
+
+test('a current saved SSH ID remains authoritative even with another identical endpoint', () => {
+    const child = sshPane('original')
+    const { service, config } = setup([child])
+    config.store.profiles = [savedSSH('original'), savedSSH('same-endpoint')]
+    assert.deepEqual(ids(service, child), ['original'])
+    service.ngOnDestroy()
+})
+
+test('a stale SSH snapshot never aliases a different port or username', () => {
+    const child = sshPane('old-container')
+    const { service, config } = setup([child])
+    config.store.profiles = [
+        savedSSH('other-port', { port: 2202 }),
+        savedSSH('other-user', { user: 'Analyst' }),
+        savedSSH('other-host', { host: 'other.example.test' }),
+    ]
+    assert.deepEqual(ids(service, child), ['old-container'])
+    service.ngOnDestroy()
+})
+
+test('ambiguous saved SSH endpoints do not select either connection', () => {
+    const child = sshPane('old-container')
+    const { service, config } = setup([child])
+    config.store.profiles = [savedSSH('copy-one'), savedSSH('copy-two')]
+    const context = service.contextForSession(child.session)
+    assert.deepEqual(context.profileIds, ['old-container'])
+    for (const id of ['copy-one', 'copy-two']) {
+        assert.equal(matchesScope({ mode: 'selected', profileIds: [id] }, context, config.store.profiles), false)
+    }
+    service.ngOnDestroy()
+})
+
+test('nested layouts resolve each stale SSH leaf without collecting sibling aliases', () => {
+    const first = sshPane('old-one')
+    const second = sshPane('old-two', { port: 2202 })
+    const root = layout('outer-layout', [layout('inner-layout', [first, second])])
+    const { service, config } = setup([root])
+    config.store.profiles = [savedSSH('current-one'), savedSSH('current-two', { port: 2202 })]
+    assert.deepEqual(ids(service, first), ['current-one', 'inner-layout', 'old-one', 'outer-layout'])
+    assert.deepEqual(ids(service, second), ['current-two', 'inner-layout', 'old-two', 'outer-layout'])
+    service.ngOnDestroy()
+})
+
+test('endpoint aliasing never revives a deleted selected profile ID or broadens empty selections', () => {
+    const child = sshPane('deleted')
+    const { service, config } = setup([child])
+    config.store.profiles = [savedSSH('replacement')]
+    const context = service.contextForSession(child.session)
+    assert.equal(matchesScope({ mode: 'selected', profileIds: ['deleted'] }, context, config.store.profiles), false)
+    assert.equal(matchesScope({ mode: 'selected', profileIds: [] }, context, config.store.profiles), false)
+    assert.equal(matchesScope({ mode: 'selected', profileIds: ['replacement'] }, context, config.store.profiles), true)
+    config.store.profiles = []
+    assert.deepEqual(ids(service, child), ['deleted'])
+    service.ngOnDestroy()
+})
+
+test('stale SSH endpoint matching normalizes the default port and excludes missing identities', () => {
+    const child = sshPane('old', { port: undefined })
+    const { service, config } = setup([child])
+    config.store.profiles = [savedSSH('current', { port: 22 })]
+    assert.deepEqual(ids(service, child), ['current', 'old'])
+    child.profile.options.host = ''
+    assert.deepEqual(ids(service, child), ['old'])
+    child.profile.options.host = 'node.example.test'
+    child.profile.options.user = ''
+    assert.deepEqual(ids(service, child), ['old'])
+    service.ngOnDestroy()
+})
+
+test('matching SSH endpoints on different proxy or jump routes remain distinct', () => {
+    const child = sshPane('old-container')
+    const { service, config } = setup([child])
+    for (const route of [
+        { jumpHost: 'jump-a' },
+        { proxyCommand: 'ssh jump-a -W %h:%p' },
+        { socksProxyHost: 'proxy.example.test', socksProxyPort: 1080 },
+        { httpProxyHost: 'proxy.example.test', httpProxyPort: 8080 },
+    ]) {
+        config.store.profiles = [savedSSH('other-route', route)]
+        assert.deepEqual(ids(service, child), ['old-container'])
+    }
+    service.ngOnDestroy()
+})
+
+test('SSH endpoint aliasing never reads authentication secrets', () => {
+    const child = sshPane('old')
+    const current = savedSSH('current')
+    for (const options of [child.profile.options, current.options]) {
+        for (const key of ['password', 'privateKeys']) {
+            Object.defineProperty(options, key, { get() { throw new Error('Must not inspect authentication'); } })
+        }
+    }
+    const { service, config } = setup([child])
+    config.store.profiles = [current]
+    assert.deepEqual(ids(service, child), ['current', 'old'])
+    service.ngOnDestroy()
+})
+
+test('temporary SSH connections without a saved ID do not acquire a selected profile scope', () => {
+    const child = sshPane(undefined)
+    const { service, config } = setup([child])
+    config.store.profiles = [savedSSH('current')]
+    assert.deepEqual(ids(service, child), [])
+    service.ngOnDestroy()
+})
+
+test('a stale session snapshot can resolve before its owning tab is registered', () => {
+    const child = sshPane('old')
+    const { service, config } = setup([])
+    config.store.profiles = [savedSSH('current')]
+    assert.deepEqual(ids(service, child), ['current', 'old'])
+    child.session.open = false
+    assert.deepEqual(ids(service, child), [])
+    service.ngOnDestroy()
+})
+
+test('stale SSH matching resolves inherited connection fields through the Tabby profile service', () => {
+    const child = sshPane('old', { jumpHost: 'lab-jump' })
+    const { service, config, profiles } = setup([child])
+    const raw = { id: 'current', type: 'ssh', group: 'lab', options: { port: 2201 } }
+    config.store.profiles = [raw]
+    profiles.getConfigProxyForProfile = candidate => {
+        assert.equal(candidate, raw)
+        return { ...candidate, options: { host: 'node.example.test', user: 'analyst', jumpHost: 'lab-jump', ...candidate.options } }
+    }
+    assert.deepEqual(ids(service, child), ['current', 'old'])
+    assert.deepEqual(raw.options, { port: 2201 }, 'resolving defaults must not edit the saved profile')
+    profiles.getConfigProxyForProfile = () => { throw new Error('Profile provider unavailable') }
+    assert.deepEqual(ids(service, child), ['old'], 'a failed provider must not break all metric rendering')
+    service.ngOnDestroy()
+})
+
+test('SSH aliases are re-evaluated when saved connections are removed, changed or recreated', () => {
+    const child = sshPane('old')
+    const { service, config } = setup([child])
+    config.store.profiles = [savedSSH('first')]
+    assert.deepEqual(ids(service, child), ['first', 'old'])
+    config.store.profiles[0].options.port = 2202
+    assert.deepEqual(ids(service, child), ['old'])
+    config.store.profiles = []
+    assert.deepEqual(ids(service, child), ['old'])
+    config.store.profiles = [savedSSH('second')]
+    assert.deepEqual(ids(service, child), ['old', 'second'])
+    config.store.profiles.push(savedSSH('third'))
+    assert.deepEqual(ids(service, child), ['old'], 'new ambiguity must remove an earlier alias')
+    service.ngOnDestroy()
+})

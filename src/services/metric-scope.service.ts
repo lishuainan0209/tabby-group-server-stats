@@ -1,7 +1,7 @@
 import { Injectable, OnDestroy } from '@angular/core'
 import { AppService, ConfigService, ProfilesService } from 'tabby-core'
 import { Subscription } from 'rxjs'
-import { findSessionTab, ScopeContext } from '../display-scope'
+import { findSessionTab, resolveProfileScopeIds, ScopeContext } from '../display-scope'
 
 /** A saved layout's origin, persisted in its recovery token, never inferred from titles. */
 export const LAYOUT_SCOPE_MARKER = '__tabbyGroupServerStatsLayoutProfileId'
@@ -101,9 +101,9 @@ export class MetricScopeService implements OnDestroy {
         if (this.destroyed || !session || session.open === false) return { profileIds: [] }
         this.observeTabs()
         const leaf = findSessionTab((this.app as any).tabs || [], session)
-        const ids = new Set<string>()
-        const leafId = typeof leaf?.profile?.id === 'string' && leaf.profile.id ? leaf.profile.id : session.profile?.id
-        if (typeof leafId === 'string' && leafId) ids.add(leafId)
+        const profile = typeof leaf?.profile?.id === 'string' && leaf.profile.id ? leaf.profile : session.profile
+        const ids = new Set(resolveProfileScopeIds(profile, this.config.store?.profiles || [], candidate =>
+            (this.profiles as any).getConfigProxyForProfile?.(candidate) || candidate))
         // Parent links reflect the current layout. A pane moved out of a saved
         // layout loses that association; sibling profiles are never collected.
         const visited = new Set<any>()

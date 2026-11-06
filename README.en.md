@@ -142,7 +142,9 @@ GPU thresholds measure VRAM use, not GPU compute utilization. CPU load is normal
 
 A standalone label or whole group can select multiple saved connections or layouts. The default unrestricted scope covers every supported terminal pane. Group members inherit the group's scope; an unmatched pane does not run even the object's check.
 
-Matching uses each pane's **original saved connection ID**, not the focused pane, tab title, host address or a sibling connection. In a `P1 / P2 / P1` layout, P1-bound metrics appear in both P1 panes and P2-bound metrics only in the middle pane. A layout-bound metric applies to all three, executing independently in each session. Multiple selections form a union: choosing P1 plus the whole layout also includes its P2 pane.
+Matching prioritizes each pane's **original saved connection ID**, not the focused pane, tab title or a sibling connection. If an old saved layout retains an obsolete connection ID, the plugin looks for exactly one current SSH profile with the same host, port, username and jump/proxy route. Missing or ambiguous matches do not inherit a scope. Hosts and containers on different ports remain separate. This compatibility fix is available in source/local builds and has not yet been published to npm.
+
+In a `P1 / P2 / P1` layout, P1-bound metrics appear in both P1 panes and P2-bound metrics only in the middle pane. A layout-bound metric applies to all three, executing independently in each session. Multiple selections form a union: choosing P1 plus the whole layout also includes its P2 pane.
 
 Renaming preserves the association. Deleted profiles remain marked unavailable and stop matching; a new profile with the same name does not inherit the old ID. Removing the last selection does not make the metric global—you must explicitly choose all terminal panes.
 
