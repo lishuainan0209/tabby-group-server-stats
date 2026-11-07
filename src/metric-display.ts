@@ -34,6 +34,15 @@ export function formatCapacityUnit(value: string): string {
     return value.replace(/(^|[\d\s])GiB\b/g, '$1GB')
 }
 
+/** Add grouping without rounding capacity readings or changing their precision. */
+export function formatGroupedNumber(value: string): string {
+    if (!isNumericDisplayValue(value) || /[eE]/.test(value)) return value
+    const [whole, fraction] = value.trim().replace(/,/g, '').split('.')
+    return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + (fraction === undefined ? '' : `.${fraction}`)
+}
+
+export function isCapacityUnit(unit: string): boolean { return /^[KMGTPE]?i?B$/i.test(unit.trim()) }
+
 export interface NumericRatio {
     numerator: string
     denominator: string
@@ -47,13 +56,15 @@ export function parseNumericRatio(value: string): NumericRatio | null {
     const numerator = match[1].trim()
     const denominator = match[2].trim()
     if (![numerator, denominator].every(isNumericDisplayValue)) return null
-    return { numerator, denominator, suffix: formatCapacityUnit(match[3] || '') }
+    const suffix = formatCapacityUnit(match[3] || '')
+    return { numerator: isCapacityUnit(suffix) ? formatGroupedNumber(numerator) : numerator,
+        denominator: isCapacityUnit(suffix) ? formatGroupedNumber(denominator) : denominator, suffix }
 }
 
 /** Parse the built-in network protocol without translating numbers or interface names. */
 export function parseNetworkDetail(value: string): { label: string; amount: string; interfaces: string } | null {
     const match = /^(Received|Sent|Combined) total: ([0-9]+(?:\.[0-9]+)?) G(?:i)?B \(since interface reset; ([^)\r\n]+)\)$/.exec(value || '')
-    return match ? { label: `${match[1]} total`, amount: match[2], interfaces: match[3] } : null
+    return match ? { label: `${match[1]} total`, amount: formatGroupedNumber(match[2]), interfaces: match[3] } : null
 }
 
 export function metricStatus(result?: DisplayResult): string {

@@ -29,7 +29,8 @@ function load(relative) {
     const exports = {};
     let moduleMetadata;
     const source = fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
-    const angular = { Component: decorator, NgModule: metadata => { moduleMetadata = metadata; return target => target; }, HostListener: decorator, ViewChildren: decorator, ViewChild: decorator };
+    const memberDecorator = () => () => undefined;
+    const angular = { Component: decorator, NgModule: metadata => { moduleMetadata = metadata; return target => target; }, HostListener: memberDecorator, ViewChildren: memberDecorator, ViewChild: memberDecorator };
     const serviceClass = class {};
     const toolbarProvider = class {};
     const bottomComponent = class {}, floatingComponent = class {};
@@ -63,10 +64,13 @@ function componentFixture(kind) {
     const Component = exports[floating ? 'ServerStatsFloatingPanelComponent' : 'ServerStatsBottomBarComponent'];
     const requests = [];
     const paneVisibility = new WeakMap();
+    const paneModes = new WeakMap();
     const service = {
         getServerKey: session => session.id, getCachedStats: () => null, isPlatformSupport: () => true,
         isPaneVisible: session => paneVisibility.get(session) !== false,
         setPaneVisible(session, visible) { paneVisibility.set(session, visible); config.changed$.emit(); },
+        getPaneGroupMode: session => paneModes.get(session),
+        setPaneGroupMode(session, mode) { paneModes.set(session, mode); config.changed$.emit(); },
         statsUpdated$: new Signal(), fetchStats(session) { const request = deferred(); requests.push({ ...request, session }); return request.promise; },
     };
     const config = { store: { plugin: { serverStats: { enabled: true, displayMode: floating ? 'floatingPanel' : 'bottomBar' } } }, changed$: new Signal(), ready$: new Signal() };
@@ -191,6 +195,100 @@ test('collapsed bars do not fetch or accept late value/stream results and can re
     await resumed;
     assert.equal(f.component.currentStats.cpu, 42);
     f.component.ngOnDestroy();
+});
+
+test('the pane menu opens without toggling visibility and applies modes to view copies only', async () => {
+    const f = componentFixture('bottom');
+    const groups = [
+        { id: 'disk', mode: 'overview', layout: 'horizontal', main: { id: 'disk-total' }, children: [] },
+        { id: 'gpu', mode: 'carousel', main: { id: 'gpu-total' }, children: [] },
+    ];
+    const singles = [{ id: 'single' }];
+    const before = JSON.stringify(groups);
+    f.service.getVisibleConfig = () => ({ customMetrics: singles, metricGroups: groups });
+    f.component.ngOnInit();
+    assert.equal(f.component.metricGroups, groups, 'configured per-group modes remain until an override is selected');
+    f.component.togglePaneMenu();
+    assert.equal(f.component.menuOpen, true);
+    assert.equal(f.component.paneVisible, true);
+    assert.equal(f.requests.length, 0, 'opening the menu must not start a collection');
+    f.component.setPaneVisibility(false);
+    assert.equal(f.component.menuOpen, false);
+    assert.equal(f.component.visible, true, 'the menu trigger survives hiding the metrics');
+    f.component.togglePaneMenu();
+    f.component.setPaneGroupMode('static');
+    assert.equal(f.component.menuOpen, false);
+    assert.equal(f.component.paneVisible, true, 'choosing a display mode shows a hidden pane');
+    assert.equal(f.service.isPaneVisible(f.A), true, 'visibility is saved together with the selected mode');
+    assert.equal(f.service.getPaneGroupMode(f.A), 'static');
+    assert.equal(f.service.getPaneGroupMode(f.B), undefined);
+    assert.equal(f.component.customMetrics, singles);
+    assert.deepEqual(Array.from(f.component.metricGroups, group => group.mode), ['static', 'static']);
+    assert.deepEqual(Array.from(f.component.metricGroups, group => group.layout), ['horizontal', 'vertical']);
+    assert.notEqual(f.component.metricGroups[0], groups[0]);
+    assert.equal(JSON.stringify(groups), before);
+    assert.equal(f.requests.length, 1, 'choosing a mode immediately resumes collection in a previously hidden pane');
+    f.requests[0].resolve(stats(42));
+    await f.requests[0].promise;
+    await Promise.resolve();
+    f.app.activeTab = { session: f.B, frontend: {} };
+    f.component.loadConfig();
+    assert.equal(f.component.metricGroups, groups, 'other panes retain the configured modes');
+    assert.equal(f.component.paneGroupMode, undefined);
+    f.component.ngOnDestroy();
+});
+
+test('pane menu keyboard navigation, outside interaction and lifecycle release focus safely', () => {
+    const f = componentFixture('bottom');
+    f.component.ngOnInit();
+    let focused = -1, toggleFocus = 0;
+    const buttons = Array.from({ length: 5 }, (_, index) => ({ focus() { focused = index; } }));
+    const toggle = { focus() { toggleFocus++; }, contains: target => target === toggle };
+    f.component.paneToggle = { nativeElement: toggle };
+    f.component.paneMenu = { nativeElement: {
+        querySelectorAll: () => buttons, contains: target => buttons.includes(target),
+    } };
+    const event = (key, target) => ({ key, target, preventDefault() {}, stopPropagation() {} });
+    f.component.togglePaneMenu();
+    assert.equal(focused, 0);
+    f.component.onMenuKeydown(event('ArrowUp', buttons[0]));
+    assert.equal(focused, 4);
+    f.component.onMenuKeydown(event('Home', buttons[4]));
+    assert.equal(focused, 0);
+    f.component.onMenuKeydown(event('End', buttons[0]));
+    assert.equal(focused, 4);
+    f.component.onMenuKeydown(event('ArrowDown', buttons[4]));
+    assert.equal(focused, 0);
+    f.component.onOutsideInteraction({ target: buttons[2] });
+    assert.equal(f.component.menuOpen, true, 'interactions inside the menu stay open until selection');
+    f.component.onDocumentKeydown(event('Escape', buttons[0]));
+    assert.equal(f.component.menuOpen, false);
+    assert.equal(toggleFocus, 1);
+    f.component.onToggleKeydown(event('ArrowUp', toggle));
+    assert.equal(f.component.menuOpen, true);
+    assert.equal(focused, 4);
+    f.component.onOutsideInteraction({ target: {} });
+    assert.equal(f.component.menuOpen, false);
+    assert.equal(toggleFocus, 1, 'outside pointer focus must not be stolen');
+    f.component.togglePaneMenu();
+    f.component.onMenuKeydown(event('Tab', buttons[0]));
+    assert.equal(f.component.menuOpen, false);
+    f.component.togglePaneMenu();
+    f.app.activeTab = { session: f.B, frontend: {} };
+    f.component.loadConfig();
+    assert.equal(f.component.menuOpen, false, 'a menu must not carry commands into a replacement session');
+    f.component.togglePaneMenu();
+    f.component.ngOnDestroy();
+    f.render.destroyed = true;
+    const calls = f.render.calls;
+    assert.equal(f.component.menuOpen, false);
+    f.component.onOutsideInteraction({ target: {} });
+    f.component.onDocumentKeydown(event('Escape', buttons[0]));
+    f.component.togglePaneMenu();
+    f.component.setPaneGroupMode('overview');
+    assert.equal(f.render.calls, calls);
+    assert.equal(f.config.changed$.subscribers.size, 0);
+    assert.equal(f.service.statsUpdated$.subscribers.size, 0);
 });
 
 test('plugin registration exposes only the bottom view and no toolbar toggle', () => {

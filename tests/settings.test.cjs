@@ -49,7 +49,7 @@ const compiled = ts.transpileModule(source, { compilerOptions: {
 let confirmationHandler = () => true;
 vm.runInNewContext(compiled, {
   require: name => { if (!(name in mocks)) throw Error('Unexpected module ' + name); return mocks[name]; },
-  exports: exportsObject, console, confirm: message => confirmationHandler(message), setTimeout,
+  exports: exportsObject, console, confirm: message => confirmationHandler(message), setTimeout, __dirname: '/plugin/dist',
 });
 function withConfirmation(answer, run) {
   const messages = [];
@@ -154,6 +154,136 @@ function scopeFixture() {
   }, save() {} };
   return { config, editor: new exportsObject.ServerStatsSettingsComponent({}, config, {}) };
 }
+
+const { HostConfigProxy } = loadPureSource('tests/helpers/host-config.ts');
+function hostDefaults() {
+  const exports = {};
+  const javascript = ts.transpileModule(fs.readFileSync(path.join(repo, 'src/config.ts'), 'utf8'), { compilerOptions: {
+    module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
+  } }).outputText;
+  vm.runInNewContext(javascript, { exports, require: name => {
+    if (name === '@angular/core') return { Injectable: noopDecorator };
+    if (name === 'tabby-core') return { ConfigProvider: class {} };
+    if (name === './metric-model') return loadPureSource('src/metric-model.ts');
+    if (name === './metric-colors') return loadPureSource('src/metric-colors.ts');
+    if (name === './icons/presets') return {};
+    throw Error('Unexpected config dependency ' + name);
+  } });
+  return { profiles: [], language: 'en', ...new exports.ServerStatsConfigProvider().defaults };
+}
+
+function hostSettingsFixture(raw = {}) {
+  const defaults = hostDefaults();
+  let savedRaw;
+  let saveCount = 0;
+  const config = { store: new HostConfigProxy(raw, defaults), save() {
+    saveCount++;
+    savedRaw = JSON.parse(JSON.stringify(raw));
+  } };
+  const editor = new exportsObject.ServerStatsSettingsComponent({}, config, {});
+  return { editor, config, raw, get saves() { return saveCount; }, get snapshot() { return savedRaw; } };
+}
+
+test('host config fixture enforces structural getters, mutable maps and raw-backed persistence', () => {
+  const raw = {};
+  const proxy = new HostConfigProxy(raw, { flags: { enabled: true }, empty: {}, mutable: { __nonStructural: true }, list: [] });
+  assert.throws(() => { 'use strict'; proxy.flags = { enabled: false }; }, TypeError);
+  proxy.flags.enabled = false;
+  assert.equal(raw.flags.enabled, false);
+  assert(Object.keys(proxy.flags).includes('__getValue'), 'Real host helper functions are enumerable');
+  proxy.empty = proxy.empty || {};
+  proxy.empty.lost = true;
+  assert.equal(proxy.empty.lost, undefined, 'Empty leaf defaults are detached clones');
+  assert.equal(raw.empty, undefined);
+  proxy.mutable.retained = true;
+  proxy.list.push('retained');
+  assert.equal(raw.mutable.retained, true);
+  assert.equal(raw.mutable.__nonStructural, undefined);
+  assert.equal(raw.list[0], 'retained');
+  proxy.undeclared = ['not persisted'];
+  assert.equal(raw.undeclared, undefined);
+});
+
+test('settings constructor migrates a fresh host ConfigProxy without assigning structural objects', () => {
+  const fixture = hostSettingsFixture();
+  const conf = fixture.config.store.plugin.serverStats;
+  assert.equal(conf.builtinDefaultsVersion, 1);
+  assert.equal(fixture.raw.plugin.serverStats.builtinDefaultsVersion, 1);
+  assert.equal(fixture.editor.builtinKeys.join(','), 'ram,net,load');
+  assert.equal(conf.defaultMetrics.ram, true);
+  assert.equal(conf.defaultMetrics.net, true);
+  assert.equal(conf.defaultMetrics.load, true);
+  assert.equal(conf.defaultMetrics.cpu, false);
+  assert.equal(conf.defaultMetrics.disk, false);
+  assert.equal(conf.customMetrics.length, 0);
+  assert.equal(fixture.saves, 1);
+  assert(!Object.keys(fixture.raw.plugin.serverStats.defaultMetrics).some(key => key.startsWith('__')));
+});
+
+test('the first memory override survives a host save/reload and can be restored then edited again', () => {
+  const fixture = hostSettingsFixture();
+  fixture.editor.editBuiltin('ram');
+  fixture.editor.currentMetric.command = 'printf 43';
+  fixture.editor.currentMetric.detailCommand = 'printf available';
+  fixture.editor.saveMetric();
+  assert.equal(fixture.raw.plugin.serverStats.defaultMetricOverrides.ram.command, 'printf 43');
+  const restored = hostSettingsFixture(fixture.snapshot);
+  assert.equal(restored.saves, 0, 'Recreating the proxy must not repeat migration');
+  restored.editor.editBuiltin('ram');
+  assert.equal(restored.editor.currentMetric.command, 'printf 43');
+  assert.equal(restored.editor.currentMetric.detailCommand, 'printf available');
+  restored.editor.restoreBuiltin('ram');
+  assert.equal(restored.config.store.plugin.serverStats.defaultMetricOverrides.ram, undefined);
+  restored.editor.editBuiltin('ram');
+  restored.editor.currentMetric.command = 'printf 44';
+  restored.editor.saveMetric();
+  assert.equal(restored.snapshot.plugin.serverStats.defaultMetricOverrides.ram.command, 'printf 44');
+});
+
+test('built-in order and visibility survive reconstruction from host raw config', () => {
+  const fixture = hostSettingsFixture();
+  fixture.editor.moveBuiltin('load', -1);
+  fixture.editor.moveBuiltin('load', -1);
+  fixture.editor.toggleBuiltinEnabled('ram');
+  fixture.editor.toggleBuiltinEnabled('net');
+  assert.equal(fixture.raw.plugin.serverStats.builtinOrder.join(','), 'load,ram,net');
+  const reopened = hostSettingsFixture(fixture.snapshot);
+  assert.equal(reopened.editor.builtinKeys.join(','), 'load,ram,net');
+  assert.equal(reopened.config.store.plugin.serverStats.defaultMetrics.ram, false);
+  assert.equal(reopened.config.store.plugin.serverStats.defaultMetrics.net, false);
+  assert.equal(reopened.config.store.plugin.serverStats.defaultMetrics.load, true);
+  assert.equal(reopened.saves, 0);
+});
+
+test('host migration preserves custom groups and edited legacy labels without repeating on reopen', () => {
+  const group = {
+    id: 'saved-load', label: 'Lab load', enabled: false, mode: 'carousel', layout: 'horizontal',
+    main: { id: 'main', label: 'Threads', type: 'text', command: 'printf custom-main' },
+    children: [{ id: 'child', label: 'Load', type: 'text', command: 'printf custom-child' }],
+    displayScope: { mode: 'selected', profileIds: ['saved-pane'] },
+    presetOrigin: { kind: 'group', id: 'cpu-load-group', source: 'https://github.com/lishuainan0209/tabby-group-server-stats' },
+  };
+  const raw = { plugin: { serverStats: {
+    defaultMetrics: { cpu: true, disk: false, ram: false },
+    defaultMetricOverrides: { disk: { id: 'builtin-disk', label: 'Archive', type: 'text', command: 'printf 91',
+      displayScope: { mode: 'selected', profileIds: ['disk-pane'] } } },
+    customMetrics: [{ id: 'existing', label: 'Existing', type: 'text', command: 'printf 1' }], metricGroups: [group],
+  } } };
+  const original = JSON.stringify(group);
+  const fixture = hostSettingsFixture(raw);
+  assert.equal(JSON.stringify(raw.plugin.serverStats.metricGroups[0]), original);
+  const metrics = fixture.config.store.plugin.serverStats.customMetrics;
+  assert.equal(metrics.length, 3);
+  assert.equal(metrics[1].enabled, true);
+  assert.equal(metrics[2].enabled, false);
+  assert.equal(metrics[2].command, 'printf 91');
+  assert.equal(metrics[2].displayScope.profileIds[0], 'disk-pane');
+  assert.equal(fixture.config.store.plugin.serverStats.defaultMetrics.load, false);
+  const reopened = hostSettingsFixture(fixture.snapshot);
+  assert.equal(reopened.config.store.plugin.serverStats.customMetrics.length, 3);
+  assert.equal(JSON.stringify(reopened.config.store.plugin.serverStats.metricGroups[0]), original);
+  assert.equal(reopened.saves, 0);
+});
 
 function layoutScopeFixture() {
   const fixture = scopeFixture();
@@ -645,26 +775,27 @@ test('hiding a failed child disables carousel participation without changing its
 test('built-in editing is a draft and restoring one item preserves other overrides and enable flags', () => {
   const { config, editor } = scopeFixture();
   const conf = config.store.plugin.serverStats;
-  conf.defaultMetrics = { cpu: false, ram: true, disk: true, net: true };
-  editor.editBuiltin('cpu');
+  conf.defaultMetrics = { ram: false, net: true, load: true };
+  editor.editBuiltin('ram');
   const original = editor.currentMetric.command;
   editor.currentMetric.command = 'printf 7';
   assert.equal(conf.defaultMetricOverrides, undefined);
   editor.cancelEdit();
-  editor.editBuiltin('cpu');
+  editor.editBuiltin('ram');
   assert.equal(editor.currentMetric.command, original);
   editor.currentMetric.command = 'printf 8';
   editor.saveMetric();
-  assert.equal(conf.defaultMetricOverrides.cpu.command, 'printf 8');
-  assert.equal(conf.defaultMetrics.cpu, false);
+  assert.equal(conf.defaultMetricOverrides.ram.command, 'printf 8');
+  assert.equal(conf.defaultMetrics.ram, false);
   assert.equal(conf.customMetrics.length, 1);
-  editor.editBuiltin('disk');
+  editor.editBuiltin('load');
+  editor.selectGroupMetric(-1);
   editor.currentMetric.command = 'printf 9';
   editor.saveMetric();
-  editor.restoreBuiltin('cpu');
-  assert.equal(conf.defaultMetricOverrides.cpu, undefined);
-  assert.equal(conf.defaultMetricOverrides.disk.command, 'printf 9');
-  assert.equal(conf.defaultMetrics.cpu, false);
+  editor.restoreBuiltin('ram');
+  assert.equal(conf.defaultMetricOverrides.ram, undefined);
+  assert.equal(conf.defaultMetricOverrides.load.main.command, 'printf 9');
+  assert.equal(conf.defaultMetrics.ram, false);
   assert.equal(conf.customMetrics[0].id, 'legacy');
 });
 
@@ -693,15 +824,15 @@ test('built-in order persists across settings instances without changing definit
   editor.moveBuiltin('net', -1);
   editor.moveBuiltin('net', -1);
   editor.moveBuiltin('net', -1);
-  assert.equal(editor.builtinKeys.join(','), 'net,cpu,ram,disk');
-  assert.equal(conf.builtinOrder.join(','), 'net,cpu,ram,disk');
+  assert.equal(editor.builtinKeys.join(','), 'net,ram,load');
+  assert.equal(conf.builtinOrder.join(','), 'net,ram,load');
   assert.equal(JSON.stringify({ flags: conf.defaultMetrics, overrides: conf.defaultMetricOverrides }), unchanged);
   editor.moveBuiltin('net', -1);
-  assert.equal(conf.builtinOrder.join(','), 'net,cpu,ram,disk');
+  assert.equal(conf.builtinOrder.join(','), 'net,ram,load');
   const reopened = new exportsObject.ServerStatsSettingsComponent({}, config, {});
-  assert.equal(reopened.builtinKeys.join(','), 'net,cpu,ram,disk');
+  assert.equal(reopened.builtinKeys.join(','), 'net,ram,load');
   editor.restoreBuiltin('ram');
-  assert.equal(conf.builtinOrder.join(','), 'net,cpu,ram,disk');
+  assert.equal(conf.builtinOrder.join(','), 'net,ram,load');
   assert.equal(conf.defaultMetrics.cpu, false);
 });
 
@@ -956,6 +1087,60 @@ test('scope: folder labels resolve by group ID and ambiguous names retain distin
   editor.toggleScopeProfile('ssh:b:22222222', true);
   assert.equal(editor.isScopeSelected('ssh:a:11111111'), false);
   assert.equal(editor.isScopeSelected('ssh:b:22222222'), true);
+});
+
+test('group copies have independent IDs, nested rules and scopes, without preset identity', () => {
+  const { config, editor } = scopeFixture();
+  const conf = config.store.plugin.serverStats;
+  const member = { id: 'm', label: '/', command: 'printf 1234', type: 'text', colorRules: [{ operator: '<', value: '20', color: '#ff0000' }] };
+  const original = { id: 'g', label: 'Disks', mode: 'carousel', layout: 'vertical', main: member,
+    children: [{ ...member, id: 'c', label: '/data' }], displayScope: { mode: 'selected', profileIds: ['ssh:test'] },
+    presetOrigin: { kind: 'group', id: 'disk', source: 'https://github.com/example/presets' } };
+  conf.metricGroups = [original];
+  editor.copyGroup(0);
+  const copy = conf.metricGroups[1];
+  assert.equal(conf.metricGroups.length, 2);
+  assert.equal(copy.label, 'Disks (Copy)');
+  assert.notEqual(copy.id, original.id);
+  assert.notEqual(copy.main.id, original.main.id);
+  assert.notEqual(copy.children[0].id, original.children[0].id);
+  assert.equal(copy.presetOrigin, undefined);
+  assert.equal(editor.expandedMemberId, null);
+  copy.main.colorRules[0].value = '99';
+  copy.displayScope.profileIds.push('ssh:other');
+  assert.equal(original.main.colorRules[0].value, '20');
+  assert.equal(original.displayScope.profileIds.length, 1);
+  editor.copyGroup(0);
+  assert.equal(conf.metricGroups[1].label, 'Disks (Copy) 2');
+});
+
+test('child duplication is an isolated draft until saving its group', () => {
+  const { config, editor } = scopeFixture();
+  editor.newGroup();
+  Object.assign(editor.currentGroup, { label: 'Disks' });
+  Object.assign(editor.currentGroup.main, { label: 'Total', command: 'printf 1' });
+  editor.addChild();
+  Object.assign(editor.currentMetric, { label: '/data', command: 'printf 2', checkCommand: 'mountpoint -q /data', detailCommand: 'printf 2/3', colorRules: [{ operator: '<', value: '20', color: '#ff0000' }] });
+  editor.saveGroup();
+  editor.editGroup(0);
+  editor.copyChild(0);
+  assert.equal(config.store.plugin.serverStats.metricGroups[0].children.length, 1);
+  assert.equal(editor.currentGroup.children.length, 2);
+  assert.equal(editor.currentMetric.label, '/data (Copy)');
+  assert.notEqual(editor.currentMetric.id, editor.currentGroup.children[0].id);
+  editor.currentMetric.colorRules[0].value = '40';
+  assert.equal(editor.currentGroup.children[0].colorRules[0].value, '20');
+  editor.saveGroup();
+  assert.equal(config.store.plugin.serverStats.metricGroups[0].children.length, 2);
+});
+
+test('tutorial uses the system PDF viewer with the local language-specific file', () => {
+  const { config } = scopeFixture();
+  const paths = [];
+  const editor = new exportsObject.ServerStatsSettingsComponent({ openPath: path => paths.push(path) }, config, {});
+  config.store.language = 'zh-CN'; editor.openTutorial();
+  config.store.language = 'en'; editor.openTutorial();
+  assert.equal(paths.join('|'), '/plugin/dist/../docs/tutorial.zh-CN.pdf|/plugin/dist/../docs/tutorial.en.pdf');
 });
 
 (async () => {

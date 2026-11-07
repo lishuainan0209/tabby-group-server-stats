@@ -2,8 +2,8 @@ import { Injectable } from '@angular/core'
 import { ConfigService } from 'tabby-core'
 import { CustomMetric, CustomMetricGroup, MetricStatus, allMetrics, metricTimeout, buildMetricCommand, parseMetricResults, shellQuote } from '../metric-model'
 import { filterScopedMetrics, ScopeContext } from '../display-scope'
-import { MetricScopeService } from './metric-scope.service'
-import { getBuiltinDefinitions } from '../builtin-metrics'
+import { MetricScopeService, PaneGroupMode } from './metric-scope.service'
+import { getBuiltinDefinitions, migrateLegacyBuiltinConfig } from '../builtin-metrics'
 import { exec } from 'child_process'
 import { Subject } from 'rxjs'
 import * as fs from 'fs'
@@ -67,7 +67,11 @@ export class StatsService {
             this.fetchTasks.clear();
             this.detailTasks.clear();
         });
-        this.config.ready$.subscribe(() => this.updateDebugState());
+        this.config.ready$.subscribe(() => {
+            const conf = this.config?.store?.plugin?.serverStats;
+            if (conf && migrateLegacyBuiltinConfig(conf)) this.config.save();
+            this.updateDebugState();
+        });
     }
 
     private updateDebugState() {
@@ -95,6 +99,14 @@ export class StatsService {
 
     public setPaneVisible(session: any, visible: boolean): void {
         this.scopes?.setPaneVisible?.(session, visible);
+    }
+
+    public getPaneGroupMode(session: any): PaneGroupMode | undefined {
+        return this.scopes?.getPaneGroupMode?.(session);
+    }
+
+    public setPaneGroupMode(session: any, mode: PaneGroupMode): void {
+        this.scopes?.setPaneGroupMode?.(session, mode);
     }
 
     /** Disabled/out-of-scope commands never run. Unavailable items still refresh to detect recovery. */

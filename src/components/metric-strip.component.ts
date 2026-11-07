@@ -2,7 +2,7 @@ import { Component, Input, OnChanges, OnDestroy, OnInit, AfterViewChecked, ViewC
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser'
 import { CustomMetric, CustomMetricGroup, evaluateColor, formatFontAwesomeIcon, getSvgPresetPath, isFaIcon, isUrlOrDataUri } from '../config'
 import { StatsService } from '../services/stats.service'
-import { carouselChildren, nextCarouselId, metricStatus, metricIsVisible, visibleGroupMetrics, parseNetworkDetail, parseNumericRatio, formatNetworkRate, formatCapacityUnit, isNumericDisplayValue, DisplayResult } from '../metric-display'
+import { carouselChildren, nextCarouselId, metricStatus, metricIsVisible, visibleGroupMetrics, parseNetworkDetail, parseNumericRatio, formatNetworkRate, formatCapacityUnit, formatGroupedNumber, isCapacityUnit, isNumericDisplayValue, DisplayResult } from '../metric-display'
 import { BuiltinMetricKey, OrderedMetricItem, orderBuiltinItems } from '../builtin-metrics'
 import { METRIC_COLORS } from '../metric-colors'
 
@@ -10,7 +10,7 @@ import { METRIC_COLORS } from '../metric-colors'
     selector: 'server-stats-metric-strip',
     template: `
       <ng-template #value let-metric let-expanded="expanded">
-        <span class="metric-label" [attr.title]="metric.label | translate">
+        <span class="metric-label">
           <svg *ngIf="svgPath(metric.icon)" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="svgPath(metric.icon)"></path></svg>
           <img *ngIf="isUrl(metric.icon)" [src]="iconUrl(metric.icon)" alt="">
           <i *ngIf="isFa(metric.icon)" [class]="iconClass(metric.icon)" aria-hidden="true"></i>
@@ -35,10 +35,19 @@ import { METRIC_COLORS } from '../metric-colors'
 
       <ng-container *ngFor="let item of visibleItems; trackBy: trackId">
       <div *ngIf="item.metric as metric" class="single metric-row" tabindex="0"
-           (mouseenter)="enterMetric(metric)" (mouseleave)="leaveMetric(metric)"
-           (focusin)="enterMetric(metric)" (focusout)="leaveMetric(metric)"
+           (mouseenter)="enterSingle(metric, $event)" (mouseleave)="leaveSingle(metric)"
+           (focusin)="enterSingle(metric, $event)" (focusout)="leaveSingle(metric)"
+           [attr.aria-expanded]="metric.detailCommand ? hoveredMetric === metric.id : null"
            [attr.aria-label]="(metric.label || metric.id) | translate">
-        <ng-container *ngTemplateOutlet="value; context: { $implicit: metric, expanded: hoveredMetric === metric.id || autoDetailMetric === metric.id }"></ng-container>
+        <ng-container *ngTemplateOutlet="value; context: { $implicit: metric, expanded: false }"></ng-container>
+        <div *ngIf="hoveredMetric === metric.id && !hoveredGroup && metric.detailCommand && status(metric) === 'ok'"
+             #singlePopup class="group-details single-details" role="region" [attr.aria-label]="metric.label | translate"
+             [style.left.px]="popup.left" [style.top.px]="popup.top" [style.max-height.px]="popup.maxHeight"
+             [style.max-width.px]="popup.width" (mouseenter)="keepSingle(metric)" (mouseleave)="leaveSingle(metric)">
+          <div class="detail-grid"><div class="metric-row detail-row">
+            <ng-container *ngTemplateOutlet="value; context: { $implicit: metric, expanded: true }"></ng-container>
+          </div></div>
+        </div>
       </div>
 
       <div *ngIf="item.group as group" class="metric-group" tabindex="0"
@@ -148,6 +157,7 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     @Input() session: any = null
     @Input() autoDetailMetric: string | null = null
     @ViewChild('groupPopup') groupPopup?: ElementRef<HTMLElement>
+    @ViewChild('singlePopup') singlePopup?: ElementRef<HTMLElement>
     @ViewChildren('carouselSlot') carouselSlots?: QueryList<ElementRef<HTMLElement>>
     private portal: HTMLElement | null = null
     private carouselWidths = new Map<string, { width: number; settled: boolean }>()
@@ -172,7 +182,7 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         this.measureCarousels()
         // Both Tabby panels use backdrop-filter, which creates a containing block
         // for fixed descendants. Keep the live Angular view outside that block.
-        const popup = this.groupPopup?.nativeElement || null
+        const popup = this.groupPopup?.nativeElement || this.singlePopup?.nativeElement || null
         if (this.portal && this.portal !== popup) this.portal.remove()
         if (popup && popup.parentElement !== document.body) document.body.appendChild(popup)
         this.portal = popup
@@ -261,7 +271,8 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
     displayValue(metric: CustomMetric): string {
         const value = this.result(metric).value
-        return this.isNetworkRate(metric) ? formatNetworkRate(value) : this.status(metric) === 'ok' ? formatCapacityUnit(value) : value
+        return this.isNetworkRate(metric) ? formatNetworkRate(value) : this.status(metric) === 'ok' ?
+            (isCapacityUnit(metric.suffix || '') ? formatGroupedNumber(value) : formatCapacityUnit(value)) : value
     }
     suffix(metric: CustomMetric): string {
         const suffix = this.isNetworkRate(metric) ? 'MB/s' : formatCapacityUnit(metric.suffix?.trim() || (metric.type === 'progress' ? '%' : ''))
@@ -282,7 +293,7 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
     detailError(metric: CustomMetric): boolean { return (this.details[metric.id] || '').startsWith('Err:') }
     networkDetail(metric: CustomMetric) {
-        return /^builtin-net-(main|rx|tx)$/.test(metric.id) ? parseNetworkDetail(this.details[metric.id]) : null
+        return parseNetworkDetail(this.details[metric.id])
     }
     detailText(metric: CustomMetric): string {
         const value = this.details[metric.id] || ''
@@ -334,12 +345,27 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         return group.layout === 'vertical' ? this.hoveredGroup === group.id : this.hoveredMetric === metric.id
     }
     enterMetric(metric: CustomMetric) { this.hoveredMetric = metric.id; void this.refreshDetails() }
+    enterSingle(metric: CustomMetric, event: Event) {
+        clearTimeout(this.closeTimer)
+        this.hoveredGroup = null
+        this.anchor = event.currentTarget as HTMLElement
+        this.enterMetric(metric)
+        this.positionPopup()
+    }
+    keepSingle(metric: CustomMetric) { clearTimeout(this.closeTimer); this.hoveredMetric = metric.id }
+    leaveSingle(metric: CustomMetric) {
+        this.closeTimer = setTimeout(() => {
+            if (this.singlePopup?.nativeElement.matches(':hover, :focus-within')) return
+            if (this.hoveredMetric === metric.id && !this.hoveredGroup) { this.hoveredMetric = null; this.cdr.markForCheck() }
+        }, 100)
+    }
     leaveMetric(metric: CustomMetric) { if (this.hoveredMetric === metric.id) this.hoveredMetric = null }
     enterChild(group: CustomMetricGroup, metric: CustomMetric) {
         if (group.layout !== 'vertical') this.enterMetric(metric)
     }
     enterGroup(group: CustomMetricGroup, event: Event) {
         clearTimeout(this.closeTimer)
+        if (group.mode !== 'static' || group.layout === 'vertical') this.hoveredMetric = null
         this.hoveredGroup = group.id
         this.anchor = event.currentTarget as HTMLElement
         this.positionPopup()
@@ -354,7 +380,7 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     blurGroup(group: CustomMetricGroup, event: FocusEvent) {
         if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node)) this.leaveGroup(group)
     }
-    @HostListener('keydown.escape') closeHover() {
+    @HostListener('document:keydown.escape') closeHover() {
         clearTimeout(this.closeTimer)
         this.hoveredMetric = null
         this.hoveredGroup = null

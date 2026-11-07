@@ -8,7 +8,7 @@ const ts = require('typescript')
 require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2017 }
 }).outputText, filename)
-const { getBuiltinDefaults, getBuiltinDefinition, getBuiltinDefinitions, createCpuSampleCommand, createNetworkRateCommand } = require('../src/builtin-metrics.ts')
+const { getBuiltinDefaults, getBuiltinDefinition, getBuiltinDefinitions, createCpuSampleCommand, createCpuLoadCommand, createNetworkRateCommand } = require('../src/builtin-metrics.ts')
 const { createGpuGroupPreset, createDiskGroupPreset, createDiskTotalCommand, createGpuCommand, createGpuCheckCommand, getBundledPresets, normalizePresetLibrary, instantiatePreset, exportPresetLibrary, findInstalledPreset, presetDefinitionFingerprint } = require('../src/preset-library.ts')
 const { getLayoutPaneTargets, layoutPaneTargetName, matchesScope } = require('../src/display-scope.ts')
 const gitExecPath = process.platform === 'win32' ? spawnSync('git', ['--exec-path'], { encoding: 'utf8' }).stdout?.trim() : ''
@@ -508,19 +508,40 @@ test('built-in overrides are independent drafts, preserve stable IDs and honor l
     const defaults = getBuiltinDefaults()
     defaults.cpu.command = 'MUTATED'
     assert.notEqual(getBuiltinDefaults().cpu.command, 'MUTATED')
-    const conf = { defaultMetrics: { cpu: true, ram: false, disk: false, net: true }, showDefaultIcons: false,
-        defaultMetricOverrides: { cpu: { ...getBuiltinDefaults().cpu, id: 'ignored', command: 'printf 42', displayScope: { mode: 'selected', profileIds: [] } } } }
+    const conf = { defaultMetrics: { ram: true, net: true, load: false }, showDefaultIcons: false,
+        defaultMetricOverrides: { ram: { ...getBuiltinDefaults().ram, id: 'ignored', command: 'printf 42', displayScope: { mode: 'selected', profileIds: [] } } } }
     const visible = getBuiltinDefinitions(conf)
     assert.equal(visible.customMetrics.length, 1)
     assert.equal(visible.customMetrics[0].command, 'printf 42')
-    assert.equal(visible.customMetrics[0].id, 'builtin-cpu')
+    assert.equal(visible.customMetrics[0].id, 'builtin-ram')
     assert.equal(visible.customMetrics[0].icon, '')
     assert.equal(visible.customMetrics[0].displayScope.mode, 'selected')
     assert.equal(visible.metricGroups[0].main.enabled, false)
     assert.equal(visible.metricGroups[0].children[0].icon, '')
-    assert.equal(getBuiltinDefinition('cpu', conf).icon, 'stats-cpu')
+    assert.equal(getBuiltinDefinition('ram', conf).icon, 'stats-memory')
     assert.equal(getBuiltinDefinitions({ defaultMetrics: {} }).customMetrics.length, 0)
-    assert.equal(getBuiltinDefinitions().customMetrics.length, 3)
+    assert.equal(getBuiltinDefinitions().customMetrics.length, 1)
+    assert.equal(getBuiltinDefinitions().metricGroups.length, 2)
+})
+
+test('CPU load normalizes Linux and Darwin load without truncating detail values or accepting invalid cores', () => {
+    const fakeDarwin = `uname() { printf 'Darwin\\n'; }
+sysctl() { case "$2" in hw.logicalcpu) printf '%s\\n' "$CORES";; vm.loadavg) printf '{ 4.25 6.75 8.50 }\\n';; esac; }
+ps() { printf 'R\\nS\\nR+\\nI\\n'; }`
+    const env = { CORES: '4' }
+    assert.equal(run(createCpuLoadCommand(1), fakeDarwin, env).stdout.trim(), '106')
+    assert.equal(run(createCpuLoadCommand(5), fakeDarwin, env).stdout.trim(), '168')
+    assert.equal(run(createCpuLoadCommand(5, true), fakeDarwin, env).stdout.trim(), '6.75/4')
+    assert.equal(run(getBuiltinDefaults().load.main.command, fakeDarwin, env).stdout.trim(), '2/4')
+    for (const CORES of ['0', '', 'bad', '4.2']) assert.notEqual(run(createCpuLoadCommand(1), fakeDarwin, { CORES }).status, 0)
+    const fakeLinux = `uname() { printf 'Linux\\n'; }
+getconf() { printf '4\\n'; }
+nproc() { printf '4\\n'; }`
+    // Feed a deterministic /proc sample into the real awk expression.
+    const sample = "4.25 6.75 8.50 3/100 123"
+    const linux = (command) => command.replace(/\/proc\/loadavg;/g, "<<'LOAD_SAMPLE'\n" + sample + '\nLOAD_SAMPLE\n')
+    assert.equal(run(linux(createCpuLoadCommand(1)), fakeLinux).stdout.trim(), '106')
+    assert.equal(run(linux(createCpuLoadCommand(5, true)), fakeLinux).stdout.trim(), '6.75/4')
 })
 
 test('sampling commands use no shared temp files and Darwin built-ins keep working', () => {

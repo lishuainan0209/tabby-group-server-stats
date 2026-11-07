@@ -17,10 +17,12 @@ export {
 } from './icons/presets';
 
 export interface DefaultMetricsConfig {
-    cpu: boolean
     ram: boolean
-    disk: boolean
     net: boolean
+    load: boolean
+    /** Retained only to migrate older editable definitions without data loss. */
+    cpu?: boolean
+    disk?: boolean
 }
 
 export function evaluateColor(value: any, rules?: ColorCondition[], defaultColor: string = METRIC_COLORS.green): string {
@@ -105,6 +107,7 @@ export class ServerStatsConfigProvider extends ConfigProvider {
                 // Kept for config compatibility; runtime always uses the bottom bar.
                 displayMode: 'bottomBar',
                 paneVisibility: { __nonStructural: true } as Record<string, boolean>,
+                paneGroupModes: { __nonStructural: true } as Record<string, string | boolean>,
                 defaultInterval: 3,
                 debugLogging: false,
                 location: { x: null, y: null },
@@ -114,12 +117,15 @@ export class ServerStatsConfigProvider extends ConfigProvider {
                     layout: 'vertical'
                 },
                 defaultMetrics: {
-                    cpu: true,
                     ram: true,
-                    disk: true,
-                    net: true
+                    net: true,
+                    load: true,
+                    cpu: false,
+                    disk: false
                 },
-                defaultMetricOverrides: {},
+                builtinDefaultsVersion: 0,
+                builtinOrder: ['ram', 'net', 'load'],
+                defaultMetricOverrides: { __nonStructural: true },
                 showDefaultIcons: true,
                 customMetrics: [] as CustomMetric[],
                 metricGroups: [] as CustomMetricGroup[]

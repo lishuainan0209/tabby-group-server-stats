@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import 'zone.js'
 import '@angular/compiler'
-import { Component, NgModule, ApplicationRef, Input, ViewChild, AfterViewInit } from '@angular/core'
+import { Component, NgModule, ApplicationRef, Input, ViewChild, AfterViewInit, HostListener, ElementRef } from '@angular/core'
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { BrowserModule } from '@angular/platform-browser'
@@ -12,14 +12,20 @@ import { ServerStatsBottomBarComponent } from '../../src/components/bottom-bar.c
 import { AppService, ConfigService, PlatformService, TranslatePipe, TranslateDirective } from './tabby.mock'
 import { StatsService } from './stats.mock'
 import { filterScopedMetrics } from '../../src/display-scope'
+import { ServerStatsConfigProvider } from '../../src/config'
 
 const metric = (id: string, label: string): any => ({ id, label, command: 'printf 63', type: 'text', suffix: '%', detailCommand: 'printf details' })
 @Component({
     selector: 'visibility-pane',
-    template: `<div class="visibility-terminal">same-user@same-server:~$</div><server-stats-bottom-bar></server-stats-bottom-bar>`,
+    template: `<div class="visibility-terminal" tabindex="-1">same-user@same-server:~$</div><server-stats-bottom-bar></server-stats-bottom-bar>`,
     styles: [`:host{display:flex;flex-direction:column;position:relative;background:#171c25;border:1px solid #ffffff40;min-width:260px;height:120px}.visibility-terminal{flex:1;min-height:0;padding:10px;font:12px monospace;color:#82dba0}`]
 })
 class VisibilityPane implements AfterViewInit {
+    constructor(private element: ElementRef<HTMLElement>) {}
+    // Tabby refocuses the terminal on each bubbled mousemove, even in the same pane.
+    @HostListener('mousemove') followMouseFocus() {
+        if ((window as any).harness.focusFollowsMouse) this.element.nativeElement.querySelector<HTMLElement>('.visibility-terminal')?.focus();
+    }
     @Input() session: any
     @ViewChild(ServerStatsBottomBarComponent, { static: true }) bar: ServerStatsBottomBarComponent
     ngAfterViewInit() {
@@ -55,8 +61,10 @@ class Harness {
     showSettings = false
     showScopeDemo = false
     showVisibilityDemo = false
+    focusFollowsMouse = false
     visibilityPanes = [0, 1, 2].map(index => ({ open: true, id: `same-layout-pane-${index}`, profile: { id: 'same-connection' } }))
     paneVisibility: Record<string, boolean> = {}
+    paneGroupModes: Record<string, 'overview' | 'carousel' | 'static'> = {}
     scopeProfiles = [{ id: 'p1', name: 'P1', type: 'ssh' }, { id: 'p2', name: 'P2', type: 'ssh' }, { id: 'layout', name: '混合三窗口', type: 'split-layout' }]
     scopePanes = ['p1', 'p2', 'p1'].map((profileId, i) => ({ profileId, label: `窗格 ${i + 1} · ${profileId.toUpperCase()}`, session: { open: true, id: `pane${i}` } }))
     scopeConfig: any = {
@@ -71,6 +79,7 @@ class Harness {
     scopeStats = { custom: [{ id: 'common', value: '40', status: 'ok' }, { id: 'p1disk', value: '63', status: 'ok' }, { id: 'p2gpu', value: '82', status: 'ok' }, { id: 'health', value: '正常', status: 'ok' }] }
     visibleFor(pane: any) { return filterScopedMetrics(this.scopeConfig, { profileIds: [pane.profileId, 'layout'] }, this.scopeProfiles) }
     constructor(public config: ConfigService) {
+        config.useHostConfig(new ServerStatsConfigProvider().defaults)
         config.store.profiles = this.scopeProfiles
         ;(window as any).harness = this
     }

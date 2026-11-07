@@ -1,16 +1,21 @@
 import { CustomMetric, CustomMetricGroup } from './metric-model'
 import { METRIC_COLORS, usageColorRules } from './metric-colors'
 
-export type BuiltinMetricKey = 'cpu' | 'ram' | 'disk' | 'net'
-export interface BuiltinDefinitions { cpu: CustomMetric; ram: CustomMetric; disk: CustomMetric; net: CustomMetricGroup }
+export type BuiltinMetricKey = 'ram' | 'net' | 'load'
+export type LegacyBuiltinMetricKey = 'cpu' | 'disk'
+type StoredBuiltinMetricKey = BuiltinMetricKey | LegacyBuiltinMetricKey
+export interface BuiltinDefinitions { cpu: CustomMetric; ram: CustomMetric; disk: CustomMetric; net: CustomMetricGroup; load: CustomMetricGroup }
 export interface BuiltinConfig {
-    defaultMetrics?: Partial<Record<BuiltinMetricKey, boolean>>
+    defaultMetrics?: Partial<Record<StoredBuiltinMetricKey, boolean>>
     defaultMetricOverrides?: Partial<BuiltinDefinitions>
     showDefaultIcons?: boolean
-    builtinOrder?: BuiltinMetricKey[]
+    builtinOrder?: StoredBuiltinMetricKey[]
+    builtinDefaultsVersion?: number
+    customMetrics?: CustomMetric[]
+    metricGroups?: CustomMetricGroup[]
 }
 
-const builtinKeys: readonly BuiltinMetricKey[] = ['cpu', 'ram', 'disk', 'net']
+const builtinKeys: readonly BuiltinMetricKey[] = ['ram', 'net', 'load']
 
 /** Keep disabled slots in the saved order; only the visible definitions are filtered. */
 export function normalizeBuiltinOrder(value?: readonly unknown[]): BuiltinMetricKey[] {
@@ -20,7 +25,7 @@ export function normalizeBuiltinOrder(value?: readonly unknown[]): BuiltinMetric
 
 export interface OrderedMetricItem { id: string; metric?: CustomMetric; group?: CustomMetricGroup }
 
-/** Mix built-in singles and the network group before the unchanged custom item order. */
+/** Mix built-in singles and groups before the unchanged custom item order. */
 export function orderBuiltinItems(metrics: CustomMetric[], groups: CustomMetricGroup[], order?: readonly unknown[]): OrderedMetricItem[] {
     const ranks = new Map(normalizeBuiltinOrder(order).map((key, index) => [`builtin-${key}`, index]))
     const items: OrderedMetricItem[] = [
@@ -41,6 +46,32 @@ const darwinMemory = (detail: boolean): string => {
     return `total=$(sysctl -n hw.memsize 2>/dev/null) || exit 1; data=$(vm_stat 2>/dev/null) || exit 1; printf '%s\\n' "$data" | awk -v total="$total" '/page size of/ {for(i=1;i<NF;i++) if($i=="of") size=$(i+1)} /^Pages free:/ {free=$3+0} /^Pages inactive:/ {inactive=$3+0} /^Pages speculative:/ {speculative=$3+0} END {if(total<=0 || size<=0) exit 1; available=(free+inactive+speculative)*size; if(available>total) available=total; ${result}}'`
 }
 const linuxOrDarwin = (linux: string, darwin: string): string => `if [ "$(uname -s)" = Darwin ]; then ${darwin}; else ${linux}; fi`
+
+/** Load is normalized by logical processor count, not the busy-CPU percentage. */
+export function createCpuLoadCommand(minutes: 1 | 5, detail = false): string {
+    const field = minutes === 1 ? 1 : 2
+    const result = detail ? 'printf "%.2f/%d\\n",load,cores' : 'printf "%d\\n",load*100/cores'
+    const parse = `awk -v cores="$cores" -v field=${field} 'BEGIN {if(cores !~ /^[0-9]+$/ || cores<=0) {bad=1; exit 1}} {gsub(/[{}]/, ""); load=$field; if(load !~ /^[0-9]+([.][0-9]+)?$/) {bad=1; exit 1} found=1; ${result}; exit} END {if(bad || !found) exit 1}'`
+    return linuxOrDarwin(
+        `cores=$(getconf _NPROCESSORS_ONLN 2>/dev/null) || cores=$(nproc 2>/dev/null) || exit 1; ${parse} /proc/loadavg`,
+        `cores=$(sysctl -n hw.logicalcpu 2>/dev/null) || exit 1; data=$(sysctl -n vm.loadavg 2>/dev/null) || exit 1; printf '%s\\n' "$data" | ${parse}`,
+    )
+}
+
+function createCpuLoadGroup(): CustomMetricGroup {
+    const shared: Partial<CustomMetric> = { type: 'text', color: METRIC_COLORS.green, icon: 'stats-cpu-load',
+        checkMode: 'exitCode', checkExpected: '0', unavailableText: 'Unavailable' }
+    const child = (minutes: 1 | 5): CustomMetric => ({ ...shared, id: `builtin-load-${minutes}min`,
+        type: 'text', label: `${minutes}min`, suffix: '%', colorRules: usageColorRules(100, 150),
+        checkCommand: linuxOrDarwin('test -r /proc/loadavg', 'command -v sysctl >/dev/null'),
+        command: createCpuLoadCommand(minutes), detailCommand: createCpuLoadCommand(minutes, true) })
+    return { id: 'builtin-load', label: 'CPU load', mode: 'overview', layout: 'vertical',
+        main: { ...shared, id: 'builtin-load-main', label: 'Threads', type: 'text',
+            checkCommand: linuxOrDarwin('test -r /proc/loadavg', 'command -v ps >/dev/null'),
+            command: linuxOrDarwin(`awk '$4 ~ /^[0-9]+\\/[0-9]+$/ {print $4; found=1; exit} END {if(!found) exit 1}' /proc/loadavg`,
+                `data=$(ps -A -M -o state= 2>/dev/null) || exit 1; printf '%s\\n' "$data" | awk 'NF {total++; if($1 ~ /^R/) running++} END {if(!total) exit 1; printf "%d/%d\\n",running,total}'`) },
+        children: [child(1), child(5)] }
+}
 
 /** Each sample owns its shell variables; concurrent panes never share a temp file. */
 export function createCpuSampleCommand(counter: 'busy' | 'iowait' | 'steal' = 'busy'): string {
@@ -122,18 +153,19 @@ export function getBuiltinDefaults(): BuiltinDefinitions {
             detailCommand: `data=$(df -Pk / 2>/dev/null) || exit 1; printf '%s\\n' "$data" | awk 'NR==2 {printf "%.1f/%.1f GB available\\n",$4/1048576,$2/1048576; found=1} END {if(!found) exit 1}'` },
         net: { id: 'builtin-net', label: 'Network', mode: 'static', layout: 'vertical',
             main: { ...netMetric('builtin-net-main', 'Network', 'total', 'stats-network'), enabled: false },
-            children: [netMetric('builtin-net-rx', 'Download', 'rx', 'stats-network-download'), netMetric('builtin-net-tx', 'Upload', 'tx', 'stats-network-upload')] }
+            children: [netMetric('builtin-net-rx', 'Download', 'rx', 'stats-network-download'), netMetric('builtin-net-tx', 'Upload', 'tx', 'stats-network-upload')] },
+        load: createCpuLoadGroup()
     }
     return clone(definitions)
 }
 
 /** Editing ignores legacy visibility switches so a disabled built-in can be configured. */
-export function getBuiltinDefinition<K extends BuiltinMetricKey>(key: K, conf: BuiltinConfig = {}): BuiltinDefinitions[K] {
+export function getBuiltinDefinition<K extends StoredBuiltinMetricKey>(key: K, conf: BuiltinConfig = {}): BuiltinDefinitions[K] {
     const defaults = getBuiltinDefaults()
     const override = conf.defaultMetricOverrides?.[key]
-    if (key === 'net') {
+    if (key === 'net' || key === 'load') {
         const saved = override as CustomMetricGroup | undefined
-        const base = defaults.net
+        const base = defaults[key] as CustomMetricGroup
         return clone({ ...base, ...saved, id: base.id,
             main: { ...base.main, ...saved?.main, id: base.main.id },
             children: saved?.children ?? base.children
@@ -144,12 +176,62 @@ export function getBuiltinDefinition<K extends BuiltinMetricKey>(key: K, conf: B
 
 /** UI and collection consume the same editable built-in definitions. */
 export function getBuiltinDefinitions(conf: BuiltinConfig = {}): { customMetrics: CustomMetric[]; metricGroups: CustomMetricGroup[] } {
-    const flags = conf.defaultMetrics || { cpu: true, ram: true, disk: true, net: true }
-    const customMetrics = normalizeBuiltinOrder(conf.builtinOrder).filter((key): key is 'cpu' | 'ram' | 'disk' => key !== 'net' && !!flags[key]).map(key => getBuiltinDefinition(key, conf))
-    const metricGroups = flags.net ? [getBuiltinDefinition('net', conf)] : []
+    const flags = conf.defaultMetrics || { ram: true, net: true, load: true }
+    const order = normalizeBuiltinOrder(conf.builtinOrder)
+    const customMetrics = flags.ram ? [getBuiltinDefinition('ram', conf)] : []
+    const metricGroups = order.filter((key): key is 'net' | 'load' => key !== 'ram' && !!flags[key]).map(key => getBuiltinDefinition(key, conf))
     if (conf.showDefaultIcons === false) {
         customMetrics.forEach(metric => { metric.icon = '' })
         metricGroups.forEach(group => { group.main.icon = ''; group.children.forEach(metric => { metric.icon = '' }) })
     }
     return { customMetrics, metricGroups }
+}
+
+function isExistingCpuLoadGroup(group: CustomMetricGroup): boolean {
+    const origin = (group as CustomMetricGroup & { presetOrigin?: { kind?: string; id?: string; source?: string } }).presetOrigin
+    if (origin?.kind === 'group' && origin.id === 'cpu-load-group' &&
+        /^https?:\/\/github\.com\/lishuainan0209\/tabby-group-server-stats(?:\.git)?\/?$/i.test(origin.source || '')) return true
+    const normalize = (value?: string) => value?.replace(/\r\n?/g, '\n').trim() || ''
+    // Pre-origin imports used these exact commands. Display names are not identity.
+    if (normalize(group.main?.command) !== "awk '{print $4}' /proc/loadavg" || group.children?.length !== 2) return false
+    const commands = group.children.map(child => normalize(child.command)).sort()
+    return [1, 2].map(field => `awk '{printf "%d\\n", ($${field}/'$(nproc)')*100}' /proc/loadavg`).sort()
+        .every((command, index) => commands[index] === command)
+}
+
+/** One-time, lossless upgrade; the caller saves config only when this returns true. */
+export function migrateLegacyBuiltinConfig(conf: BuiltinConfig): boolean {
+    if ((conf.builtinDefaultsVersion || 0) >= 1) return false
+    // Tabby exposes structural config objects through getter-only properties.
+    // Read only declared flags: spreading its proxy also copies internal helpers.
+    const flags = {
+        ram: conf.defaultMetrics?.ram ?? true,
+        net: conf.defaultMetrics?.net ?? true,
+        load: conf.defaultMetrics?.load ?? true,
+        cpu: conf.defaultMetrics?.cpu ?? false,
+        disk: conf.defaultMetrics?.disk ?? false,
+    }
+    const metrics = [...(conf.customMetrics || [])]
+    const usedIds = new Set([...metrics.map(metric => metric.id), ...(conf.metricGroups || []).flatMap(group =>
+        [group.id, group.main?.id, ...(group.children || []).map(metric => metric.id)])])
+    for (const key of ['cpu', 'disk'] as const) {
+        if (flags[key] === true || conf.defaultMetricOverrides?.[key]) {
+            const definition = getBuiltinDefinition(key, conf)
+            const baseId = `legacy-builtin-${key}`
+            let id = baseId, suffix = 2
+            while (usedIds.has(id)) id = `${baseId}-${suffix++}`
+            usedIds.add(id)
+            metrics.push({ ...definition, id, enabled: flags[key] === true && definition.enabled !== false })
+        }
+        flags[key] = false
+    }
+    // Keep the user's existing group, its bindings and its disabled state intact.
+    // Its presence means introducing another default load group would duplicate it.
+    if (!conf.defaultMetricOverrides?.load && (conf.metricGroups || []).some(isExistingCpuLoadGroup)) flags.load = false
+    conf.customMetrics = metrics
+    if (!conf.defaultMetrics) conf.defaultMetrics = {}
+    Object.assign(conf.defaultMetrics, flags)
+    conf.builtinOrder = normalizeBuiltinOrder(conf.builtinOrder)
+    conf.builtinDefaultsVersion = 1
+    return true
 }

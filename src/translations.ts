@@ -227,6 +227,13 @@ export const TRANSLATIONS: Record<string, Record<string, string>> = {
 
 // Group and validation settings share the same English message keys as the UI.
 const GROUP_TRANSLATIONS: Array<[string, string, string]> = [
+    ['Pane status bar options', '当前分屏状态栏选项', 'Opções da barra deste painel'],
+    ['Show', '显示', 'Mostrar'],
+    ['Hide', '隐藏', 'Ocultar'],
+    ['Tutorial (PDF)', '使用教程（PDF）', 'Tutorial (PDF)'],
+    ['Duplicate Group', '复制标签组', 'Duplicar grupo'],
+    ['Duplicate Child', '复制子标签', 'Duplicar métrica filha'],
+    ['Copy', '副本', 'Cópia'],
     ["Author's lab only", '作者实验室自用', 'Somente para o laboratório do autor'],
     ['Received total', '累计接收', 'Total recebido'],
     ['Sent total', '累计发送', 'Total enviado'],
@@ -363,7 +370,7 @@ const GROUP_TRANSLATIONS: Array<[string, string, string]> = [
     ['Unavailable', '不可用', 'Indisponível'],
     ['Output text is compared exactly after trimming surrounding whitespace. Exit code 0 usually means success.', '输出文本去除首尾空白后精确比较，区分大小写；退出码 0 通常表示成功。', 'O texto é comparado exatamente após remover espaços nas extremidades. O código 0 geralmente indica sucesso.'],
     ['Hover Detail Command (optional)', '悬停扩展信息命令（可选）', 'Comando de Detalhes ao Passar o Mouse (opcional)'],
-    ['Append this command output on hover. Leave empty for no extra information.', '鼠标移入时将输出追加到功能命令结果后，移出收起；留空则不显示扩展信息。', 'Acrescenta a saída ao passar o mouse e oculta ao sair. Deixe vazio para não exibir detalhes.'],
+    ['Hover shows this command output. Single labels use a popup; groups follow their display mode. Leave empty for no extra information.', '悬停时显示此命令的输出：单标签在上方弹窗中显示，标签组按其显示模式展开。移开收起；留空则不显示扩展信息。', 'Ao passar o mouse, mostra a saída: métricas individuais em popup e grupos conforme seu modo. Deixe vazio para não exibir detalhes.'],
     ['Keep in carousel when its check fails', '前置校验失败时仍参与轮播', 'Manter no carrossel quando a verificação falhar'],
     ['Enabled by default. Disable to skip this child immediately in the carousel. Static views and hover details still show its failure text.', '默认开启并显示失败提示。关闭后，轮播立即跳过此子标签；静态显示和悬停详情仍保留失败提示。', 'Ativado por padrão. Desative para pular esta filha imediatamente no carrossel. Exibições estáticas e detalhes ainda mostram a falha.'],
     ['Every member needs a label or icon and a metric command. Intervals and timeouts must be positive; exit codes must be whole numbers from 0 to 255.', '每个标签都需要名称或图标，以及功能命令。频率、超时须不小于 1；退出码须为 0～255 的整数。', 'Cada membro precisa de nome ou ícone e comando. Intervalos e tempos limite devem ser positivos; códigos de saída devem ser inteiros de 0 a 255.'],

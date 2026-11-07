@@ -7,6 +7,7 @@ import { findSessionTab, getLayoutPaneTargets, layoutLeafTokens, layoutPaneId, L
 /** A saved layout's origin, persisted in its recovery token, never inferred from titles. */
 export const LAYOUT_SCOPE_MARKER = '__tabbyGroupServerStatsLayoutProfileId'
 export const INSTANCE_VISIBILITY_MARKER = '__tabbyGroupServerStatsVisibilityId'
+export type PaneGroupMode = 'overview' | 'carousel' | 'static'
 
 interface TokenPatch {
     original: (...args: any[]) => any
@@ -208,8 +209,8 @@ export class MetricScopeService implements OnDestroy {
         return !key || this.config.store?.plugin?.serverStats?.paneVisibility?.[key] !== false
     }
 
-    setPaneVisible(session: any, visible: boolean) {
-        if (this.destroyed || !session || session.open === false) return
+    private panePreferenceKey(session: any): string | undefined {
+        if (this.destroyed || !session || session.open === false) return undefined
         let key = this.visibilityKey(session)
         if (!key) {
             const leaf = findSessionTab((this.app as any).tabs || [], session)
@@ -217,12 +218,33 @@ export class MetricScopeService implements OnDestroy {
             this.visibilityInstances.set(leaf || session, key)
             this.preserveVisibilityMarker(leaf)
         }
+        return key
+    }
+
+    private savePanePreference(session: any, map: 'paneVisibility' | 'paneGroupModes', value: boolean | PaneGroupMode) {
+        const key = this.panePreferenceKey(session)
+        if (!key) return
         if (!this.config.store.plugin) this.config.store.plugin = {}
         if (!this.config.store.plugin.serverStats) this.config.store.plugin.serverStats = {}
         const stats = this.config.store.plugin.serverStats
-        const previous = stats.paneVisibility
-        stats.paneVisibility = { ...(previous && typeof previous === 'object' && !Array.isArray(previous) ? previous : {}), [key]: Boolean(visible) }
+        const previous = stats[map]
+        stats[map] = { ...(previous && typeof previous === 'object' && !Array.isArray(previous) ? previous : {}), [key]: value }
         this.config.save?.()
+    }
+
+    setPaneVisible(session: any, visible: boolean) {
+        this.savePanePreference(session, 'paneVisibility', Boolean(visible))
+    }
+
+    getPaneGroupMode(session: any): PaneGroupMode | undefined {
+        const key = this.visibilityKey(session)
+        const value = key && this.config.store?.plugin?.serverStats?.paneGroupModes?.[key]
+        return value === 'overview' || value === 'carousel' || value === 'static' ? value : undefined
+    }
+
+    setPaneGroupMode(session: any, mode: PaneGroupMode) {
+        if (mode !== 'overview' && mode !== 'carousel' && mode !== 'static') return
+        this.savePanePreference(session, 'paneGroupModes', mode)
     }
 
     /** Upgrade already restored layouts without guessing from a focused or sibling pane. */

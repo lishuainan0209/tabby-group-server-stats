@@ -779,3 +779,101 @@ test('opening a newly saved layout gives explicit layout targets priority over i
     assert.equal(env.service.isPaneVisible(children[0].session), false)
     env.service.ngOnDestroy()
 })
+
+test('saved-layout pane modes persist independently across reopen alongside visibility', async () => {
+    const shared = savedSSH('same')
+    const saved = savedPaneLayout('layout-modes', [shared, shared, shared])
+    const other = savedPaneLayout('layout-other', [shared])
+    const before = JSON.stringify([shared, saved, other])
+    const first = setup()
+    first.config.store.profiles = [shared, saved, other]
+    let saves = 0
+    first.config.save = () => { saves++ }
+    const { children } = await openSavedPaneLayout(first, saved)
+    const modes = ['overview', 'carousel', 'static']
+    children.forEach((child, index) => first.service.setPaneGroupMode(child.session, modes[index]))
+    first.service.setPaneVisible(children[0].session, false)
+    first.service.setPaneVisible(children[1].session, false)
+    assert.equal(saves, 5)
+    assert.deepEqual(children.map(child => first.service.getPaneGroupMode(child.session)), modes)
+    assert.deepEqual(children.map(child => first.service.isPaneVisible(child.session)), [false, false, true])
+    assert.equal(JSON.stringify([shared, saved, other]), before, 'shared profile and layout definitions are never edited')
+    const preferences = JSON.parse(JSON.stringify(first.config.store.plugin.serverStats))
+    assert.equal(Object.keys(preferences.paneGroupModes).length, 3)
+    first.service.ngOnDestroy()
+    const next = setup()
+    next.config.store.profiles = [shared, saved, other]
+    next.config.store.plugin = { serverStats: preferences }
+    const restored = await openSavedPaneLayout(next, saved)
+    const separate = await openSavedPaneLayout(next, other)
+    assert.deepEqual(restored.children.map(child => next.service.getPaneGroupMode(child.session)), modes)
+    assert.deepEqual(restored.children.map(child => next.service.isPaneVisible(child.session)), [false, false, true])
+    assert.equal(next.service.getPaneGroupMode(separate.children[0].session), undefined)
+    next.service.setPaneGroupMode(restored.children[1].session, 'static')
+    assert.equal(next.service.isPaneVisible(restored.children[1].session), false, 'mode selection does not unhide a pane')
+    assert.equal(next.service.getPaneGroupMode(restored.children[0].session), 'overview')
+    next.service.ngOnDestroy()
+})
+
+test('standalone mode-only preferences recover their identity and duplicate panes start independently', async () => {
+    const shared = savedSSH('shared-mode')
+    const makeLeaf = profile => ({ profile, session: { open: true, profile }, destroyed$: new Subject(),
+        getRecoveryToken: async () => ({ type: 'app:ssh-tab', profile }) })
+    const original = makeLeaf(shared), sibling = makeLeaf(shared)
+    const recoveryMethod = original.getRecoveryToken
+    const first = setup([original, sibling])
+    first.config.store.profiles = [shared]
+    first.service.setPaneGroupMode(original.session, 'carousel')
+    assert.equal(first.service.isPaneVisible(original.session), true)
+    assert.equal(first.service.getPaneGroupMode(sibling.session), undefined)
+    assert.equal(shared[INSTANCE_VISIBILITY_MARKER], undefined)
+    const originalKey = first.service.visibilityKey(original.session)
+    const recovery = JSON.parse(JSON.stringify(await original.getRecoveryToken({ includeState: true })))
+    assert.equal(recovery.profile[INSTANCE_VISIBILITY_MARKER], originalKey)
+    const copied = await original.getRecoveryToken()
+    const duplicate = makeLeaf(copied.profile)
+    first.app.tabs.push(duplicate)
+    assert.equal(first.service.getPaneGroupMode(duplicate.session), undefined)
+    first.service.setPaneGroupMode(duplicate.session, 'static')
+    assert.equal(first.service.getPaneGroupMode(original.session), 'carousel')
+    const preferences = JSON.parse(JSON.stringify(first.config.store.plugin.serverStats))
+    first.service.ngOnDestroy()
+    assert.equal(original.getRecoveryToken, recoveryMethod)
+    assert.equal(original.destroyed$.observers.length, 0, 'mode persistence hooks are released with the service')
+    const restored = makeLeaf(recovery.profile)
+    const restoredDuplicate = makeLeaf(copied.profile)
+    const second = setup([restored, restoredDuplicate])
+    second.config.store.profiles = [shared]
+    second.config.store.plugin = { serverStats: preferences }
+    assert.equal(second.service.getPaneGroupMode(restored.session), 'carousel')
+    assert.equal(second.service.getPaneGroupMode(restoredDuplicate.session), 'static')
+    second.service.ngOnDestroy()
+})
+
+test('pane mode preferences reject invalid values and ignore closed or destroyed sessions', () => {
+    const key = 'pane-instance:' + 'e'.repeat(32)
+    const raw = { ...savedSSH('mode-proxy'), [INSTANCE_VISIBILITY_MARKER]: key }
+    const profile = { id: raw.id, type: raw.type, options: raw.options, __getValue: field => raw[field] }
+    const leaf = { profile, session: { open: true, profile } }
+    const env = setup([leaf])
+    env.config.store.profiles = [savedSSH('mode-proxy')]
+    env.config.store.plugin = { serverStats: { paneGroupModes: { [key]: 'bad', untouched: 'carousel' } } }
+    let saves = 0
+    env.config.save = () => { saves++ }
+    assert.equal(env.service.getPaneGroupMode(leaf.session), undefined)
+    env.service.setPaneGroupMode(leaf.session, 'bad')
+    assert.equal(saves, 0)
+    env.service.setPaneGroupMode(leaf.session, 'overview')
+    assert.equal(saves, 1)
+    assert.equal(env.service.getPaneGroupMode(leaf.session), 'overview', 'hidden ConfigProxy identities support modes too')
+    assert.equal(env.config.store.plugin.serverStats.paneGroupModes.untouched, 'carousel')
+    leaf.session.open = false
+    env.service.setPaneGroupMode(leaf.session, 'static')
+    assert.equal(env.service.getPaneGroupMode(leaf.session), undefined)
+    env.service.setPaneGroupMode(null, 'static')
+    env.service.ngOnDestroy()
+    leaf.session.open = true
+    env.service.setPaneGroupMode(leaf.session, 'static')
+    assert.equal(env.service.getPaneGroupMode(leaf.session), undefined)
+    assert.equal(saves, 1)
+})

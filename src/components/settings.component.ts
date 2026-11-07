@@ -2,7 +2,7 @@ import { Component, Injectable, HostListener } from '@angular/core'
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser'
 import { ConfigService, PlatformService, TranslateService } from 'tabby-core'
 import { SettingsTabProvider } from 'tabby-settings'
-import { BuiltinMetricKey, getBuiltinDefinition, normalizeBuiltinOrder } from '../builtin-metrics'
+import { BuiltinMetricKey, getBuiltinDefinition, normalizeBuiltinOrder, migrateLegacyBuiltinConfig } from '../builtin-metrics'
 import { MetricPreset, getBundledPresets, normalizePresetLibrary, instantiatePreset, exportPresetLibrary, findInstalledPreset } from '../preset-library'
 import { DEFAULT_GITHUB_PRESETS_URL, fetchGitHubPresets, PresetGitHubError } from '../preset-github'
 import { METRIC_COLORS } from '../metric-colors'
@@ -35,7 +35,10 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
 @Component({
     selector: 'server-stats-settings',
     template: `
-        <h3 translate>Bottom Status Bar</h3>
+        <div class="settings-heading">
+            <h3 translate>Bottom Status Bar</h3>
+            <button type="button" class="btn tutorial-button" (click)="openTutorial()"><i class="fas fa-book-open" aria-hidden="true"></i> <span translate>Tutorial (PDF)</span></button>
+        </div>
         <div class="form-line">
             <div class="header"><div class="title" translate>Show bottom status bar</div></div>
             <div class="form-check form-switch">
@@ -97,7 +100,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                     <div class="group-summary">
                         <span class="group-card-icon"><ng-container *ngTemplateOutlet="metricIcon; context: { $implicit: builtinMain(key) }"></ng-container></span>
                         <strong>{{ builtinTitle(key) | translate }}</strong>
-                        <span class="badge bg-secondary" *ngIf="key === 'net'" translate>Metric Group</span>
+                        <span class="badge bg-secondary" *ngIf="key === 'net' || key === 'load'" translate>Metric Group</span>
                         <span class="badge bg-info" *ngIf="hasBuiltinOverride(key)" translate>Customized</span>
                     </div>
                     <div class="btn-group btn-group-sm builtin-actions">
@@ -275,6 +278,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                             <button type="button" class="btn btn-outline-secondary group-enabled" (click)="toggleGroupEnabled(g)" [attr.aria-pressed]="group.enabled !== false" [title]="(group.enabled === false ? 'Enable metric' : 'Disable metric') | translate">{{ (group.enabled === false ? 'Disabled' : 'Enabled') | translate }}</button>
                             <button class="btn btn-outline-secondary" [disabled]="g === 0" (click)="moveGroup(g, -1)" [title]="'Move up' | translate" [attr.aria-label]="'Move up' | translate">↑</button>
                             <button class="btn btn-outline-secondary" [disabled]="g === metricGroups.length - 1" (click)="moveGroup(g, 1)" [title]="'Move down' | translate" [attr.aria-label]="'Move down' | translate">↓</button>
+                            <button type="button" class="btn btn-outline-secondary group-copy" (click)="copyGroup(g)" [title]="'Duplicate Group' | translate" [attr.aria-label]="'Duplicate Group' | translate"><i class="fas fa-copy" aria-hidden="true"></i></button>
                             <button type="button" class="btn btn-outline-secondary group-edit" (click)="editGroup(g)" [title]="'Edit' | translate" [attr.aria-label]="'Edit' | translate" [attr.aria-controls]="'group-editor-' + group.id"><i class="fas fa-pen" aria-hidden="true"></i></button>
                         </div>
                     </div>
@@ -409,6 +413,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                                 <i class="fas member-chevron" [class.fa-chevron-down]="expandedMemberId !== child.id" [class.fa-chevron-up]="expandedMemberId === child.id" aria-hidden="true"></i>
                             </button>
                             <div class="btn-group btn-group-sm member-actions">
+                                <button type="button" class="btn btn-outline-secondary child-copy" (click)="copyChild(c)" [title]="'Duplicate Child' | translate" [attr.aria-label]="'Duplicate Child' | translate"><i class="fas fa-copy" aria-hidden="true"></i></button>
                                 <button type="button" class="btn btn-outline-secondary member-enabled" (click)="toggleMemberEnabled(child)" [attr.aria-pressed]="child.enabled !== false">{{ (child.enabled === false ? 'Disabled' : 'Enabled') | translate }}</button>
                                 <button class="btn btn-outline-secondary" [disabled]="c === 0" (click)="moveChild(c, -1)" [title]="'Move up' | translate" [attr.aria-label]="'Move up' | translate">↑</button>
                                 <button class="btn btn-outline-secondary" [disabled]="c === currentGroup.children.length - 1" (click)="moveChild(c, 1)" [title]="'Move down' | translate" [attr.aria-label]="'Move down' | translate">↓</button>
@@ -583,7 +588,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                 <div class="col-12 detail-command">
                     <label class="form-label" translate>Hover Detail Command (optional)</label>
                     <textarea class="form-control form-control-sm font-monospace" rows="2" [(ngModel)]="currentMetric.detailCommand"></textarea>
-                    <div class="form-text" translate>Append this command output on hover. Leave empty for no extra information.</div>
+                    <div class="form-text" translate>Hover shows this command output. Single labels use a popup; groups follow their display mode. Leave empty for no extra information.</div>
                 </div>
                 <div class="col-12 unavailable-visibility">
                     <label class="form-check">
@@ -737,6 +742,10 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
         .metric-disabled { border-style: dashed !important; }
         .metric-enabled[aria-pressed="true"], .group-enabled[aria-pressed="true"], .member-enabled[aria-pressed="true"] { color: #70c7a0; border-color: #598c75; }
         .member-enabled { flex-shrink: 0; }
+        .settings-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+        .settings-heading h3 { margin: 0; }
+        .tutorial-button { color: #fff; background: #175cb8; border: 2px solid #7abaff; font-weight: 700; padding: 9px 16px; box-shadow: 0 0 0 2px #175cb833; }
+        .tutorial-button:hover, .tutorial-button:focus-visible { color: #fff; background: #216fd0; outline: 2px solid #b4d9ff; outline-offset: 2px; }
         .builtin-header, .preset-library-header, .preset-card-header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
         .builtin-actions { margin-left: auto; }
         .preset-library-header { justify-content: space-between; }
@@ -932,7 +941,9 @@ export class ServerStatsSettingsComponent {
         private platform: PlatformService,
         public config: ConfigService,
         private sanitizer: DomSanitizer
-    ) {}
+    ) {
+        if (migrateLegacyBuiltinConfig(this.config.store.plugin.serverStats)) this.config.save();
+    }
 
     get scopeOwner(): { displayScope?: DisplayScope } {
         return this.currentGroup || this.currentMetric;
@@ -1248,6 +1259,52 @@ export class ServerStatsSettingsComponent {
         return TRANSLATIONS[locale]?.[key] || TRANSLATIONS[locale.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en']?.[key] || key;
     }
 
+    openTutorial() {
+        const configured = this.config.store.language;
+        const locale = String(configured && configured !== 'auto' ? configured : typeof navigator !== 'undefined' ? navigator.language : 'en');
+        this.platform.openPath(`${__dirname}/../docs/tutorial.${locale.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en'}.pdf`);
+    }
+
+    private copyLabel(label: string, existing: string[]): string {
+        const base = `${label || this.uiText('Unnamed Metric')} (${this.uiText('Copy')})`;
+        let candidate = base;
+        let number = 2;
+        while (existing.includes(candidate)) candidate = `${base} ${number++}`;
+        return candidate;
+    }
+
+    private independentCopy<T extends { id: string }>(item: T, prefix: string): T {
+        const copy = JSON.parse(JSON.stringify(item));
+        copy.id = this.newId(prefix);
+        // A deliberate copy is editable independently of the source preset.
+        delete copy.presetOrigin;
+        delete copy.presetMetadata;
+        return copy;
+    }
+
+    copyGroup(index: number) {
+        const original = this.metricGroups[index];
+        if (!original) return;
+        const copy = this.independentCopy(original, 'group');
+        copy.label = this.copyLabel(original.label, this.metricGroups.map(group => group.label));
+        copy.main = this.independentCopy(original.main, 'metric');
+        copy.children = original.children.map(child => this.independentCopy(child, 'metric'));
+        const groups = [...this.metricGroups];
+        groups.splice(index + 1, 0, copy);
+        this.config.store.plugin.serverStats.metricGroups = groups;
+        this.save();
+        this.editGroup(index + 1);
+    }
+
+    copyChild(index: number) {
+        const original = this.currentGroup?.children[index];
+        if (!original) return;
+        const copy = this.independentCopy(original, 'metric');
+        copy.label = this.copyLabel(original.label, [this.currentGroup.main, ...this.currentGroup.children].map(metric => metric.label));
+        this.currentGroup.children.splice(index + 1, 0, copy);
+        this.selectGroupMetric(index + 1);
+    }
+
     groupModeLabel(mode: string): string {
         return mode === 'carousel' ? 'Carousel' : mode === 'static' ? 'Static' : 'Overview';
     }
@@ -1471,14 +1528,14 @@ export class ServerStatsSettingsComponent {
 
     get defaultMetricsConfig() {
         if (!this.config.store.plugin.serverStats.defaultMetrics) {
-            this.config.store.plugin.serverStats.defaultMetrics = { cpu: true, ram: true, disk: true, net: true };
+            this.config.store.plugin.serverStats.defaultMetrics = { ram: true, net: true, load: true };
         }
         return this.config.store.plugin.serverStats.defaultMetrics;
     }
     
     builtinMain(key: BuiltinMetricKey): CustomMetric {
         const definition = getBuiltinDefinition(key, this.config.store.plugin.serverStats);
-        return key === 'net' ? (definition as CustomMetricGroup).main : definition as CustomMetric;
+        return key === 'net' || key === 'load' ? (definition as CustomMetricGroup).main : definition as CustomMetric;
     }
 
     builtinTitle(key: BuiltinMetricKey): string {
@@ -1505,7 +1562,7 @@ export class ServerStatsSettingsComponent {
         this.cancelEdit();
         this.editingBuiltinKey = key;
         const definition = getBuiltinDefinition(key, this.config.store.plugin.serverStats);
-        if (key === 'net') {
+        if (key === 'net' || key === 'load') {
             const group = JSON.parse(JSON.stringify(definition)) as CustomMetricGroup;
             this.currentGroup = { ...group, main: this.draftMetric(group.main), children: group.children.map(child => this.draftMetric(child)) };
             this.selectGroupMetric(-1);
@@ -1522,10 +1579,10 @@ export class ServerStatsSettingsComponent {
 
     private saveBuiltin() {
         const key = this.editingBuiltinKey;
-        if (!key || (key === 'net' ? !this.isGroupValid() : !this.isMetricValid(this.currentMetric))) return;
+        if (!key || ((key === 'net' || key === 'load') ? !this.isGroupValid() : !this.isMetricValid(this.currentMetric))) return;
         const conf = this.config.store.plugin.serverStats;
         conf.defaultMetricOverrides = conf.defaultMetricOverrides || {};
-        conf.defaultMetricOverrides[key] = key === 'net' ? {
+        conf.defaultMetricOverrides[key] = key === 'net' || key === 'load' ? {
             ...this.currentGroup,
             label: this.currentGroup.label?.trim() || '',
             interval: Number(this.currentGroup.interval) || 3,

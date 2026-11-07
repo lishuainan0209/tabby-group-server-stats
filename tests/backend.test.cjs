@@ -144,30 +144,30 @@ test('editable builtin commands, checks, details, scopes and enabled flags share
     const { instance, config, session } = service([], [], { profiles: [{ id: 'p1' }] });
     session.profile = { id: 'p1' };
     const conf = config.store.plugin.serverStats;
-    conf.defaultMetrics = { cpu: true };
-    conf.defaultMetricOverrides = { cpu: {
+    conf.defaultMetrics = { ram: true };
+    conf.defaultMetricOverrides = { ram: {
         command: 'printf 37', checkCommand: 'printf ready', checkMode: 'output', checkExpected: 'ready',
         type: 'text', detailCommand: 'printf edited-details', displayScope: { mode: 'selected', profileIds: ['p1'] }
     }};
     let calls = 0;
     instance.execute = async (_session, script) => {
         calls++;
-        assert.doesNotMatch(script, /TABBY-STATS-START|\/proc\/stat/);
+        assert.doesNotMatch(script, /TABBY-STATS-START|\/proc\/meminfo/);
         const result = spawnSync(shell, ['-s'], { input: script, encoding: 'utf8', timeout: 7000,
             env: { ...process.env, PATH: shellTools + process.env.PATH } });
         assert.equal(result.status, 0, result.stderr);
         return result.stdout;
     };
     const data = await instance.fetchStats(session);
-    assert.deepEqual(data.custom, [{ id: 'builtin-cpu', status: 'ok', value: '37' }]);
-    assert.equal(data.cpu, 37);
+    assert.deepEqual(data.custom, [{ id: 'builtin-ram', status: 'ok', value: '37' }]);
+    assert.equal(data.mem, 37);
     const visible = instance.getVisibleConfig(session).customMetrics;
     assert.equal(visible[0].type, 'text');
-    assert.deepEqual(await instance.fetchDetails(session, visible), { 'builtin-cpu': 'edited-details' });
+    assert.deepEqual(await instance.fetchDetails(session, visible), { 'builtin-ram': 'edited-details' });
     session.profile.id = 'other';
     assert.deepEqual((await instance.fetchStats(session)).custom, []);
     session.profile.id = 'p1';
-    conf.defaultMetricOverrides.cpu.enabled = false;
+    conf.defaultMetricOverrides.ram.enabled = false;
     assert.deepEqual((await instance.fetchStats(session)).custom, []);
     assert.deepEqual(await instance.fetchDetails(session, visible), {});
     assert.equal(calls, 2);

@@ -9,6 +9,14 @@ import { Subject } from 'rxjs'
         root.paneVisibility[session.id] = visible
         root.config.changed$.next()
     }
+    getPaneGroupMode(session: any): 'overview' | 'carousel' | 'static' | undefined {
+        return (window as any).harness.paneGroupModes[session?.id]
+    }
+    setPaneGroupMode(session: any, mode: 'overview' | 'carousel' | 'static'): void {
+        const root = (window as any).harness
+        root.paneGroupModes[session.id] = mode
+        root.config.changed$.next()
+    }
     async fetchDetails(session: any, metrics: any[]) {
         const root = (window as any).harness
         root.detailCalls.push(metrics.map(metric => metric.id))

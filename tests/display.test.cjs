@@ -31,7 +31,7 @@ test('network display does not turn missing or nonnumeric command output into ze
 
 test('capacity ratios preserve precision and expose each right-aligned column independently', () => {
     for (const [raw, numerator, denominator, suffix] of [
-        ['551.0/8786.0 GiB', '551.0', '8786.0', 'GB'],
+        ['551.0/8786.0 GiB', '551.0', '8,786.0', 'GB'],
         ['38.3/936.4GB', '38.3', '936.4', 'GB'],
         [' 38.3 / 936.4 GB ', '38.3', '936.4', 'GB'],
         ['1,234.50/12,345.00 MiB', '1,234.50', '12,345.00', 'MiB'],
@@ -49,6 +49,13 @@ test('capacity ratios preserve precision and expose each right-aligned column in
 test('capacity parsing leaves paths, errors and unrelated slash text unchanged', () => {
     for (const raw of ['', '/data', '/12/34', 'Err: 1/2', 'RX 12/TX 34', '12,34/50 GiB', '1/NaN GiB', '1e999/50 GiB', '1/2/3', '1/2 GiB extra', '1/2 users']) {
         assert.equal(api.parseNumericRatio(raw), null, raw)
+    }
+})
+
+test('capacity grouping preserves decimal precision and existing separators', () => {
+    for (const [value, expected] of [['1234', '1,234'], ['12345.00', '12,345.00'], ['1,234.50', '1,234.50'],
+        ['-1234567.0', '-1,234,567.0'], ['.5', '.5'], ['Err: 1234', 'Err: 1234'], ['1e4', '1e4']]) {
+        assert.equal(api.formatGroupedNumber(value), expected)
     }
 })
 

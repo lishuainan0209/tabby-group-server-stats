@@ -1,22 +1,43 @@
-import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone } from '@angular/core'
+import { Component, OnInit, OnDestroy, ChangeDetectorRef, NgZone, HostListener, ViewChild, ElementRef } from '@angular/core'
 import { DomSanitizer } from '@angular/platform-browser'
 import { Subscription } from 'rxjs'
 import { AppService, ConfigService } from 'tabby-core'
 import { StatsService } from '../services/stats.service'
 import { CustomMetric, CustomMetricGroup } from '../config'
 import { BuiltinMetricKey } from '../builtin-metrics'
+import { PaneGroupMode } from '../services/metric-scope.service'
 
 @Component({
     selector: 'server-stats-bottom-bar',
     template: `
       <ng-container *ngIf="visible">
-        <button type="button" class="pane-status-toggle" [class.is-collapsed]="!paneVisible"
-            data-testid="pane-status-toggle" (click)="togglePaneVisibility()"
-            [attr.aria-expanded]="paneVisible"
-            [attr.aria-label]="(paneVisible ? 'Hide this pane status bar' : 'Show this pane status bar') | translate"
-            [title]="(paneVisible ? 'Hide this pane status bar' : 'Show this pane status bar') | translate">
+        <button #paneToggle type="button" class="pane-status-toggle" [class.is-collapsed]="!paneVisible"
+            data-testid="pane-status-toggle" (click)="togglePaneMenu($event)" (keydown)="onToggleKeydown($event)"
+            (mousemove)="$event.stopPropagation()"
+            [attr.aria-expanded]="menuOpen" aria-haspopup="menu"
+            [attr.aria-label]="'Pane status bar options' | translate">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"></path></svg>
         </button>
+        <div #paneMenu *ngIf="menuOpen" class="pane-status-menu" role="menu"
+            [style.left.px]="menuPosition.left" [style.top.px]="menuPosition.top"
+            [attr.aria-label]="'Pane status bar options' | translate" (keydown)="onMenuKeydown($event)"
+            (mousemove)="$event.stopPropagation()" (click)="$event.stopPropagation()">
+            <div role="group">
+                <button type="button" class="pane-menu-show" role="menuitemradio" [attr.aria-checked]="paneVisible"
+                    (click)="setPaneVisibility(true)"><span aria-hidden="true">{{paneVisible ? '✓' : ''}}</span>{{'Show' | translate}}</button>
+                <button type="button" class="pane-menu-hide" role="menuitemradio" [attr.aria-checked]="!paneVisible"
+                    (click)="setPaneVisibility(false)"><span aria-hidden="true">{{!paneVisible ? '✓' : ''}}</span>{{'Hide' | translate}}</button>
+            </div>
+            <div class="pane-menu-separator" role="separator"></div>
+            <div role="group">
+                <button type="button" class="pane-menu-overview" role="menuitemradio" [attr.aria-checked]="paneGroupMode === 'overview'"
+                    (click)="setPaneGroupMode('overview')"><span aria-hidden="true">{{paneGroupMode === 'overview' ? '✓' : ''}}</span>{{'Overview' | translate}}</button>
+                <button type="button" class="pane-menu-carousel" role="menuitemradio" [attr.aria-checked]="paneGroupMode === 'carousel'"
+                    (click)="setPaneGroupMode('carousel')"><span aria-hidden="true">{{paneGroupMode === 'carousel' ? '✓' : ''}}</span>{{'Carousel' | translate}}</button>
+                <button type="button" class="pane-menu-static" role="menuitemradio" [attr.aria-checked]="paneGroupMode === 'static'"
+                    (click)="setPaneGroupMode('static')"><span aria-hidden="true">{{paneGroupMode === 'static' ? '✓' : ''}}</span>{{'Static' | translate}}</button>
+            </div>
+        </div>
         <div class="stats-container" 
              *ngIf="paneVisible"
              [style.background]="styleConfig.background">
@@ -62,11 +83,28 @@ import { BuiltinMetricKey } from '../builtin-metrics'
         .pane-status-toggle.is-collapsed { color: #b8c4d0; bottom: 2px; }
         .pane-status-toggle:hover { color: #fff; border-color: #8fcaff; }
         .pane-status-toggle:focus-visible { outline: 2px solid #8fcaff; outline-offset: 1px; }
+        .pane-status-menu {
+            position: fixed; z-index: 10000; max-height: calc(100vh - 16px); overflow-y: auto;
+            min-width: 155px; padding: 5px; border: 1px solid #8199b2; border-radius: 6px;
+            background: #202831; color: #f0f4f8; box-shadow: 0 4px 18px #0009; font-size: 13px;
+        }
+        .pane-status-menu button {
+            display: flex; align-items: center; width: 100%; gap: 8px; padding: 6px 10px;
+            border: none; border-radius: 3px; background: transparent; color: inherit; text-align: left; cursor: pointer;
+        }
+        .pane-status-menu button span { display: inline-block; width: 14px; color: #8fcaff; }
+        .pane-status-menu button:hover, .pane-status-menu button:focus-visible { background: #36506b; outline: 1px solid #8fcaff; }
+        .pane-menu-separator { border-top: 1px solid #65788d; margin: 4px 5px; }
     `]
 })
 export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
     visible = false
     paneVisible = true
+    menuOpen = false
+    menuPosition = { left: 4, top: 4 }
+    paneGroupMode: PaneGroupMode | undefined
+    @ViewChild('paneToggle') private paneToggle?: ElementRef<HTMLButtonElement>
+    @ViewChild('paneMenu') private paneMenu?: ElementRef<HTMLElement>
     loading = true
     currentStats: any = { cpu: 0, mem: 0, disk: 0, netRx: 0, netTx: 0, custom: [] }
     customMetrics: CustomMetric[] = []
@@ -110,6 +148,7 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         }
         this.applyMetricScope(session);
         if (this.displaySession === session) return;
+        this.menuOpen = false;
         this.viewRevision++;
         this.displaySession = session;
         const cached = session?.open !== false && session ? this.statsService.getCachedStats(session) : null;
@@ -122,7 +161,11 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         const visible = this.statsService.getVisibleConfig?.(session) || conf;
         this.builtinOrder = conf.builtinOrder || [];
         this.customMetrics = visible.customMetrics || [];
-        this.metricGroups = visible.metricGroups || [];
+        this.paneGroupMode = session ? this.statsService.getPaneGroupMode?.(session) : undefined;
+        // A pane preference is a presentation override, never a change to shared definitions.
+        this.metricGroups = this.paneGroupMode ? (visible.metricGroups || []).map(group => ({
+            ...group, mode: this.paneGroupMode!, layout: group.layout || 'vertical',
+        })) : visible.metricGroups || [];
     }
 
     private canDisplay(session: any): boolean {
@@ -139,13 +182,115 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
     togglePaneVisibility() {
         const session = this.resolveSession();
         if (!this.canDisplay(session)) return;
-        this.statsService.setPaneVisible(session, this.statsService.isPaneVisible(session) === false);
+        this.setPaneVisibility(this.statsService.isPaneVisible(session) === false);
+    }
+
+    setPaneVisibility(visible: boolean) {
+        const session = this.resolveSession();
+        if (!this.canDisplay(session)) return;
+        this.statsService.setPaneVisible(session, visible);
         this.viewRevision++;
         this.synchronizeSession(session);
         this.visible = true;
         if (!this.paneVisible) this.loading = false;
+        this.closePaneMenu(true);
         this.cdr.detectChanges();
         if (this.paneVisible) this.forceUpdate();
+    }
+
+    setPaneGroupMode(mode: PaneGroupMode) {
+        const session = this.resolveSession();
+        if (!this.canDisplay(session)) return;
+        this.statsService.setPaneGroupMode(session, mode);
+        // Choosing a presentation mode also resumes a hidden pane's status bar.
+        if (this.statsService.isPaneVisible(session) === false) {
+            this.setPaneVisibility(true);
+        } else {
+            this.applyMetricScope(session);
+            this.closePaneMenu(true);
+            this.cdr.detectChanges();
+        }
+    }
+
+    togglePaneMenu(event?: Event) {
+        event?.stopPropagation();
+        if (!this.canDisplay(this.resolveSession())) return;
+        this.menuOpen = !this.menuOpen;
+        this.cdr.detectChanges();
+        if (this.menuOpen) {
+            this.positionPaneMenu();
+            this.cdr.detectChanges();
+            this.menuButtons()[0]?.focus();
+        }
+    }
+
+    private positionPaneMenu() {
+        const toggle = this.paneToggle?.nativeElement.getBoundingClientRect?.();
+        const menu = this.paneMenu?.nativeElement.getBoundingClientRect?.();
+        if (!toggle || !menu) return;
+        this.menuPosition = {
+            left: Math.max(8, Math.min(toggle.left, window.innerWidth - menu.width - 8)),
+            top: Math.max(8, Math.min(toggle.top - menu.height - 4, window.innerHeight - menu.height - 8)),
+        };
+    }
+
+    private menuButtons(): HTMLButtonElement[] {
+        return Array.from(this.paneMenu?.nativeElement.querySelectorAll<HTMLButtonElement>('button') || []);
+    }
+
+    private closePaneMenu(restoreFocus = false) {
+        if (!this.menuOpen) return;
+        this.menuOpen = false;
+        if (restoreFocus && !this.destroyed) this.paneToggle?.nativeElement.focus();
+    }
+
+    onToggleKeydown(event: KeyboardEvent) {
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+        event.preventDefault(); event.stopPropagation();
+        if (!this.menuOpen) this.togglePaneMenu();
+        const buttons = this.menuButtons();
+        buttons[event.key === 'ArrowUp' ? buttons.length - 1 : 0]?.focus();
+    }
+
+    onMenuKeydown(event: KeyboardEvent) {
+        if (!this.menuOpen || this.destroyed) return;
+        if (event.key === 'Tab') { this.closePaneMenu(); return; }
+        const buttons = this.menuButtons();
+        const current = buttons.indexOf(event.target as HTMLButtonElement);
+        let next: number;
+        if (event.key === 'ArrowDown') next = (current + 1) % buttons.length;
+        else if (event.key === 'ArrowUp') next = (current - 1 + buttons.length) % buttons.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = buttons.length - 1;
+        else return;
+        event.preventDefault(); event.stopPropagation();
+        buttons[next]?.focus();
+    }
+
+    @HostListener('document:keydown', ['$event'])
+    onDocumentKeydown(event: KeyboardEvent) {
+        if (!this.menuOpen || this.destroyed || event.key !== 'Escape') return;
+        event.preventDefault(); event.stopPropagation();
+        this.closePaneMenu(true);
+        this.cdr.detectChanges();
+    }
+
+    // Tabby's focus-follows-mouse can focus the terminal while the pointer crosses
+    // the gap above the toggle. Only an intentional outside click dismisses this menu.
+    @HostListener('document:pointerdown', ['$event'])
+    onOutsideInteraction(event: Event) {
+        if (!this.menuOpen || this.destroyed) return;
+        const target = event.target as Node;
+        if (this.paneMenu?.nativeElement.contains(target) || this.paneToggle?.nativeElement.contains(target)) return;
+        this.closePaneMenu();
+        this.cdr.detectChanges();
+    }
+
+    @HostListener('window:resize')
+    onViewportResize() {
+        if (!this.menuOpen || this.destroyed) return;
+        this.positionPaneMenu();
+        this.cdr.detectChanges();
     }
 
     renderExternalStats(stats: any | null) {
@@ -254,6 +399,7 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         this.visible = this.canDisplay(session);
         if (!this.visible) {
             this.visible = false;
+            this.menuOpen = false;
             this.synchronizeSession(null);
         }
         this.cdr.detectChanges();
@@ -323,6 +469,7 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
 
     ngOnDestroy() {
         this.destroyed = true;
+        this.menuOpen = false;
         this.viewRevision++;
         this.visible = false;
         this.displaySession = null;

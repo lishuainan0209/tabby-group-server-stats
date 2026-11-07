@@ -2,11 +2,11 @@
 
 [中文](README.md) | English
 
-SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current version is **1.7.4**, adding duplicate-preset protection while retaining compact rows, three-decimal MB/s rates and aligned capacity columns.
+SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.7.5**, adding per-pane display menus, group/child duplication, capacity thousands separators and offline PDF tutorials.
 
 Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
-**1.7.4 updates:** individual layout-pane scopes, linked checks for the same connection ID with individual opt-outs, bottom-bar-only display and a separate lower-left toggle in every pane.
+**1.7.5 updates:** built-ins now comprise memory, network and CPU load. Choosing a group mode from a pane's lower-left menu also shows its bar and saves both choices. Standalone hover details open above the bar, and redundant white name tooltips are removed.
 
 **The SSH hotfix from 1.6.1 is retained.** Previously, oversized SSH execution requests could disconnect the entire connection when many metrics were enabled. A fixed short command now receives the script through standard input in 8 KiB chunks, retaining the bounded completion acknowledgment. Transfer failures close only the statistics channel, without deliberately closing the terminal session or automatically rerunning user commands.
 
@@ -21,24 +21,31 @@ The preview uses example configuration data and the Chinese interface.
 - **Metric groups:** one main label and multiple children, with overview, carousel, horizontal static and vertical static displays.
 - **Independent switches:** disable a standalone label, an entire group, its main label or individual children without deleting commands or color rules.
 - **Connection scopes:** select saved connections or layouts; each pane in a mixed layout retains its own connection identity.
-- **Editable, reorderable built-ins:** customize CPU, memory, disk and network definitions, move them up or down in both panels, or restore one built-in's defaults.
+- **Editable, reorderable built-ins:** customize memory, network and CPU load, move them up or down in the bottom bar, or restore one built-in's defaults.
+- **Independent copies:** duplicate an entire group or a child within its group, then adjust device paths, GPU indices and commands.
+- **Per-pane display menus:** choose Show, Hide, Overview, Carousel or Static from a vertical lower-left menu; choosing a mode also shows the bar, and each pane remembers its selection.
+- **Offline PDF manuals:** a highlighted **Tutorial (PDF)** button opens the Chinese or English manual with the system's default PDF application, covering pane menus, label editing, presets and a disk-group walkthrough.
 - **Offline and GitHub library:** 20 bundled presets—12 standalone labels and 8 groups—with imports from this fork, JSON import/export and search; repeated clicks do not add another copy of an existing preset.
 - **Clear section and card borders:** separate built-ins, presets, standalone labels and groups; compact line separators between displayed groups.
 - **English/Chinese UI and 26 original monitoring icons:** searchable categories, existing icon support and custom SVGs.
 
-Display is fixed to the bottom status bar, with an enable switch in settings. Legacy floating-panel preferences automatically use the bottom bar. Built-ins use the same checks, colors, scopes and details as custom metrics. Group hover-detail popups remain available.
+Display is fixed to the bottom status bar, with an enable switch in settings. Legacy floating-panel preferences automatically use the bottom bar. Built-ins use the same checks, colors, scopes and details as custom metrics. Standalone details open above the bar without widening it. Group overview/carousel popups and static hover behavior retain their existing rules.
 
 ## Create a label
 
 Open Tabby Settings → Bottom Status Bar, then choose **Add single label**, or find a library preset and click **Add**. Importing from GitHub or JSON loads choices into the library; adding a preset puts it into the active configuration. Use the pencil button to edit an existing item. Within a group, each main/child label opens its own editor.
 
+To get started, click the highlighted **Tutorial (PDF)** button at the top of settings. The complete manual ships with the plugin for offline use and opens in the system's default PDF application, choosing Chinese or English from the interface language. It starts with the lower-left menu, built-ins and standalone labels, then walks through finding mount points and configuring system/data disks and an aggregate value. Continue with copies, enable switches, colors, display scopes, preset import/export and troubleshooting. You can also read the [English PDF](docs/tutorial.en.pdf) or [中文 PDF](docs/tutorial.zh-CN.pdf) directly.
+
 Group cards place the main label and child labels on separate adjacent rows. The group's pencil button opens its editor with every member collapsed; clicking a bordered label button opens that member directly. Delete buttons sit at the lower right of their cards and ask for confirmation with the item's name. Deleting a child takes effect only after saving the whole group.
+
+Click a group card's **Duplicate** button to create and save an independent copy immediately after it, then open that copy for editing. Commands, scopes, styling and enabled states are retained, while the group and every member receive new IDs. Editing the copy does not change its source. Inside the group editor, a child's **Duplicate** button inserts a copy after that child and opens its editor; this remains a draft until you save the whole group. Deliberate copies do not retain the source preset's duplicate-detection identity, unlike repeatedly clicking **Add** in the library.
 
 New labels default to **text** and checks default to **output-text comparison**. Configure commands in this order:
 
 1. **Object check, optional:** compare trimmed standard output or an expected exit code. Without a check, the primary command runs directly.
 2. **Shell command:** periodically collects the primary value.
-3. **Hover detail command, optional:** appends information while hovered and collapses on mouse leave. An empty command makes no detail request.
+3. **Hover detail command, optional:** a standalone label opens its primary value and details in a popup above the bar, closing on mouse leave. An empty command makes no detail request. Group members expand according to the group's display mode.
 
 For a separate filesystem mounted at `/data2`:
 
@@ -61,7 +68,7 @@ Details follow the label's refresh interval, or the global interval when unset: 
 
 ## Groups and visibility
 
-Group names appear in the hover popup, without a repeated prefix in the status bar. The main label is flush left, children are indented, and popup names, values and details align in columns. Thin separators and smaller gaps between groups conserve status-bar width.
+Group names appear in the hover popup, without a repeated prefix in the status bar. The main label is flush left, children are indented, and popup names, values and details align in columns. Capacity numbers have thousands separators, such as `7,912 GB`. In details such as `433.9/8,786.0 GB`, each side of the slash is independently right-aligned, retaining the original decimal precision and raw values for color rules. Thin separators and smaller gaps between groups conserve status-bar width.
 
 - **Overview:** shows the main label; hover opens the full group vertically with details.
 - **Carousel:** rotates through child labels; hover pauses rotation and opens the full group. Skipped children do not consume extra rotation periods.
@@ -83,13 +90,15 @@ Disabling the main label does not disable its children. Disabling one child leav
 
 ## Editable built-ins
 
-CPU, memory and disk are standalone labels. Network is a vertical static group with download/upload children; its main label starts disabled. All use the common commands, checks, details, scopes and color rules rather than a separate hardcoded chart collector.
+New configurations have only three built-ins: **memory, network and CPU load**. Memory is a standalone label. Network is a vertical static group with download/upload children; its main label starts disabled. CPU load is an overview group with runnable/total thread counts as its main value and 1min/5min load percentages normalized by logical processor count as children. All use the common commands, checks, details, scopes and color rules rather than a separate hardcoded chart collector.
 
-Use each card's up/down buttons to reorder CPU, memory, disk and network. The order is persisted in `builtinOrder` and retained after restarting. Custom labels and groups retain their existing relative order.
+During upgrades, enabled legacy CPU/disk built-ins and edited overrides are preserved as ordinary standalone labels, retaining commands, scopes and enabled states. Existing custom CPU-load groups stay in place; when an existing group is recognized as that preset, the new built-in CPU-load group starts disabled to avoid duplicate displays.
 
-**Restore defaults** removes only the selected built-in's override, preserving its top-level enable switch and ordering, and leaving other built-ins and custom labels untouched. Restoring network resets that group's main/child definitions to their factory configuration.
+Use each card's up/down buttons to reorder memory, network and CPU load. The order is persisted in `builtinOrder` and retained after restarting. Custom labels and groups retain their existing relative order.
 
-Built-in CPU, memory, disk and network commands support Linux/macOS; most other library presets target Linux. Download and upload show the current received/sent rates in decimal MB/s with three fractional digits and thousands separators. Commands still return KiB/s; thresholds continue to use raw values. Each direction's hover detail shows its own cumulative GB and the interfaces included. Default-route interfaces are preferred; without a usable default route, eligible non-loopback interfaces are used. **Totals cover the time since interface creation or counter reset, not since the current SSH login.**
+**Restore defaults** removes only the selected built-in's override, preserving its top-level enable switch and ordering, and leaving other built-ins and custom labels untouched. Restoring network or CPU load resets that group's main/child definitions to their factory configuration.
+
+Memory, network and CPU-load commands support Linux/macOS; most other library presets target Linux. Download and upload show the current received/sent rates in decimal MB/s with three fractional digits and thousands separators. Commands still return KiB/s; thresholds continue to use raw values. Each direction's hover detail shows its own cumulative GB and the interfaces included. Default-route interfaces are preferred; without a usable default route, eligible non-loopback interfaces are used. **Totals cover the time since interface creation or counter reset, not since the current SSH login.**
 
 Capacity and cumulative traffic use the **GB** label while retaining the existing base-1024 calculation (1024³ bytes per displayed unit). Only the unit name changes; readings and alert thresholds stay the same. Network rates in MB/s remain decimal.
 
@@ -160,7 +169,11 @@ Saved layouts have IDs separate from the connections inside them. The plugin rec
 
 Individual pane bindings also require that layout-origin marker; reopen an unmarked old window from its saved layout once. Pane targets combine the layout ID, saved position and original connection ID, so repeated connections can be unchecked individually. After editing a saved layout or removing/replacing panes, review unavailable scope entries and select the intended targets again.
 
-The small lower-left button in each pane controls only that pane's entire status bar. The button remains available when the bar is hidden. Saved layouts remember visibility separately for each occurrence: three identical connections can retain an off/off/on pattern when reopened, without affecting other layouts.
+Click each pane's lower-left button to open a vertical menu: **Show, Hide, Overview, Carousel, Static**. Show/Hide controls that pane's entire status bar, while the button remains available when hidden. Choosing Overview, Carousel or Static automatically shows the bar and saves both visibility and mode; no extra Show action is needed. The three modes override the presentation of groups in that pane; Static retains each group's horizontal/vertical layout, and standalone labels are unaffected. Choosing a mode does not modify shared group definitions. Without a pane override, each group uses its configured mode.
+
+Saved layouts remember visibility and mode for each pane. For three identical connections, choose Hide in the first two and Carousel directly in the third to show it. The layout retains those choices when reopened, without affecting other layouts.
+
+The menu opens on click and stays open while crossing the gap above the icon, including when Tabby's focus-follows-mouse setting is enabled. Selecting an option, clicking the icon again or outside, pressing Escape, or tabbing out closes it. Changing sessions or removing the pane also closes the old menu.
 
 ## Install, develop and publish
 
@@ -181,7 +194,7 @@ npm.cmd run test:ui
 npm.cmd pack
 ```
 
-`npm pack` reruns type checking, unit tests and the production build, producing `tabby-group-server-stats-1.7.4.tgz`; compiled files are in `dist/`. Browser tests use real Angular components with simulated data, while command tests use a local shell. Live SSH command validation and desktop split-pane acceptance need their own recorded results.
+`npm pack` reruns type checking, unit tests and the production build, producing `tabby-group-server-stats-1.7.5.tgz`; compiled files are in `dist/`. Browser tests use real Angular components with simulated data, while command tests use a local shell. Live SSH command validation and desktop split-pane acceptance need their own recorded results.
 
 This fork retains `plugin.serverStats` configuration compatibility. **Enable either the upstream plugin or this fork in a Tabby instance**, to avoid duplicate collection. An isolated portable Tabby installation is recommended for initial testing. See the [packaging, local-installation and publishing guide (Chinese)](PUBLISHING.zh-CN.md) for commands and acceptance checks.
 
@@ -210,3 +223,14 @@ Report problems or suggest improvements through [this project's Issues](https://
 - Use a fixed bottom bar with a persistent, independent lower-left toggle for each pane.
 - Put main/child buttons together for direct editing; collapse group editors initially and move named deletion confirmations to the lower right.
 - Display capacity as GB while retaining base-1024 readings and thresholds, with compatibility for legacy GiB configuration.
+
+### 1.7.5 pane menus, copies and user manuals
+
+- Use a vertical lower-left menu to persist each pane's visibility and Overview/Carousel/Static mode. Choosing a mode also shows the bar without changing shared group definitions.
+- Duplicate groups and children independently; group copies are created immediately, while child copies belong to the group editing draft.
+- Open standalone hover details above the bar, retain static-group behavior and remove redundant white name tooltips.
+- Add thousands separators to capacity values and right-align primary values and both sides of ratio details.
+- Limit built-ins to memory, network and CPU load, preserving enabled or edited legacy CPU/disk definitions.
+- Open bundled English/Chinese complete user manuals, including the disk-group walkthrough, through the highlighted tutorial button.
+- Fix the lower-left menu closing as the pointer moves upward with focus-follows-mouse enabled.
+- Fix a configuration migration incompatibility that left the settings page blank, and persist built-in ordering and first-time edits across restarts.
