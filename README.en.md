@@ -6,6 +6,8 @@ SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, me
 
 Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
+**Source updates (not yet published to npm):** individual layout-pane scopes, linked checks for the same connection ID with individual opt-outs, bottom-bar-only display and a separate lower-left toggle in every pane.
+
 **The SSH hotfix from 1.6.1 is retained.** Previously, oversized SSH execution requests could disconnect the entire connection when many metrics were enabled. A fixed short command now receives the script through standard input in 8 KiB chunks, retaining the bounded completion acknowledgment. Transfer failures close only the statistics channel, without deliberately closing the terminal session or automatically rerunning user commands.
 
 ![Offline preset library](docs/images/preset-library.png)
@@ -24,11 +26,11 @@ The preview uses example configuration data and the Chinese interface.
 - **Clear section and card borders:** separate built-ins, presets, standalone labels and groups; compact line separators between displayed groups.
 - **English/Chinese UI and 26 original monitoring icons:** searchable categories, existing icon support and custom SVGs.
 
-The bottom bar and floating panel share the same label renderer. Built-ins use the same checks, colors, scopes and details as custom metrics.
+Display is fixed to the bottom status bar, with an enable switch in settings. Legacy floating-panel preferences automatically use the bottom bar. Built-ins use the same checks, colors, scopes and details as custom metrics. Group hover-detail popups remain available.
 
 ## Create a label
 
-Open Tabby Settings → Server Stats, then choose **Add single label**, or find a library preset and click **Add**. Importing from GitHub or JSON loads choices into the library; adding a preset puts it into the active configuration. Use the pencil button to edit an existing item. Within a group, each main/child label opens its own editor.
+Open Tabby Settings → Bottom Status Bar, then choose **Add single label**, or find a library preset and click **Add**. Importing from GitHub or JSON loads choices into the library; adding a preset puts it into the active configuration. Use the pencil button to edit an existing item. Within a group, each main/child label opens its own editor.
 
 New labels default to **text** and checks default to **output-text comparison**. Configure commands in this order:
 
@@ -81,7 +83,7 @@ Disabling the main label does not disable its children. Disabling one child leav
 
 CPU, memory and disk are standalone labels. Network is a vertical static group with download/upload children; its main label starts disabled. All use the common commands, checks, details, scopes and color rules rather than a separate hardcoded chart collector.
 
-Use each card's up/down buttons to reorder CPU, memory, disk and network. The order is persisted in `builtinOrder`, shared by the bottom bar and floating panel, and retained after restarting. Custom labels and groups retain their existing relative order.
+Use each card's up/down buttons to reorder CPU, memory, disk and network. The order is persisted in `builtinOrder` and retained after restarting. Custom labels and groups retain their existing relative order.
 
 **Restore defaults** removes only the selected built-in's override, preserving its top-level enable switch and ordering, and leaving other built-ins and custom labels untouched. Restoring network resets that group's main/child definitions to their factory configuration.
 
@@ -140,7 +142,9 @@ GPU thresholds measure VRAM use, not GPU compute utilization. CPU load is normal
 
 ## Connection scopes and mixed panes
 
-A standalone label or whole group can select multiple saved connections or layouts. The default unrestricted scope covers every supported terminal pane. Group members inherit the group's scope; an unmatched pane does not run even the object's check.
+A standalone label or whole group can select saved connections, whole layouts or individual panes within layouts. Layouts expand by default with indented pane entries. A pane remains selectable after its original connection profile is deleted, as long as the saved layout retains its copy. The default unrestricted scope covers every supported terminal pane. Group members inherit the group's scope; an unmatched pane does not run even the object's check.
+
+Checking a connection selects every entry with the **same original connection ID**; unchecking affects only that entry. Per-pane opt-outs override connection-wide or layout-wide selections and survive saving, reopening and JSON export/import. A layout checkbox selects or clears only its own panes. Equal names with different IDs do not link selections.
 
 Matching prioritizes each pane's **original saved connection ID**, not the focused pane, tab title or a sibling connection. If an old saved layout retains an obsolete connection ID, the plugin looks for exactly one current SSH profile with the same host, port, username and jump/proxy route. Missing or ambiguous matches do not inherit a scope. Hosts and containers on different ports remain separate. This compatibility fix is available in source/local builds and has not yet been published to npm.
 
@@ -148,7 +152,11 @@ In a `P1 / P2 / P1` layout, P1-bound metrics appear in both P1 panes and P2-boun
 
 Renaming preserves the association. Deleted profiles remain marked unavailable and stop matching; a new profile with the same name does not inherit the old ID. Removing the last selection does not make the metric global—you must explicitly choose all terminal panes.
 
-Saved layouts have IDs separate from the connections inside them. The plugin records a layout's origin when it is opened and retains that marker in recovery data. For **whole-layout bindings only**, an unmarked layout already open before installation, or a newly saved layout, must be reopened once from the saved-profile list. Direct connection-ID bindings need no such reopening.
+Saved layouts have IDs separate from the connections inside them. The plugin records a layout's origin when it is opened and retains that marker in recovery data. Whole-layout and individual-pane bindings require an unmarked layout already open before installation, or a newly saved layout, to be reopened once from the saved-profile list. Direct connection-ID bindings need no such reopening.
+
+Individual pane bindings also require that layout-origin marker; reopen an unmarked old window from its saved layout once. Pane targets combine the layout ID, saved position and original connection ID, so repeated connections can be unchecked individually. After editing a saved layout or removing/replacing panes, review unavailable scope entries and select the intended targets again.
+
+The small lower-left button in each pane controls only that pane's entire status bar. The button remains available when the bar is hidden. Saved layouts remember visibility separately for each occurrence: three identical connections can retain an off/off/on pattern when reopened, without affecting other layouts.
 
 ## Install, develop and publish
 

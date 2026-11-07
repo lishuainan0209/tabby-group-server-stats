@@ -3,6 +3,64 @@ import type { CustomMetric, CustomMetricGroup, DisplayScope } from './metric-mod
 export interface ScopeContext { profileIds: string[] }
 export interface ScopedMetrics { customMetrics?: CustomMetric[]; metricGroups?: CustomMetricGroup[] }
 
+export const PANE_SCOPE_MARKER = '__tabbyGroupServerStatsPaneId'
+export interface LayoutPaneTarget {
+    id: string
+    layoutId: string
+    layoutName: string
+    profileId: string
+    name: string
+    path: number[]
+    type: 'layout-pane'
+    connectionIds: string[]
+}
+
+export function layoutPaneTargetName(target: LayoutPaneTarget): string {
+    return `${target.layoutName} / ${target.path.map(index => index + 1).join('.')} / ${target.name}`
+}
+
+/** The path distinguishes repeated occurrences of the same original connection. */
+export function layoutPaneId(layoutId: string, path: number[], profileId: string): string {
+    return `layout-pane:${encodeURIComponent(layoutId)}:${path.join('.')}:${encodeURIComponent(profileId)}`
+}
+
+/** Visit only split children, not terminal output, options or authentication data. */
+export function layoutLeafTokens(token: any): Array<{ token: any; path: number[] }> {
+    const leaves: Array<{ token: any; path: number[] }> = []
+    const visited = new Set<any>()
+    const visit = (node: any, path: number[]) => {
+        if (!node || typeof node !== 'object' || visited.has(node)) return
+        visited.add(node)
+        if (node.type === 'app:split-tab' && Array.isArray(node.children)) {
+            node.children.forEach((child: any, index: number) => visit(child, [...path, index]))
+        } else if (path.length) leaves.push({ token: node, path })
+    }
+    visit(token, [])
+    return leaves
+}
+
+/** UI-safe metadata: a deleted standalone profile remains available inside its layout. */
+export function getLayoutPaneTargets(profiles: any[], includeConnectionAliases = true): LayoutPaneTarget[] {
+    const targets: LayoutPaneTarget[] = []
+    const seen = new Set<string>()
+    for (const layout of Array.isArray(profiles) ? profiles : []) {
+        if (layout?.type !== 'split-layout' || typeof layout.id !== 'string' || !layout.id) continue
+        for (const leaf of layoutLeafTokens(layout.options?.recoveryToken)) {
+            const profile = leaf.token.profile
+            if (profile?.type !== 'ssh' || typeof profile.id !== 'string' || !profile.id) continue
+            const id = layoutPaneId(layout.id, leaf.path, profile.id)
+            if (seen.has(id)) continue
+            seen.add(id)
+            targets.push({ id, layoutId: layout.id,
+                layoutName: typeof layout.name === 'string' && layout.name ? layout.name : layout.id,
+                profileId: profile.id,
+                name: typeof profile.name === 'string' && profile.name ? profile.name : profile.id,
+                path: leaf.path, type: 'layout-pane', connectionIds: includeConnectionAliases ? resolveProfileScopeIds(profile, profiles) : [profile.id] })
+        }
+    }
+    return targets
+}
+
 /** Connection identity only: never inspect passwords, keys, titles or sibling panes. */
 function sshEndpoint(profile: any): string | null {
     if (profile?.type !== 'ssh') return null
@@ -46,18 +104,31 @@ export function resolveProfileScopeIds(profile: any, availableProfiles: any[], e
     return matches.length === 1 ? [...ids, matches[0].id] : ids
 }
 
-export function matchesScope(scope: DisplayScope | undefined, context: ScopeContext, availableProfiles: any[]): boolean {
+function scopeInventory(profiles: any[]): { available: Set<string>; panes: Set<string> } {
+    const panes = new Set(getLayoutPaneTargets(profiles, false).map(target => target.id))
+    return { panes, available: new Set([...(profiles || []).map(profile => profile?.id).filter(Boolean), ...panes]) }
+}
+
+function matchesInventory(scope: DisplayScope | undefined, context: Set<string>, available: Set<string>, panes: Set<string>): boolean {
     if (!scope || scope.mode === 'all') return true
     if (scope.mode !== 'selected' || !Array.isArray(scope.profileIds)) return false
-    const available = new Set((availableProfiles || []).map(profile => profile?.id).filter(Boolean))
-    return scope.profileIds.some(id => available.has(id) && context.profileIds.includes(id))
+    if ((scope.excludedProfileIds || []).some(id => panes.has(id) && context.has(id))) return false
+    return scope.profileIds.some(id => available.has(id) && context.has(id))
+}
+
+export function matchesScope(scope: DisplayScope | undefined, context: ScopeContext, availableProfiles: any[]): boolean {
+    const { available, panes } = scopeInventory(availableProfiles)
+    return matchesInventory(scope, new Set(context.profileIds), available, panes)
 }
 
 export function filterScopedMetrics(config: ScopedMetrics, context: ScopeContext, profiles: any[]): Required<ScopedMetrics> {
+    const { available, panes } = scopeInventory(profiles)
+    const contextIds = new Set(context.profileIds)
+    const matches = (scope: DisplayScope | undefined) => matchesInventory(scope, contextIds, available, panes)
     return {
-        customMetrics: (config.customMetrics || []).filter(metric => metric.enabled !== false && matchesScope(metric.displayScope, context, profiles)),
+        customMetrics: (config.customMetrics || []).filter(metric => metric.enabled !== false && matches(metric.displayScope)),
         // A group is scoped as one unit. Its main/children inherit that scope.
-        metricGroups: (config.metricGroups || []).filter(group => group.enabled !== false && matchesScope(group.displayScope, context, profiles)),
+        metricGroups: (config.metricGroups || []).filter(group => group.enabled !== false && matches(group.displayScope)),
     }
 }
 

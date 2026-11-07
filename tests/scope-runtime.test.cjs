@@ -17,8 +17,8 @@ Module._load = function (name, parent, isMain) {
     if (name === 'tabby-core') return {}
     return originalLoad.call(this, name, parent, isMain)
 }
-const { MetricScopeService, LAYOUT_SCOPE_MARKER: marker } = require('../src/services/metric-scope.service.ts')
-const { matchesScope } = require('../src/display-scope.ts')
+const { MetricScopeService, LAYOUT_SCOPE_MARKER: marker, INSTANCE_VISIBILITY_MARKER } = require('../src/services/metric-scope.service.ts')
+const { matchesScope, getLayoutPaneTargets, layoutLeafTokens, PANE_SCOPE_MARKER } = require('../src/display-scope.ts')
 
 const token = (id) => ({ type: 'app:split-tab', orientation: 'h', ratios: [1, 1, 1], children: [], ...(id ? { [marker]: id } : {}) })
 const pane = id => ({ profile: { id, name: id }, session: { open: true, profile: { id } }, parent: null })
@@ -371,4 +371,411 @@ test('SSH aliases are re-evaluated when saved connections are removed, changed o
     config.store.profiles.push(savedSSH('third'))
     assert.deepEqual(ids(service, child), ['old'], 'new ambiguity must remove an earlier alias')
     service.ngOnDestroy()
+})
+
+function savedPaneLayout(id, profiles) {
+    return { id, type: 'split-layout', name: id, options: { recoveryToken: {
+        type: 'app:split-tab', children: profiles.map(profile => ({ type: 'app:ssh-tab', profile })),
+    } } }
+}
+
+test('opening a saved layout stamps distinct pane identities without changing its stored snapshots', async () => {
+    const saved = savedPaneLayout('layout', [savedSSH('deleted'), savedSSH('deleted')])
+    const before = JSON.stringify(saved)
+    const { service, config, profiles, app } = setup()
+    config.store.profiles = [saved]
+    const params = await profiles.newTabParametersForProfile(saved)
+    const snapshots = layoutLeafTokens(params.inputs._recoveredState)
+    const children = snapshots.map(entry => ({ profile: entry.token.profile, session: { open: true, profile: entry.token.profile } }))
+    const root = layout(null, children, params.inputs)
+    app.tabs = [root]
+    const targets = getLayoutPaneTargets(config.store.profiles)
+    assert.notEqual(snapshots[0].token.profile[PANE_SCOPE_MARKER], snapshots[1].token.profile[PANE_SCOPE_MARKER])
+    assert.equal(JSON.stringify(saved), before)
+    const scope = { mode: 'selected', profileIds: [targets[0].id] }
+    assert.equal(matchesScope(scope, service.contextForSession(children[0].session), config.store.profiles), true)
+    assert.equal(matchesScope(scope, service.contextForSession(children[1].session), config.store.profiles), false)
+    service.ngOnDestroy()
+})
+
+test('marked pane identity survives recovery and keeps per-pane opt-outs through repeated connections', async () => {
+    const saved = savedPaneLayout('layout', [savedSSH('shared'), savedSSH('shared')])
+    const first = setup()
+    first.config.store.profiles = [savedSSH('shared'), saved]
+    const params = await first.profiles.newTabParametersForProfile(saved)
+    const children = layoutLeafTokens(params.inputs._recoveredState).map(entry => ({ profile: entry.token.profile, session: { open: true, profile: entry.token.profile } }))
+    const root = layout(null, children, params.inputs)
+    root.getRecoveryToken = async () => ({ type: 'app:split-tab', children: children.map(child => ({ type: 'app:ssh-tab', profile: child.profile })) })
+    first.app.tabs = [root]
+    first.app.tabsChanged$.next()
+    const recovered = await root.getRecoveryToken()
+    first.service.ngOnDestroy()
+    const restored = recovered.children.map(entry => ({ profile: entry.profile, session: { open: true, profile: entry.profile } }))
+    const second = setup([layout(null, restored, { _recoveredState: recovered })])
+    second.config.store.profiles = [savedSSH('shared'), saved]
+    const targets = getLayoutPaneTargets(second.config.store.profiles)
+    const scope = { mode: 'selected', profileIds: ['shared', 'layout'], excludedProfileIds: [targets[0].id] }
+    assert.equal(matchesScope(scope, second.service.contextForSession(restored[0].session), second.config.store.profiles), false)
+    assert.equal(matchesScope(scope, second.service.contextForSession(restored[1].session), second.config.store.profiles), true)
+    second.service.ngOnDestroy()
+})
+
+test('existing marked layouts acquire child identities only after their complete leaf sequence matches', async () => {
+    const profiles = [savedSSH('old-one'), savedSSH('old-two', { port: 2202 })]
+    const saved = savedPaneLayout('layout', profiles)
+    // Different nested tree shape is normalized by Tabby, while leaf order stays intact.
+    saved.options.recoveryToken.children = [{ type: 'app:split-tab', children: saved.options.recoveryToken.children }]
+    const children = profiles.map(profile => ({ profile, session: { open: true, profile } }))
+    const state = JSON.parse(JSON.stringify(saved.options.recoveryToken))
+    state[marker] = 'layout'
+    const root = layout(null, children, { _recoveredState: state })
+    root.getRecoveryToken = async () => ({ type: 'app:split-tab', children: children.map(child => ({ type: 'app:ssh-tab', profile: child.profile })) })
+    const { service, config } = setup([root])
+    config.store.profiles = [saved]
+    const targets = getLayoutPaneTargets(config.store.profiles)
+    assert(service.contextForSession(children[0].session).profileIds.includes(targets[0].id))
+    assert(service.contextForSession(children[1].session).profileIds.includes(targets[1].id))
+    const recovery = await root.getRecoveryToken()
+    assert.equal(recovery.children[0].profile[PANE_SCOPE_MARKER], targets[0].id)
+    assert.equal(children[0].profile[PANE_SCOPE_MARKER], undefined, 'legacy upgrade must not edit the stored profile')
+    service.ngOnDestroy()
+
+    // A skipped or unknown leaf makes positional inference unsafe.
+    const altered = setup([layout(null, [children[0]], { _recoveredState: state })])
+    altered.config.store.profiles = [saved]
+    assert(!altered.service.contextForSession(children[0].session).profileIds.includes(targets[0].id))
+    altered.service.ngOnDestroy()
+})
+
+test('moving a pane preserves its identity within its layout and drops it outside that layout', async () => {
+    const saved = savedPaneLayout('layout', [savedSSH('same'), savedSSH('same')])
+    const { service, config, profiles, app } = setup()
+    config.store.profiles = [saved]
+    const params = await profiles.newTabParametersForProfile(saved)
+    const children = layoutLeafTokens(params.inputs._recoveredState).map(entry => ({ profile: entry.token.profile, session: { open: true, profile: entry.token.profile } }))
+    const root = layout(null, children, params.inputs)
+    app.tabs = [root]
+    const target = getLayoutPaneTargets(config.store.profiles)[0]
+    const child = children[0]
+    children.reverse()
+    assert(service.contextForSession(child.session).profileIds.includes(target.id), 'reordering live panes must not exchange their IDs')
+    children.splice(children.indexOf(child), 1)
+    child.parent = null; app.tabs.push(child)
+    assert(!service.contextForSession(child.session).profileIds.includes(target.id))
+    const other = layout('another-layout', [child])
+    app.tabs = [root, other]
+    assert(!service.contextForSession(child.session).profileIds.includes(target.id))
+    service.ngOnDestroy()
+})
+
+test('removed or replaced saved pane targets do not survive in a restored runtime context', async () => {
+    const saved = savedPaneLayout('layout', [savedSSH('old')])
+    const { service, config, profiles, app } = setup()
+    config.store.profiles = [saved]
+    const params = await profiles.newTabParametersForProfile(saved)
+    const profile = params.inputs._recoveredState.children[0].profile
+    const child = { profile, session: { open: true, profile } }
+    app.tabs = [layout(null, [child], params.inputs)]
+    const target = getLayoutPaneTargets(config.store.profiles)[0]
+    assert(service.contextForSession(child.session).profileIds.includes(target.id))
+    saved.options.recoveryToken.children[0].profile = savedSSH('replacement')
+    assert(!service.contextForSession(child.session).profileIds.includes(target.id))
+    config.store.profiles = []
+    assert(!service.contextForSession(child.session).profileIds.includes(target.id))
+    service.ngOnDestroy()
+})
+
+test('ConfigProxy-hidden pane markers survive reordered repeated connections and recovery without swapping exclusions', async () => {
+    // Like Tabby's ConfigProxy, only provider-default keys have visible getters.
+    const proxy = raw => {
+        const result = {}
+        for (const key of ['id', 'type', 'name', 'options']) {
+            Object.defineProperty(result, key, { enumerable: true, get: () => raw[key] })
+        }
+        result.__getValue = key => {
+            assert([PANE_SCOPE_MARKER, INSTANCE_VISIBILITY_MARKER].includes(key), 'only known plugin markers may be read from raw config')
+            return raw[key]
+        }
+        return result
+    }
+    const saved = savedPaneLayout('layout', [savedSSH('same'), savedSSH('same')])
+    const first = setup()
+    first.config.store.profiles = [saved]
+    const params = await first.profiles.newTabParametersForProfile(saved)
+    const children = layoutLeafTokens(params.inputs._recoveredState).map(entry => {
+        const profile = proxy(entry.token.profile)
+        assert.equal(profile[PANE_SCOPE_MARKER], undefined)
+        return { profile, session: { open: true, profile } }
+    })
+    const root = layout(null, children, params.inputs)
+    root.getRecoveryToken = async () => ({ type: 'app:split-tab', children: children.map(child => ({ type: 'app:ssh-tab', profile: child.profile })) })
+    first.app.tabs = [root]
+    first.app.tabsChanged$.next()
+    const [one, two] = getLayoutPaneTargets(first.config.store.profiles)
+    const firstChild = children[0]
+    children.reverse()
+    assert(first.service.contextForSession(firstChild.session).profileIds.includes(one.id))
+    assert(!first.service.contextForSession(firstChild.session).profileIds.includes(two.id))
+    const recovery = JSON.parse(JSON.stringify(await root.getRecoveryToken()))
+    assert.equal(recovery.children[0].profile[PANE_SCOPE_MARKER], two.id)
+    assert.equal(recovery.children[1].profile[PANE_SCOPE_MARKER], one.id)
+    first.service.ngOnDestroy()
+    const restored = recovery.children.map(entry => {
+        const profile = proxy(entry.profile)
+        return { profile, session: { open: true, profile } }
+    })
+    const second = setup([layout(null, restored, { _recoveredState: recovery })])
+    second.config.store.profiles = [saved]
+    const scope = { mode: 'selected', profileIds: ['layout'], excludedProfileIds: [one.id] }
+    assert.equal(matchesScope(scope, second.service.contextForSession(restored[0].session), second.config.store.profiles), true)
+    assert.equal(matchesScope(scope, second.service.contextForSession(restored[1].session), second.config.store.profiles), false)
+    second.service.ngOnDestroy()
+})
+
+test('legacy recovery uses a marker in its saved token before deriving a new positional identity', () => {
+    const saved = savedPaneLayout('layout', [savedSSH('same'), savedSSH('same')])
+    const [one, two] = getLayoutPaneTargets([saved])
+    const state = JSON.parse(JSON.stringify(saved.options.recoveryToken))
+    state[marker] = 'layout'
+    state.children[0].profile[PANE_SCOPE_MARKER] = two.id
+    state.children[1].profile[PANE_SCOPE_MARKER] = one.id
+    const children = [sshPane('same'), sshPane('same')]
+    const { service, config } = setup([layout(null, children, { _recoveredState: state })])
+    config.store.profiles = [saved]
+    assert(service.contextForSession(children[0].session).profileIds.includes(two.id))
+    assert(service.contextForSession(children[1].session).profileIds.includes(one.id))
+    service.ngOnDestroy()
+})
+
+async function openSavedPaneLayout(env, saved) {
+    const params = await env.profiles.newTabParametersForProfile(saved)
+    const children = layoutLeafTokens(params.inputs._recoveredState).map(entry => {
+        const profile = entry.token.profile
+        return { profile, session: { open: true, profile } }
+    })
+    const root = layout(null, children, params.inputs)
+    env.app.tabs.push(root)
+    env.app.tabsChanged$.next()
+    return { root, children }
+}
+
+test('three same-connection panes persist independent false/false/true visibility when a saved layout is reopened', async () => {
+    const shared = savedSSH('same')
+    const saved = savedPaneLayout('layout', [shared, shared, shared])
+    const before = JSON.stringify(saved)
+    const first = setup()
+    first.config.store.profiles = [shared, saved]
+    let saves = 0
+    first.config.save = () => { saves++ }
+    const { children } = await openSavedPaneLayout(first, saved)
+    first.service.setPaneVisible(children[0].session, false)
+    first.service.setPaneVisible(children[1].session, false)
+    assert.deepEqual(children.map(child => first.service.isPaneVisible(child.session)), [false, false, true])
+    assert.equal(saves, 2)
+    assert.equal(JSON.stringify(saved), before, 'visibility must not alter the shared saved connection or layout')
+    const savedVisibility = JSON.parse(JSON.stringify(first.config.store.plugin.serverStats.paneVisibility))
+    assert.equal(Object.keys(savedVisibility).length, 2)
+    first.service.ngOnDestroy()
+    const second = setup()
+    second.config.store.profiles = [shared, saved]
+    second.config.store.plugin = { serverStats: { paneVisibility: savedVisibility } }
+    const reopened = await openSavedPaneLayout(second, saved)
+    assert.deepEqual(reopened.children.map(child => second.service.isPaneVisible(child.session)), [false, false, true])
+    second.service.setPaneVisible(reopened.children[0].session, true)
+    assert.deepEqual(reopened.children.map(child => second.service.isPaneVisible(child.session)), [true, false, true])
+    second.service.ngOnDestroy()
+})
+
+test('visibility is isolated between layouts and deleted/replaced pane targets do not reuse old hidden flags', async () => {
+    const savedA = savedPaneLayout('layout-a', [savedSSH('same')])
+    const savedB = savedPaneLayout('layout-b', [savedSSH('same')])
+    const env = setup()
+    env.config.store.profiles = [savedA, savedB]
+    const a = await openSavedPaneLayout(env, savedA)
+    const b = await openSavedPaneLayout(env, savedB)
+    env.service.setPaneVisible(a.children[0].session, false)
+    assert.equal(env.service.isPaneVisible(a.children[0].session), false)
+    assert.equal(env.service.isPaneVisible(b.children[0].session), true)
+    savedA.options.recoveryToken.children[0].profile = savedSSH('replacement')
+    const replacement = await openSavedPaneLayout(env, savedA)
+    assert.equal(env.service.isPaneVisible(replacement.children[0].session), true)
+    env.config.store.profiles = [savedB]
+    assert.equal(env.service.isPaneVisible(a.children[0].session), true)
+    env.service.ngOnDestroy()
+})
+
+test('standalone panes using one shared profile persist distinct instance visibility without modifying that profile', async () => {
+    const shared = savedSSH('shared')
+    const makeLeaf = profile => ({ profile, session: { open: true, profile }, destroyed$: new Subject(),
+        getRecoveryToken: async () => ({ type: 'app:ssh-tab', profile }) })
+    const one = makeLeaf(shared), two = makeLeaf(shared)
+    const originalRecovery = one.getRecoveryToken
+    const env = setup([one, two])
+    env.config.store.profiles = [shared]
+    env.service.setPaneVisible(one.session, false)
+    assert.equal(env.service.isPaneVisible(one.session), false)
+    assert.equal(env.service.isPaneVisible(two.session), true)
+    assert.equal(shared[INSTANCE_VISIBILITY_MARKER], undefined)
+    const recovered = JSON.parse(JSON.stringify(await one.getRecoveryToken({ includeState: true })))
+    assert.match(recovered.profile[INSTANCE_VISIBILITY_MARKER], /^pane-instance:[a-f0-9]{32}$/)
+    assert.equal(recovered.profile.id, shared.id)
+    const savedVisibility = JSON.parse(JSON.stringify(env.config.store.plugin.serverStats.paneVisibility))
+    env.service.ngOnDestroy()
+    assert.equal(one.getRecoveryToken, originalRecovery)
+    assert.equal(one.destroyed$.observers.length, 0)
+    // A fresh connection opened from the saved profile is still independent.
+    const reopened = makeLeaf(shared)
+    const restored = makeLeaf(recovered.profile)
+    const next = setup([reopened, restored])
+    next.config.store.profiles = [shared]
+    next.config.store.plugin = { serverStats: { paneVisibility: savedVisibility } }
+    assert.equal(next.service.isPaneVisible(restored.session), false)
+    assert.equal(next.service.isPaneVisible(reopened.session), true)
+    next.service.setPaneVisible(reopened.session, false)
+    next.service.setPaneVisible(restored.session, true)
+    assert.equal(next.service.isPaneVisible(reopened.session), false)
+    assert.equal(next.service.isPaneVisible(restored.session), true)
+    next.service.ngOnDestroy()
+})
+
+test('ConfigProxy-hidden standalone visibility identity survives recovery and reconnects', async () => {
+    const key = 'pane-instance:' + 'b'.repeat(32)
+    const raw = { ...savedSSH('saved'), [INSTANCE_VISIBILITY_MARKER]: key }
+    const profile = { id: raw.id, type: raw.type, options: raw.options,
+        __getValue: field => field === INSTANCE_VISIBILITY_MARKER ? key : undefined }
+    const child = { profile, session: { open: true, profile }, getRecoveryToken: async () => ({ type: 'app:ssh-tab', profile }) }
+    const env = setup([child])
+    env.config.store.profiles = [savedSSH('saved')]
+    env.config.store.plugin = { serverStats: { paneVisibility: { [key]: false } } }
+    assert.equal(env.service.isPaneVisible(child.session), false)
+    child.session = { open: true, profile }
+    assert.equal(env.service.isPaneVisible(child.session), false)
+    assert.equal((await child.getRecoveryToken({ includeState: true })).profile[INSTANCE_VISIBILITY_MARKER], key)
+    env.service.ngOnDestroy()
+})
+
+test('duplicating a hidden standalone pane strips its old recovery identity and creates an independent toggle', async () => {
+    const shared = savedSSH('same')
+    const child = { profile: shared, session: { open: true, profile: shared },
+        getRecoveryToken: async () => ({ type: 'app:ssh-tab', profile: shared }) }
+    const env = setup([child])
+    env.config.store.profiles = [shared]
+    env.service.setPaneVisible(child.session, false)
+    const oldKey = env.service.visibilityKey(child.session)
+    const recovery = await child.getRecoveryToken({ includeState: true })
+    assert.equal(recovery.profile[INSTANCE_VISIBILITY_MARKER], oldKey)
+    // Duplicate uses no options, unlike actual session recovery.
+    const copied = await child.getRecoveryToken()
+    assert.notEqual(copied.profile[INSTANCE_VISIBILITY_MARKER], oldKey)
+    assert.match(copied.profile[INSTANCE_VISIBILITY_MARKER], /^pane-instance:[a-f0-9]{32}$/)
+    const duplicate = { profile: copied.profile, session: { open: true, profile: copied.profile },
+        getRecoveryToken: async () => copied }
+    env.app.tabs.push(duplicate)
+    assert.equal(env.service.isPaneVisible(duplicate.session), true)
+    env.service.setPaneVisible(duplicate.session, false)
+    assert.notEqual(env.service.visibilityKey(duplicate.session), oldKey)
+    env.service.setPaneVisible(child.session, true)
+    assert.equal(env.service.isPaneVisible(child.session), true)
+    assert.equal(env.service.isPaneVisible(duplicate.session), false)
+    env.service.ngOnDestroy()
+})
+
+test('a duplicated layout pane does not reuse its source slot even after the original pane is removed', async () => {
+    const saved = savedPaneLayout('layout', [savedSSH('same')])
+    const env = setup()
+    env.config.store.profiles = [saved]
+    const { root, children } = await openSavedPaneLayout(env, saved)
+    const original = children[0]
+    original.getRecoveryToken = async () => ({ type: 'app:ssh-tab', profile: original.profile })
+    env.app.tabsChanged$.next()
+    env.service.setPaneVisible(original.session, false)
+    const oldKey = env.service.visibilityKey(original.session)
+    const copied = await original.getRecoveryToken()
+    assert.equal(copied.profile[PANE_SCOPE_MARKER], undefined)
+    assert.match(copied.profile[INSTANCE_VISIBILITY_MARKER], /^pane-instance:[a-f0-9]{32}$/)
+    const duplicate = { profile: copied.profile, session: { open: true, profile: copied.profile }, parent: root,
+        getRecoveryToken: async () => copied }
+    children.push(duplicate)
+    assert.equal(env.service.isPaneVisible(duplicate.session), true)
+    assert(!env.service.contextForSession(duplicate.session).profileIds.includes(oldKey))
+    // The raw profile-ID sequence now looks like the initial saved layout again.
+    // It must not make this newly created pane inherit the old slot or hidden flag.
+    children.splice(0, 1); original.parent = null
+    assert.equal(env.service.isPaneVisible(duplicate.session), true)
+    assert(!env.service.contextForSession(duplicate.session).profileIds.includes(oldKey))
+    env.service.setPaneVisible(duplicate.session, false)
+    assert.notEqual(env.service.visibilityKey(duplicate.session), oldKey)
+    env.service.ngOnDestroy()
+})
+
+test('duplicate recovery removes hidden ConfigProxy identifiers as well as visible marker properties', async () => {
+    const key = 'pane-instance:' + 'd'.repeat(32)
+    const raw = { ...savedSSH('same'), [INSTANCE_VISIBILITY_MARKER]: key }
+    const profile = { id: raw.id, type: raw.type, options: raw.options,
+        __getValue: field => raw[field] }
+    const leaf = { profile, session: { open: true, profile }, getRecoveryToken: async () => ({ type: 'app:ssh-tab', profile }) }
+    const env = setup([leaf])
+    env.config.store.profiles = [savedSSH('same')]
+    env.config.store.plugin = { serverStats: { paneVisibility: { [key]: false } } }
+    const duplicate = await leaf.getRecoveryToken({ includeState: false })
+    assert.notEqual(duplicate.profile[INSTANCE_VISIBILITY_MARKER], key)
+    assert.match(duplicate.profile[INSTANCE_VISIBILITY_MARKER], /^pane-instance:[a-f0-9]{32}$/)
+    assert.equal(duplicate.profile[PANE_SCOPE_MARKER], undefined)
+    assert.equal(duplicate.profile.__getValue, undefined, 'a copied accessor must not expose the old raw identifier')
+    assert.equal(profile.__getValue(INSTANCE_VISIBILITY_MARKER), key, 'the original proxy remains untouched')
+    env.service.ngOnDestroy()
+})
+
+test('replacement duplicates retain independent visibility after restart, including duplicates never toggled', async () => {
+    for (const explicitlyShown of [false, true]) {
+        const saved = savedPaneLayout('layout', [savedSSH('same')])
+        const env = setup()
+        env.config.store.profiles = [saved]
+        const params = await env.profiles.newTabParametersForProfile(saved)
+        const makeLeaf = profile => ({ profile, session: { open: true, profile },
+            getRecoveryToken: async () => ({ type: 'app:ssh-tab', profile }) })
+        const original = makeLeaf(params.inputs._recoveredState.children[0].profile)
+        const children = [original]
+        const root = layout(null, children, { ...params.inputs, getRecoveryToken: async options => ({
+            type: 'app:split-tab', children: await Promise.all(children.map(child => child.getRecoveryToken(options))),
+        }) })
+        env.app.tabs = [root]; env.app.tabsChanged$.next()
+        env.service.setPaneVisible(original.session, false)
+        const oldKey = env.service.visibilityKey(original.session)
+        const copied = await original.getRecoveryToken()
+        const duplicate = makeLeaf(copied.profile)
+        duplicate.parent = root
+        children.splice(0, 1, duplicate); original.parent = null
+        env.app.tabsChanged$.next()
+        if (explicitlyShown) env.service.setPaneVisible(duplicate.session, true)
+        assert.equal(env.service.isPaneVisible(duplicate.session), true)
+        const ownKey = env.service.visibilityKey(duplicate.session)
+        assert.notEqual(ownKey, oldKey)
+        const state = JSON.parse(JSON.stringify(await root.getRecoveryToken({ includeState: true })))
+        assert.equal(state.children[0].profile[PANE_SCOPE_MARKER], undefined)
+        assert.equal(state.children[0].profile[INSTANCE_VISIBILITY_MARKER], ownKey)
+        const persisted = JSON.parse(JSON.stringify(env.config.store.plugin.serverStats.paneVisibility))
+        env.service.ngOnDestroy()
+        const restored = makeLeaf(state.children[0].profile)
+        const next = setup([layout(null, [restored], { _recoveredState: state })])
+        next.config.store.profiles = [saved]
+        next.config.store.plugin = { serverStats: { paneVisibility: persisted } }
+        assert.equal(next.service.visibilityKey(restored.session), ownKey)
+        assert.equal(next.service.isPaneVisible(restored.session), true)
+        assert(!next.service.contextForSession(restored.session).profileIds.includes(oldKey))
+        next.service.ngOnDestroy()
+    }
+})
+
+test('opening a newly saved layout gives explicit layout targets priority over inherited instance IDs', async () => {
+    const inherited = { ...savedSSH('same'), [INSTANCE_VISIBILITY_MARKER]: 'pane-instance:' + 'a'.repeat(32) }
+    const saved = savedPaneLayout('new-layout', [inherited])
+    const env = setup()
+    env.config.store.profiles = [saved]
+    const [target] = getLayoutPaneTargets([saved])
+    env.config.store.plugin = { serverStats: { paneVisibility: { [target.id]: false, [inherited[INSTANCE_VISIBILITY_MARKER]]: true } } }
+    const { children } = await openSavedPaneLayout(env, saved)
+    assert.equal(env.service.visibilityKey(children[0].session), target.id)
+    assert.equal(env.service.isPaneVisible(children[0].session), false)
+    env.service.ngOnDestroy()
 })

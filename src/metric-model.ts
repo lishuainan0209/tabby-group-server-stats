@@ -12,6 +12,8 @@ export interface DisplayScope {
     mode: 'all' | 'selected'
     profileIds: string[]
     profileNames?: Record<string, string>
+    /** Explicit per-layout pane opt-outs override a selected connection/layout. */
+    excludedProfileIds?: string[]
 }
 
 export interface CustomMetric {

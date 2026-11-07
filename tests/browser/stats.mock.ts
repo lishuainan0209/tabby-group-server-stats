@@ -3,6 +3,12 @@ import { Subject } from 'rxjs'
 @Injectable() export class StatsService {
     static isDebugEnabled = false
     statsUpdated$ = new Subject<any>()
+    isPaneVisible(session: any): boolean { return (window as any).harness.paneVisibility[session?.id] !== false }
+    setPaneVisible(session: any, visible: boolean): void {
+        const root = (window as any).harness
+        root.paneVisibility[session.id] = visible
+        root.config.changed$.next()
+    }
     async fetchDetails(session: any, metrics: any[]) {
         const root = (window as any).harness
         root.detailCalls.push(metrics.map(metric => metric.id))

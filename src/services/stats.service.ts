@@ -89,6 +89,14 @@ export class StatsService {
         return this.scopes?.contextForSession(session) || { profileIds: session?.profile?.id ? [session.profile.id] : [] };
     }
 
+    public isPaneVisible(session: any): boolean {
+        return this.scopes?.isPaneVisible?.(session) ?? true;
+    }
+
+    public setPaneVisible(session: any, visible: boolean): void {
+        this.scopes?.setPaneVisible?.(session, visible);
+    }
+
     /** Disabled/out-of-scope commands never run. Unavailable items still refresh to detect recovery. */
     public getVisibleConfig(session: any): { customMetrics: CustomMetric[]; metricGroups: CustomMetricGroup[] } {
         const conf = this.config?.store?.plugin?.serverStats || {};

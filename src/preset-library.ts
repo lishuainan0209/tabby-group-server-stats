@@ -1,6 +1,7 @@
 import { CustomMetric, CustomMetricGroup, DisplayScope, shellQuote } from './metric-model'
 import { createCpuSampleCommand } from './builtin-metrics'
 import { METRIC_COLORS, capacityColorRules, usageColorRules } from './metric-colors'
+import { getLayoutPaneTargets, layoutPaneTargetName } from './display-scope'
 
 export interface MetricPreset {
     id: string
@@ -13,10 +14,12 @@ export interface MetricPreset {
     group?: CustomMetricGroup
     /** Portable bindings contain saved profile names, never machine-local IDs. */
     profileNames?: string[]
+    /** Portable per-pane opt-outs, resolved before any selected scope can run. */
+    excludedProfileNames?: string[]
     source?: { name: string; url?: string; license?: string }
     audience?: 'author-lab'
 }
-export interface PresetProfile { id?: string; name?: string }
+export interface PresetProfile { id?: string; name?: string; type?: string; options?: any }
 export interface InstantiatedPreset {
     customMetrics: CustomMetric[]
     metricGroups: CustomMetricGroup[]
@@ -56,7 +59,16 @@ function definitionBody(item: CustomMetric | CustomMetricGroup, kind: 'metric' |
 /** A conservative legacy fallback: actual commands and targets, never display names. */
 export function presetDefinitionFingerprint(item: CustomMetric | CustomMetricGroup, kind: 'metric' | 'group'): string {
     const scope = item.displayScope?.mode === 'selected' ? ['selected', [...new Set(item.displayScope.profileIds || [])].sort()] : ['all']
+    if (item.displayScope?.mode === 'selected' && item.displayScope.excludedProfileIds?.length) {
+        scope.push([...new Set(item.displayScope.excludedProfileIds)].sort())
+    }
     return JSON.stringify([kind, definitionBody(item, kind), scope])
+}
+
+function scopeNames(scope: DisplayScope | undefined, excluded = false): string[] | undefined {
+    if (scope?.mode !== 'selected') return undefined
+    const ids = excluded ? scope.excludedProfileIds || [] : scope.profileIds || []
+    return [...new Set(ids.map(id => scope.profileNames?.[id]).filter((name): name is string => typeof name === 'string' && Boolean(name.trim())))]
 }
 
 // Content-derived anonymous IDs are stable when a flat JSON library is reordered.
@@ -81,8 +93,10 @@ function presetOrigin(entry: MetricPreset): PresetOrigin {
     const generated = /^(?:legacy|preset)-\d+$/.test(entry.id)
     // An anonymous file has no durable namespace for its IDs. Include its
     // definition so unrelated libraries with the same ID cannot block each other.
-    const requestedNames = entry.profileNames ?? (target.displayScope?.mode === 'selected' ? Object.values(target.displayScope.profileNames || {}) : undefined)
+    const requestedNames = entry.profileNames ?? scopeNames(target.displayScope)
+    const excludedNames = entry.excludedProfileNames ?? scopeNames(target.displayScope, true) ?? []
     const portableScope = requestedNames === undefined ? ['all'] : ['selected', [...new Set(requestedNames)].sort()]
+    if (excludedNames.length) portableScope.push([...new Set(excludedNames)].sort())
     const id = generated || !source ? contentId(JSON.stringify([entry.kind, definitionBody(target, entry.kind), portableScope])) : entry.id
     return { id, source, kind: entry.kind }
 }
@@ -237,9 +251,12 @@ export function normalizePresetLibrary(input: unknown): MetricPreset[] {
                 main: normalizeMetric(entry.group.main, `${result.id}-main`),
                 children: entry.group.children.map((metric: any, child: number) => normalizeMetric(metric, `${result.id}-${child}`)) }
         } else throw new Error('Invalid preset kind')
-        if (result.profileNames !== undefined) {
-            if (!Array.isArray(result.profileNames) || result.profileNames.some(name => typeof name !== 'string')) throw new Error('Invalid preset profile names')
-            result.profileNames = [...new Set(result.profileNames.map(name => name.trim()).filter(Boolean))]
+        for (const key of ['profileNames', 'excludedProfileNames'] as const) {
+            const names = result[key]
+            if (names !== undefined) {
+                if (!Array.isArray(names) || names.some(name => typeof name !== 'string')) throw new Error('Invalid preset profile names')
+                result[key] = [...new Set(names.map(name => name.trim()).filter(Boolean))]
+            }
         }
         return result
     })
@@ -256,15 +273,30 @@ export function instantiatePreset(preset: MetricPreset, profiles: PresetProfile[
     const missingProfileNames: string[] = []
     let scope: DisplayScope = { mode: 'all', profileIds: [] }
     const originalScope = entry.kind === 'group' ? entry.group?.displayScope : entry.metric?.displayScope
-    const requestedNames = entry.profileNames ?? (originalScope?.mode === 'selected' ? Object.values(originalScope.profileNames || {}) : undefined)
-    if (requestedNames !== undefined) {
+    const requestedNames = entry.profileNames ?? scopeNames(originalScope)
+    const excludedNames = entry.excludedProfileNames ?? scopeNames(originalScope, true) ?? []
+    const unnamedExclusion = entry.excludedProfileNames === undefined && originalScope?.mode === 'selected' &&
+        (originalScope.excludedProfileIds || []).some(id => !originalScope.profileNames?.[id]?.trim())
+    if (requestedNames !== undefined || excludedNames.length) {
         scope = { mode: 'selected', profileIds: [], profileNames: {} }
-        for (const name of [...new Set(requestedNames)]) {
-            const matches = profiles.filter(profile => profile.id && profile.name?.trim() === name.trim())
+        const targets: PresetProfile[] = [...profiles, ...getLayoutPaneTargets(profiles).map(target => ({ id: target.id, name: layoutPaneTargetName(target) }))]
+        for (const name of [...new Set(requestedNames || [])]) {
+            const matches = targets.filter(profile => profile.id && profile.name?.trim() === name.trim())
             if (matches.length !== 1) { missingProfileNames.push(name); continue }
             scope.profileIds.push(matches[0].id!)
             scope.profileNames![matches[0].id!] = matches[0].name!
         }
+        let missingExclusion = unnamedExclusion
+        if (unnamedExclusion) missingProfileNames.push('Unnamed excluded pane / 未命名排除分屏')
+        if (excludedNames.length) scope.excludedProfileIds = []
+        for (const name of [...new Set(excludedNames)]) {
+            const matches = targets.filter(profile => profile.id && profile.name?.trim() === name.trim())
+            if (matches.length !== 1) { missingProfileNames.push(name); missingExclusion = true; continue }
+            scope.excludedProfileIds!.push(matches[0].id!)
+            scope.profileNames![matches[0].id!] = matches[0].name!
+        }
+        // Losing an opt-out must not turn a deliberately hidden pane back on.
+        if (missingExclusion) scope.profileIds = []
     }
     const metric = (value: CustomMetric): CustomMetric => {
         const result = { ...clone(value), id: makeId(), displayScope: undefined } as PresetTarget
@@ -282,7 +314,13 @@ export function instantiatePreset(preset: MetricPreset, profiles: PresetProfile[
 export function exportPresetLibrary(presets: MetricPreset[]): string {
     const result = normalizePresetLibrary(presets).map(entry => {
         const target = entry.kind === 'group' ? entry.group! : entry.metric!
-        if (target.displayScope?.mode === 'selected') entry.profileNames = entry.profileNames ?? Object.values(target.displayScope.profileNames || {})
+        if (target.displayScope?.mode === 'selected') {
+            entry.profileNames = entry.profileNames ?? scopeNames(target.displayScope)
+            entry.excludedProfileNames = entry.excludedProfileNames ?? scopeNames(target.displayScope, true)
+            if ((target.displayScope.excludedProfileIds || []).some(id => !target.displayScope?.profileNames?.[id]?.trim())) {
+                entry.profileNames = []
+            }
+        }
         target.displayScope = { mode: entry.profileNames === undefined ? 'all' : 'selected', profileIds: [] }
         if (entry.group) for (const metric of [entry.group.main, ...entry.group.children]) delete metric.displayScope
         return entry

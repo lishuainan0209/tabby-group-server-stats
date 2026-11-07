@@ -2,9 +2,8 @@ import { NgModule, ComponentFactoryResolver, ApplicationRef, Injector, EmbeddedV
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { NgbModule } from '@ng-bootstrap/ng-bootstrap'
-import TabbyCoreModule, { ToolbarButtonProvider, ConfigProvider, TranslateService, AppService, ConfigService } from 'tabby-core'
+import TabbyCoreModule, { ConfigProvider, TranslateService, AppService, ConfigService } from 'tabby-core'
 import { SettingsTabProvider } from 'tabby-settings'
-import { NgChartsModule } from 'ng2-charts'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -12,8 +11,6 @@ import * as path from 'path'
 import { ServerStatsConfigProvider } from './config'
 import { TRANSLATIONS } from './translations'
 import { StatsService } from './services/stats.service'
-import { StatsToolbarButtonProvider } from './toolbar-button.provider'
-import { ServerStatsFloatingPanelComponent } from './components/floating-panel.component'
 import { MetricStripComponent } from './components/metric-strip.component'
 import { ServerStatsBottomBarComponent } from './components/bottom-bar.component'
 import { ServerStatsSettingsComponent, ServerStatsSettingsTabProvider } from './components/settings.component'
@@ -47,19 +44,16 @@ const logDebug = (message: string) => {
 }
 
 @NgModule({
-    imports: [CommonModule, FormsModule, NgChartsModule, TabbyCoreModule, NgbModule], 
-    declarations: [MetricStripComponent, ServerStatsFloatingPanelComponent, ServerStatsBottomBarComponent, ServerStatsSettingsComponent],
-    entryComponents: [ServerStatsFloatingPanelComponent, ServerStatsBottomBarComponent, ServerStatsSettingsComponent],
+    imports: [CommonModule, FormsModule, TabbyCoreModule, NgbModule],
+    declarations: [MetricStripComponent, ServerStatsBottomBarComponent, ServerStatsSettingsComponent],
+    entryComponents: [ServerStatsBottomBarComponent, ServerStatsSettingsComponent],
     providers: [
         { provide: ConfigProvider, useClass: ServerStatsConfigProvider, multi: true },
-        { provide: ToolbarButtonProvider, useClass: StatsToolbarButtonProvider, multi: true },
         { provide: SettingsTabProvider, useClass: ServerStatsSettingsTabProvider, multi: true }, 
         StatsService
     ]
 })
 export default class ServerStatsModule {
-    private floatingRef: any = null
-    private floatingElem: HTMLElement | null = null
     private activeDisplayMode: string | null = null
     private tabInstances: WeakMap<HTMLElement, TabInstance> = new WeakMap()
     private attachedTabs = new Set<HTMLElement>()
@@ -116,7 +110,8 @@ export default class ServerStatsModule {
     }
 
     private getDisplayMode() {
-        return this.config?.store?.plugin?.serverStats?.displayMode || 'bottomBar'
+        // Legacy floatingPanel settings must not hide the only supported view.
+        return 'bottomBar'
     }
 
     private safeRun(label: string, fn: () => void) {
@@ -143,26 +138,10 @@ export default class ServerStatsModule {
             return
         }
 
-        this.destroyFloating()
         this.teardownAllTabs()
 
-        if (mode === 'floatingPanel') {
-            this.safeRun('createFloatingPanel', () => this.createFloatingPanel())
-        } else {
-            this.safeRun('ensureGlobalStyle', () => this.ensureGlobalStyle())
-            this.safeRun('initializePerTabBars', () => this.initializePerTabBars())
-        }
-    }
-
-    private createFloatingPanel() {
-        logDebug('[state] createFloatingPanel')
-        const floatingFactory = this.componentFactoryResolver.resolveComponentFactory(ServerStatsFloatingPanelComponent)
-        this.floatingRef = floatingFactory.create(this.injector)
-        this.appRef.attachView(this.floatingRef.hostView)
-        this.floatingElem = (this.floatingRef.hostView as EmbeddedViewRef<any>).rootNodes[0] as HTMLElement
-        document.body.appendChild(this.floatingElem);
-        this.floatingRef.changeDetectorRef.detectChanges();
-        setTimeout(() => this.floatingRef.instance.checkAndFetch(), 100);
+        this.safeRun('ensureGlobalStyle', () => this.ensureGlobalStyle())
+        this.safeRun('initializePerTabBars', () => this.initializePerTabBars())
     }
 
     private initializePerTabBars() {
@@ -494,9 +473,16 @@ export default class ServerStatsModule {
             if (!supported) {
                 return { data: null, session: activeSession, supported: false }
             }
+            // A collapsed pane retains its reopen button but starts no metric work.
+            if (this.statsService.isPaneVisible?.(collectingSession) === false) {
+                return { data: null, session: collectingSession, supported: true }
+            }
             const data = await this.statsService.fetchStats(collectingSession)
             if (!alive || collectingSession.open === false || activeSession !== collectingSession ||
                 this.resolveSessionForElement(sshTabEl) !== collectingSession) return null
+            if (this.statsService.isPaneVisible?.(collectingSession) === false) {
+                return { data: null, session: collectingSession, supported: true }
+            }
             const latestTab = this.resolveTabForElement(sshTabEl)
             if (latestTab && (latestTab.frontendIsReady === false || !latestTab.frontend)) return null
             return { data, session: collectingSession, supported: true }
@@ -563,7 +549,9 @@ export default class ServerStatsModule {
                 return
             }
             if ((barRef.instance as any).setExternalLoading) {
-                (barRef.instance as any).setExternalLoading(true)
+                // Saving one pane's visibility also emits a global config event.
+                // Keep other panes' existing readings on screen while refreshing.
+                (barRef.instance as any).setExternalLoading(state.last === null)
             }
             setTimeout(() => runPoll(), 300)
         }
@@ -736,20 +724,6 @@ export default class ServerStatsModule {
                 this.disposables.push(() => sub.unsubscribe())
             }
         })
-    }
-
-    private destroyFloating() {
-        if (this.floatingRef) {
-            try {
-                this.appRef.detachView(this.floatingRef.hostView)
-            } catch {}
-            this.floatingRef.destroy()
-            if (this.floatingElem && this.floatingElem.parentNode) {
-                this.floatingElem.parentNode.removeChild(this.floatingElem)
-            }
-            this.floatingRef = null
-            this.floatingElem = null
-        }
     }
 
     private teardownAllTabs() {

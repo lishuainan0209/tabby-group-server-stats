@@ -7,6 +7,7 @@ import { MetricPreset, getBundledPresets, normalizePresetLibrary, instantiatePre
 import { DEFAULT_GITHUB_PRESETS_URL, fetchGitHubPresets, PresetGitHubError } from '../preset-github'
 import { METRIC_COLORS } from '../metric-colors'
 import { TRANSLATIONS } from '../translations'
+import { getLayoutPaneTargets, layoutPaneTargetName } from '../display-scope'
 import { 
     CustomMetric,
     CustomMetricGroup,
@@ -19,7 +20,7 @@ import {
     POPULAR_ICON_PRESETS
 } from '../config'
 
-interface ScopeChoice { id: string; name: string; type: string; group: string; disambiguator?: string }
+interface ScopeChoice { id: string; name: string; type: string; group: string; disambiguator?: string; layoutId?: string; layoutName?: string; profileId?: string; connectionIds?: string[]; path?: number[]; storedName?: string }
 interface IconPresetChoice { name: string; label: string; category?: string; keywords?: string | string[] }
 interface ImportedPresetMetadata {
     importedLabel: string
@@ -34,25 +35,11 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
 @Component({
     selector: 'server-stats-settings',
     template: `
-        <h3 translate>Server Stats</h3>
-        
-        <!-- 显示模式选择 -->
+        <h3 translate>Bottom Status Bar</h3>
         <div class="form-line">
-            <div class="header">
-                <div class="title" translate>Display Mode</div>
-                <div class="description" translate>Choose between floating panel or bottom bar</div>
-            </div>
-            <div class="btn-group">
-                <input type="radio" class="btn-check" name="displayMode" id="displayModeFloating" 
-                    autocomplete="off" value="floatingPanel"
-                    [(ngModel)]="config.store.plugin.serverStats.displayMode" 
-                    (ngModelChange)="save()">
-                <label class="btn btn-secondary" for="displayModeFloating" translate>Floating Panel</label>
-                <input type="radio" class="btn-check" name="displayMode" id="displayModeBottom" 
-                    autocomplete="off" value="bottomBar"
-                    [(ngModel)]="config.store.plugin.serverStats.displayMode" 
-                    (ngModelChange)="save()">
-                <label class="btn btn-secondary" for="displayModeBottom" translate>Bottom Bar</label>
+            <div class="header"><div class="title" translate>Show bottom status bar</div></div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="statusBarEnabled" [(ngModel)]="config.store.plugin.serverStats.enabled" (ngModelChange)="save()" [attr.aria-label]="'Show bottom status bar' | translate">
             </div>
         </div>
 
@@ -104,7 +91,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
         <section class="settings-section builtin-metrics mt-4 mb-3">
             <h4 translate>Default Metrics</h4>
             <p class="text-muted" translate>Edit built-in commands and appearance, or restore an item to its defaults.</p>
-            <p class="text-muted builtin-order-help" translate>Move items up or down to set their order in the bottom bar and floating panel.</p>
+            <p class="text-muted builtin-order-help" translate>Move items up or down to set their order in the bottom status bar.</p>
             <div class="list-group-item custom-metric-item builtin-card p-3 mb-2" *ngFor="let key of builtinKeys; let b = index" [attr.data-builtin]="key" [class.metric-disabled]="defaultMetricsConfig[key] === false">
                 <div class="builtin-header">
                     <div class="group-summary">
@@ -328,16 +315,19 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                 <div class="form-text" *ngIf="currentGroup" translate>The entire group shares this scope, including its main metric and children.</div>
                 <div class="form-text" *ngIf="scopeMode === 'all'" translate>Show in every supported terminal pane, including new connections and split panes.</div>
                 <ng-container *ngIf="scopeMode === 'selected'">
-                    <div class="scope-help mt-2" translate>A connection matches each pane using that saved connection. A layout matches every pane opened within that saved layout. Multiple selections are combined.</div>
-                    <div class="form-text mb-2" translate>For a mixed P1 / P2 / P1 layout, select P1 for metrics that belong only to its two P1 panes. Select the layout only for metrics shared by all panes.</div>
+                    <div class="scope-help mt-2" translate>Expand a layout to select its individual panes, even if their original saved connection was deleted.</div>
+                    <div class="form-text mb-2" translate>Checking a connection selects every entry with the same connection ID. Unchecking removes only that entry. A layout checkbox selects or clears its own panes.</div>
                     <label class="form-label mt-2" for="stats-scope-search" translate>Find a saved connection or layout</label>
                     <input id="stats-scope-search" class="form-control form-control-sm mb-2" [(ngModel)]="scopeSearch" [placeholder]="'Search by name' | translate">
                     <div class="scope-options" role="group" [attr.aria-label]="'Saved connections and layouts' | translate">
-                        <label class="scope-option" *ngFor="let profile of scopeChoices; trackBy: trackScopeChoice" [attr.title]="profile.id">
-                            <input type="checkbox" class="form-check-input" [checked]="isScopeSelected(profile.id)" (change)="toggleScopeProfile(profile.id, $any($event.target).checked)">
-                            <span class="scope-name"><small class="text-muted" *ngIf="profile.group">{{profile.group}} / </small>{{profile.name}}<small class="text-muted ms-2" *ngIf="profile.disambiguator">#{{profile.disambiguator}}</small></span>
-                            <span class="badge bg-secondary">{{(profile.type === 'split-layout' ? 'Saved Layout' : 'Saved Connection') | translate}}</span>
-                        </label>
+                        <div class="scope-option" *ngFor="let profile of scopeChoices; trackBy: trackScopeChoice" [attr.title]="profile.id" [class.scope-pane]="profile.layoutId" [class.scope-layout]="profile.type === 'split-layout'">
+                            <button type="button" class="scope-expand" *ngIf="profile.type === 'split-layout'" (click)="toggleScopeLayout(profile.id)" [attr.aria-expanded]="!collapsedScopeLayouts.has(profile.id)" [attr.aria-label]="(collapsedScopeLayouts.has(profile.id) ? 'Expand layout' : 'Collapse layout') | translate"><i class="fas" [class.fa-chevron-right]="collapsedScopeLayouts.has(profile.id)" [class.fa-chevron-down]="!collapsedScopeLayouts.has(profile.id)" aria-hidden="true"></i></button>
+                            <label class="scope-target">
+                                <input type="checkbox" class="form-check-input" [checked]="isScopeSelected(profile.id)" [indeterminate]="isScopeIndeterminate(profile.id)" (change)="toggleScopeProfile(profile.id, $any($event.target).checked)">
+                                <span class="scope-name"><small class="text-muted" *ngIf="profile.group && !profile.layoutId">{{profile.group}} / </small><small class="scope-pane-number" *ngIf="profile.path">{{paneNumber(profile)}}</small>{{profile.name}}<small class="text-muted ms-2" *ngIf="profile.disambiguator">#{{profile.disambiguator}}</small></span>
+                                <span class="badge bg-secondary">{{(profile.layoutId ? 'Layout Pane' : profile.type === 'split-layout' ? 'Saved Layout' : 'Saved Connection') | translate}}</span>
+                            </label>
+                        </div>
                         <div class="text-muted p-2" *ngIf="scopeChoices.length === 0" translate>No matching saved connections or layouts.</div>
                     </div>
                     <div class="scope-selected mt-2" *ngIf="scopeSelectedProfiles.length">
@@ -842,11 +832,17 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
         .icon-empty { padding: 18px 8px; text-align: center; color: var(--stats-field-muted); font-size: 13px; }
         @media (max-width: 600px) { .icon-picker-filters { grid-template-columns: minmax(0, 1fr); } }
         .scope-help { font-size: 13px; }
-        .scope-options { max-height: 220px; overflow-y: auto; border: 1px solid rgba(128,128,128,.3); border-radius: 4px; }
+        .scope-options { max-height: 360px; overflow-y: auto; border: 1px solid rgba(128,128,128,.3); border-radius: 4px; }
         .scope-option { display: flex; align-items: center; gap: 9px; padding: 8px 10px; cursor: pointer; border-bottom: 1px solid rgba(128,128,128,.15); }
         .scope-option:last-child { border-bottom: 0; }
         .scope-option:hover { background: rgba(128,128,128,.08); }
         .scope-option .form-check-input { flex: 0 0 auto; margin: 0; }
+        .scope-target { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; margin: 0; cursor: pointer; }
+        .scope-option.scope-pane { padding-left: 42px; border-left: 2px solid #719bc9; }
+        .scope-layout { background: #7897bf15; font-weight: 600; }
+        .scope-expand { border: 0; background: transparent; color: inherit; padding: 2px; width: 18px; flex: 0 0 18px; }
+        .scope-expand:focus-visible { outline: 2px solid #71b7ff; }
+        .scope-pane-number { display: inline-block; min-width: 28px; margin-right: 6px; opacity: .75; font-variant-numeric: tabular-nums; }
         .scope-name { flex: 1 1 auto; overflow-wrap: anywhere; }
         .scope-selected { display: flex; flex-wrap: wrap; gap: 6px; }
         .scope-selection { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(128,128,128,.3); border-radius: 4px; padding: 3px 4px 3px 8px; }
@@ -900,6 +896,7 @@ export class ServerStatsSettingsComponent {
     iconSearch = '';
     iconCategory = 'all';
     scopeSearch = '';
+    collapsedScopeLayouts = new Set<string>();
     
     // 预设相关
     presets: MetricPreset[] = getBundledPresets();
@@ -927,7 +924,7 @@ export class ServerStatsSettingsComponent {
         const previous = this.scopeOwner.displayScope;
         this.scopeOwner.displayScope = {
             mode, profileIds: [...(previous?.profileIds || [])],
-            profileNames: { ...(previous?.profileNames || {}) }
+            profileNames: { ...(previous?.profileNames || {}) }, excludedProfileIds: [...(previous?.excludedProfileIds || [])]
         };
     }
 
@@ -953,21 +950,32 @@ export class ServerStatsSettingsComponent {
                 profile.disambiguator = profile.id.slice(-8);
             }
         }
-        return profiles;
+        profiles.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+        const panes = getLayoutPaneTargets(saved);
+        return profiles.flatMap(profile => [profile, ...panes.filter(pane => pane.layoutId === profile.id).map(pane => ({
+            ...pane, group: profile.group, storedName: layoutPaneTargetName(pane)
+        }))]);
     }
 
     get scopeChoices(): ScopeChoice[] {
         const search = this.scopeSearch.trim().toLocaleLowerCase();
-        return this.savedScopeProfiles.filter(profile => !search || `${profile.group} ${profile.name}`.toLocaleLowerCase().includes(search))
-            .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+        const all = this.savedScopeProfiles;
+        const matching = (profile: ScopeChoice) => `${profile.group} ${profile.name} ${profile.layoutName || ''}`.toLocaleLowerCase().includes(search);
+        return all.filter(profile => {
+            if (!search) return !profile.layoutId || !this.collapsedScopeLayouts.has(profile.layoutId);
+            return matching(profile) || (profile.type === 'split-layout' && all.some(child => child.layoutId === profile.id && matching(child)));
+        });
     }
+
+    paneNumber(profile: ScopeChoice): string { return (profile.path || []).map(index => index + 1).join('.'); }
+    toggleScopeLayout(id: string) { this.collapsedScopeLayouts.has(id) ? this.collapsedScopeLayouts.delete(id) : this.collapsedScopeLayouts.add(id); }
 
     get scopeSelectedProfiles(): Array<ScopeChoice & { missing: boolean }> {
         const scope = this.scopeOwner.displayScope;
         const saved = new Map(this.savedScopeProfiles.map(profile => [profile.id, profile]));
         return [...new Set(scope?.profileIds || [])].map(id => {
             const profile = saved.get(id);
-            return profile ? { ...profile, missing: false } : {
+            return profile ? { ...profile, name: profile.storedName || profile.name, missing: false } : {
                 id, name: scope?.profileNames?.[id] || id, type: '', group: '', missing: true
             };
         });
@@ -975,22 +983,76 @@ export class ServerStatsSettingsComponent {
 
     get hasMissingScopeProfiles(): boolean { return this.scopeSelectedProfiles.some(profile => profile.missing); }
     trackScopeChoice(_: number, profile: ScopeChoice): string { return profile.id; }
-    isScopeSelected(id: string): boolean { return this.scopeOwner.displayScope?.profileIds?.includes(id) || false; }
+    private scopeChoiceSelected(profile: ScopeChoice): boolean {
+        const scope = this.scopeOwner.displayScope;
+        if (scope?.excludedProfileIds?.includes(profile.id)) return false;
+        const ids = scope?.profileIds || [];
+        return ids.includes(profile.id) || Boolean(profile.layoutId && (ids.includes(profile.layoutId) ||
+            (profile.connectionIds || [profile.profileId]).some(id => !!id && ids.includes(id) &&
+                (this.config.store.profiles || []).some(saved => saved.id === id))));
+    }
+
+    isScopeSelected(id: string): boolean {
+        const all = this.savedScopeProfiles;
+        const profile = all.find(item => item.id === id);
+        if (!profile) return false;
+        const children = profile.type === 'split-layout' ? all.filter(item => item.layoutId === id) : [];
+        return children.length ? children.every(child => this.scopeChoiceSelected(child)) : this.scopeChoiceSelected(profile);
+    }
+
+    isScopeIndeterminate(id: string): boolean {
+        const children = this.savedScopeProfiles.filter(item => item.layoutId === id);
+        return children.some(child => this.scopeChoiceSelected(child)) && !children.every(child => this.scopeChoiceSelected(child));
+    }
 
     toggleScopeProfile(id: string, selected: boolean) {
         const scope = this.scopeOwner.displayScope;
         const ids = new Set(scope?.profileIds || []);
+        const excluded = new Set(scope?.excludedProfileIds || []);
         const names = { ...(scope?.profileNames || {}) };
-        if (selected) {
-            const profile = this.savedScopeProfiles.find(item => item.id === id);
+        const all = this.savedScopeProfiles;
+        const profile = all.find(item => item.id === id);
+        if (profile?.type === 'split-layout') {
+            const children = all.filter(item => item.layoutId === id);
+            if (selected) {
+                ids.add(id);
+                names[id] = profile.name;
+                children.forEach(child => excluded.delete(child.id));
+            } else {
+                ids.delete(id);
+                for (const child of children) {
+                    ids.delete(child.id);
+                    excluded.add(child.id);
+                    names[child.id] = child.storedName || child.name;
+                }
+            }
+        } else if (selected) {
             if (!profile) return;
-            ids.add(id);
-            names[id] = profile.name;
+            const connectionId = profile.profileId || profile.id;
+            for (const target of all.filter(item => item.type !== 'split-layout' && (item.profileId || item.id) === connectionId)) {
+                ids.add(target.id);
+                excluded.delete(target.id);
+                names[target.id] = target.storedName || target.name;
+            }
         } else {
+            // Legacy scopes may contain only the shared connection ID. Keep the
+            // already checked layout occurrences when cancelling that one row.
+            if (profile && !profile.layoutId) for (const pane of all.filter(item => item.layoutId &&
+                (item.connectionIds || [item.profileId]).includes(id) && this.scopeChoiceSelected(item))) {
+                ids.add(pane.id);
+                names[pane.id] = pane.storedName || pane.name;
+            }
             ids.delete(id);
-            delete names[id];
+            if (profile?.layoutId) {
+                excluded.add(id);
+                names[id] = profile.storedName || profile.name;
+            } else {
+                excluded.delete(id);
+                delete names[id];
+            }
         }
-        this.scopeOwner.displayScope = { mode: 'selected', profileIds: [...ids], profileNames: names };
+        for (const key of Object.keys(names)) if (!ids.has(key) && !excluded.has(key)) delete names[key];
+        this.scopeOwner.displayScope = { mode: 'selected', profileIds: [...ids], excludedProfileIds: [...excluded], profileNames: names };
     }
 
     removeScopeProfile(id: string) { this.toggleScopeProfile(id, false); }
@@ -998,10 +1060,11 @@ export class ServerStatsSettingsComponent {
     private serializeScope(scope?: DisplayScope): DisplayScope | undefined {
         if (!scope) return undefined;
         const ids = [...new Set((scope.profileIds || []).filter(id => typeof id === 'string' && Boolean(id)))];
-        const saved = new Map(this.savedScopeProfiles.map(profile => [profile.id, profile.name]));
+        const excludedProfileIds = [...new Set((scope.excludedProfileIds || []).filter(id => typeof id === 'string' && Boolean(id)))];
+        const saved = new Map(this.savedScopeProfiles.map(profile => [profile.id, profile.storedName || profile.name]));
         const profileNames: Record<string, string> = {};
-        for (const id of ids) profileNames[id] = saved.get(id) || scope.profileNames?.[id] || id;
-        return { mode: scope.mode === 'selected' ? 'selected' : 'all', profileIds: ids, profileNames };
+        for (const id of [...ids, ...excludedProfileIds]) profileNames[id] = saved.get(id) || scope.profileNames?.[id] || id;
+        return { mode: scope.mode === 'selected' ? 'selected' : 'all', profileIds: ids, excludedProfileIds, profileNames };
     }
 
     @HostListener('document:click')
@@ -1494,7 +1557,7 @@ export class ServerStatsSettingsComponent {
     }
 
     currentPresetLibrary(): string {
-        const profiles = new Map((this.config.store.profiles || []).map(profile => [profile.id, profile.name]));
+        const profiles = new Map(this.savedScopeProfiles.map(profile => [profile.id, profile.storedName || profile.name]));
         const targets = (item: { displayScope?: DisplayScope }) => (item.displayScope?.profileIds || []).map(id => {
             const name = profiles.get(id) || item.displayScope?.profileNames?.[id];
             return typeof name === 'string' ? name.trim() : '';
@@ -1690,12 +1753,12 @@ export class ServerStatsSettingsComponent {
 export class ServerStatsSettingsTabProvider extends SettingsTabProvider {
     constructor(private translate: TranslateService) {
         super();
-        setTimeout(() => this.setTitle(this.translate.instant('Server Stats')), 10);
+        setTimeout(() => this.setTitle(this.translate.instant('Bottom Status Bar')), 10);
     }
 
     id = 'server-stats';
     icon = 'fas fa-server'; 
-    title = this.translate.instant('Server Stats');
+    title = this.translate.instant('Bottom Status Bar');
 
     setTitle(title: string) {
         this.title = title;

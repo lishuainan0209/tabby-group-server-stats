@@ -102,7 +102,9 @@ export class ServerStatsConfigProvider extends ConfigProvider {
         plugin: {
             serverStats: {
                 enabled: true,
+                // Kept for config compatibility; runtime always uses the bottom bar.
                 displayMode: 'bottomBar',
+                paneVisibility: { __nonStructural: true } as Record<string, boolean>,
                 defaultInterval: 3,
                 debugLogging: false,
                 location: { x: null, y: null },

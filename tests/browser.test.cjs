@@ -392,6 +392,49 @@ async function main() {
         assert.equal(await scopeMode.inputValue(), 'selected')
         assert((await page.locator('.scope-editor').innerText()).includes('No targets selected'))
         console.log('PASS scope multiselect, search and deleted-target removal preserve explicit empty scope')
+        await mutate(() => {
+            window.layoutTestProfiles = window.harness.config.store.profiles;
+            const leaf = id => ({ type: 'app:ssh-tab', profile: { id, name: id === 'shared' ? 'Shared connection' : 'Retained connection', type: 'ssh' } });
+            window.harness.config.store.profiles = [
+                { id: 'shared', name: 'Shared connection', type: 'ssh' },
+                { id: 'layout-a', name: 'Layout A', type: 'split-layout', options: { recoveryToken: { type: 'app:split-tab', children: [leaf('shared'), leaf('shared'), leaf('deleted')] } } },
+                { id: 'layout-b', name: 'Layout B', type: 'split-layout', options: { recoveryToken: { type: 'app:split-tab', children: [leaf('shared')] } } },
+            ];
+        })
+        await page.locator('#stats-scope-search').fill('')
+        const paneRows = page.locator('.scope-options .scope-pane')
+        assert.equal(await paneRows.count(), 4, 'layouts are expanded by default, including a deleted original connection')
+        const paneIds = await paneRows.evaluateAll(rows => rows.map(row => row.getAttribute('title')))
+        const paneBox = await paneRows.first().boundingBox()
+        const labelBox = await paneRows.first().locator('input').boundingBox()
+        assert(labelBox.x - paneBox.x >= 36, 'layout children visibly indent')
+        await paneRows.nth(0).locator('input').check()
+        assert(await page.locator('.scope-option[title="shared"] input').isChecked())
+        for (const index of [0, 1, 3]) assert(await paneRows.nth(index).locator('input').isChecked())
+        assert(!(await paneRows.nth(2).locator('input').isChecked()))
+        await paneRows.nth(1).locator('input').uncheck()
+        assert(!(await paneRows.nth(1).locator('input').isChecked()))
+        for (const index of [0, 3]) assert(await paneRows.nth(index).locator('input').isChecked())
+        assert(await page.locator('.scope-option[title="shared"] input').isChecked())
+        assert(await page.locator('.scope-option[title="layout-a"] input').evaluate(el => el.indeterminate))
+        await page.locator('.scope-option[title="layout-a"] .scope-expand').click()
+        assert.equal(await paneRows.count(), 1)
+        await page.locator('#stats-scope-search').fill('Retained')
+        assert.equal(await page.locator('.scope-option').count(), 2, 'search keeps matching child and layout parent')
+        await page.locator('#stats-scope-search').fill('')
+        await page.locator('.scope-option[title="layout-a"] .scope-expand').click()
+        assert.equal(await paneRows.count(), 4)
+        assert(!(await paneRows.nth(1).locator('input').isChecked()), 'expanding again preserves per-pane cancellation')
+        assert.equal(await page.locator('.settings h3').innerText(), 'Bottom Status Bar')
+        assert.equal(await page.locator('input[name="displayMode"]').count(), 0)
+        assert.equal(await page.locator('#statusBarEnabled').count(), 1)
+        if (process.env.LAYOUT_SCOPE_SCREENSHOT) {
+            await mutate(() => { window.harness.previewChinese = true })
+            await page.locator('.scope-editor').screenshot({ path: process.env.LAYOUT_SCOPE_SCREENSHOT })
+            await mutate(() => { window.harness.previewChinese = false })
+        }
+        await mutate(() => { window.harness.config.store.profiles = window.layoutTestProfiles })
+        console.log('PASS expanded layout children, exact-ID linked checks, individual cancellations, search and bottom-only settings')
         await page.locator('.editor-actions').getByRole('button', { name: 'Cancel', exact: true }).click()
         await page.waitForFunction(() => !document.querySelector('.new-item-editor'))
         console.log('PASS single-label form only appears after Add Single Label and closes on Cancel')
@@ -845,6 +888,46 @@ async function main() {
         assert(!(await page.locator('.scope-demo').innerText()).includes('P1 数据盘'))
         assert((await panes.nth(1).innerText()).includes('P2 GPU'))
         console.log('PASS deletion of a selected profile never broadens its scope')
+        await mutate(() => {
+            const h = window.harness;
+            h.showScopeDemo = false;
+            h.config.store.plugin.serverStats = { enabled: true, displayMode: 'floatingPanel',
+                customMetrics: [{ id: 'pane-reading', label: 'Memory', type: 'text', command: 'printf 42', suffix: '%' }], metricGroups: [] };
+            h.stats = { custom: [{ id: 'pane-reading', value: '42', status: 'ok' }] };
+            h.showVisibilityDemo = true;
+        })
+        const visibilityPanes = page.locator('visibility-pane')
+        const toggles = page.locator('[data-testid="pane-status-toggle"]')
+        await page.waitForFunction(() => document.querySelectorAll('visibility-pane .stats-container').length === 3)
+        assert.equal(await toggles.count(), 3)
+        await toggles.nth(0).click()
+        await toggles.nth(1).click()
+        assert.equal(await visibilityPanes.nth(0).locator('.stats-container').count(), 0)
+        assert.equal(await visibilityPanes.nth(1).locator('.stats-container').count(), 0)
+        assert.equal(await visibilityPanes.nth(2).locator('.stats-container').count(), 1)
+        for (const i of [0, 1]) {
+            const host = await visibilityPanes.nth(i).locator('server-stats-bottom-bar').boundingBox()
+            assert(host.height <= 1, 'hidden status bar must not reserve a blank bottom row')
+            const pane = await visibilityPanes.nth(i).boundingBox()
+            const button = await toggles.nth(i).boundingBox()
+            assert(button.x >= pane.x && button.x <= pane.x + 12, 'toggle stays at the pane left edge')
+            assert(button.y + button.height <= pane.y + pane.height && button.y + button.height >= pane.y + pane.height - 8, 'toggle stays at the pane bottom edge')
+        }
+        await mutate(() => { window.harness.showVisibilityDemo = false })
+        await mutate(() => { window.harness.showVisibilityDemo = true })
+        await page.waitForFunction(() => document.querySelectorAll('[data-testid="pane-status-toggle"]').length === 3)
+        assert.equal(await visibilityPanes.nth(0).locator('.stats-container').count(), 0)
+        assert.equal(await visibilityPanes.nth(1).locator('.stats-container').count(), 0)
+        assert.equal(await visibilityPanes.nth(2).locator('.stats-container').count(), 1)
+        await mutate(() => { window.harness.previewChinese = true })
+        assert.equal(await toggles.nth(0).getAttribute('aria-label'), '显示此分屏状态栏')
+        assert.equal(await toggles.nth(2).getAttribute('aria-label'), '隐藏此分屏状态栏')
+        if (process.env.VISIBILITY_SCREENSHOT) await page.locator('.visibility-demo').screenshot({ path: process.env.VISIBILITY_SCREENSHOT })
+        await toggles.nth(0).click()
+        assert.equal(await visibilityPanes.nth(0).locator('.stats-container').count(), 1)
+        assert.equal(await visibilityPanes.nth(1).locator('.stats-container').count(), 0)
+        assert.equal(await visibilityPanes.nth(2).locator('.stats-container').count(), 1)
+        console.log('PASS independent lower-left pane toggles collapse row height, preserve off/off/on on recreation and reopen individually')
         assert.equal(errors.length, 0, errors.join('\n'))
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)) }
 }

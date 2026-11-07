@@ -40,6 +40,7 @@ const mocks = {
   '../preset-github': loadPureSource('src/preset-github.ts'),
   '../metric-colors': loadPureSource('src/metric-colors.ts'),
   '../translations': loadPureSource('src/translations.ts'),
+  '../display-scope': loadPureSource('src/display-scope.ts'),
 };
 const compiled = ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
@@ -146,6 +147,120 @@ function scopeFixture() {
   }, save() {} };
   return { config, editor: new exportsObject.ServerStatsSettingsComponent({}, config, {}) };
 }
+
+function layoutScopeFixture() {
+  const fixture = scopeFixture();
+  const leaf = id => ({ type: 'app:ssh-tab', profile: { id, type: 'ssh', name: id === 'shared' ? 'Repeated connection' : 'Other connection' } });
+  fixture.config.store.profiles = [
+    { id: 'shared', type: 'ssh', name: 'Repeated connection' },
+    { id: 'different-id', type: 'ssh', name: 'Repeated connection' },
+    { id: 'layout-a', type: 'split-layout', name: 'Layout A', options: { recoveryToken: { type: 'app:split-tab', children: [leaf('shared'), leaf('shared'), leaf('deleted')] } } },
+    { id: 'layout-b', type: 'split-layout', name: 'Layout B', options: { recoveryToken: { type: 'app:split-tab', children: [leaf('shared')] } } },
+  ];
+  fixture.editor.setScopeMode('selected');
+  return fixture;
+}
+
+test('layout scopes default expanded, include deleted originals and collapse/search without changing selections', () => {
+  const { editor } = layoutScopeFixture();
+  const panes = editor.scopeChoices.filter(p => p.layoutId);
+  assert.equal(panes.length, 4);
+  assert.equal(new Set(panes.map(p => p.id)).size, 4);
+  assert.equal(panes.filter(p => p.profileId === 'deleted').length, 1);
+  editor.toggleScopeProfile(panes[0].id, true);
+  const selection = JSON.stringify(editor.scopeOwner.displayScope);
+  editor.toggleScopeLayout('layout-a');
+  assert.equal(editor.scopeChoices.filter(p => p.layoutId === 'layout-a').length, 0);
+  editor.scopeSearch = 'Other connection';
+  assert.equal(editor.scopeChoices.length, 2, 'search retains parent and matching child even when collapsed');
+  assert.equal(editor.scopeChoices[0].id, 'layout-a');
+  assert.equal(JSON.stringify(editor.scopeOwner.displayScope), selection);
+});
+
+test('checking one repeated connection selects all exact-ID entries and unchecking cancels only that pane', () => {
+  const { editor } = layoutScopeFixture();
+  const panes = editor.scopeChoices.filter(p => p.profileId === 'shared');
+  editor.toggleScopeProfile(panes[0].id, true);
+  assert(editor.isScopeSelected('shared'));
+  assert(!editor.isScopeSelected('different-id'), 'equal labels do not link unrelated connections');
+  assert(panes.every(p => editor.isScopeSelected(p.id)));
+  editor.toggleScopeProfile(panes[1].id, false);
+  assert(!editor.isScopeSelected(panes[1].id));
+  assert(editor.isScopeSelected('shared'));
+  assert(editor.isScopeSelected(panes[0].id));
+  assert(editor.isScopeSelected(panes[2].id));
+  editor.toggleScopeProfile('shared', false);
+  assert(!editor.isScopeSelected('shared'));
+  assert(editor.isScopeSelected(panes[0].id));
+  assert(editor.isScopeSelected(panes[2].id));
+  editor.toggleScopeProfile(panes[1].id, true);
+  assert(panes.every(p => editor.isScopeSelected(p.id)));
+  assert(editor.isScopeSelected('shared'));
+});
+
+test('a layout-wide scope respects per-pane exclusions after save and reopen', () => {
+  const { editor, config } = layoutScopeFixture();
+  editor.editMetric(0);
+  editor.setScopeMode('selected');
+  const children = editor.scopeChoices.filter(p => p.layoutId === 'layout-a');
+  editor.toggleScopeProfile('layout-a', true);
+  assert(children.every(p => editor.isScopeSelected(p.id)));
+  editor.toggleScopeProfile(children[0].id, false);
+  assert(!editor.isScopeSelected(children[0].id));
+  assert(editor.isScopeIndeterminate('layout-a'));
+  assert(!editor.isScopeSelected('layout-a'));
+  editor.saveMetric();
+  editor.editMetric(0);
+  assert(!editor.isScopeSelected(children[0].id));
+  assert(editor.isScopeSelected(children[1].id));
+  const scope = config.store.plugin.serverStats.customMetrics[0].displayScope;
+  const match = mocks['../display-scope'].matchesScope;
+  assert(!match(scope, { profileIds: ['shared', 'layout-a', children[0].id] }, config.store.profiles));
+  assert(match(scope, { profileIds: ['shared', 'layout-a', children[1].id] }, config.store.profiles));
+  assert.equal(scope.profileNames[children[0].id], children[0].storedName);
+});
+
+test('clearing a layout clears only its own pane entries even with a shared connection selected', () => {
+  const { editor } = layoutScopeFixture();
+  const shared = editor.scopeChoices.filter(p => p.profileId === 'shared');
+  editor.toggleScopeProfile('shared', true);
+  editor.toggleScopeProfile('layout-a', false);
+  assert(shared.filter(p => p.layoutId === 'layout-a').every(p => !editor.isScopeSelected(p.id)));
+  assert(editor.isScopeSelected(shared.find(p => p.layoutId === 'layout-b').id));
+  assert(editor.isScopeSelected('shared'));
+  editor.toggleScopeProfile('layout-a', true);
+  assert(editor.scopeChoices.filter(p => p.layoutId === 'layout-a').every(p => editor.isScopeSelected(p.id)));
+});
+
+test('unchecking a legacy standalone connection preserves its already selected layout occurrences', () => {
+  const { editor } = layoutScopeFixture();
+  const panes = editor.scopeChoices.filter(p => p.profileId === 'shared');
+  editor.scopeOwner.displayScope = { mode: 'selected', profileIds: ['shared'] };
+  assert(panes.every(p => editor.isScopeSelected(p.id)));
+  editor.toggleScopeProfile('shared', false);
+  assert(!editor.isScopeSelected('shared'));
+  assert(panes.every(p => editor.isScopeSelected(p.id)));
+  assert.equal(editor.scopeOwner.displayScope.profileIds.length, 3);
+});
+
+test('deleted standalone selections do not falsely check their retained layout copies', () => {
+  const { editor } = layoutScopeFixture();
+  const pane = editor.scopeChoices.find(p => p.profileId === 'deleted');
+  editor.scopeOwner.displayScope = { mode: 'selected', profileIds: ['deleted'] };
+  assert(!editor.isScopeSelected(pane.id));
+  editor.toggleScopeProfile(pane.id, true);
+  assert(editor.isScopeSelected(pane.id));
+});
+
+test('bottom status bar settings have a bilingual title and enabled switch without display-mode controls', () => {
+  assert(componentMetadata.template.includes('<h3 translate>Bottom Status Bar</h3>'));
+  assert(componentMetadata.template.includes('id="statusBarEnabled"'));
+  assert(!componentMetadata.template.includes('displayModeFloating'));
+  assert(!componentMetadata.template.includes('floating panel'));
+  const translations = mocks['../translations'].TRANSLATIONS;
+  assert.equal(translations['zh-CN']['Bottom Status Bar'], '底部状态栏');
+  assert.equal(translations.en['Bottom Status Bar'], 'Bottom Status Bar');
+});
 
 test('new singles, group mains and children default to text values and output-text checks', () => {
   const { editor } = scopeFixture();

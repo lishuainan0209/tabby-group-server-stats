@@ -55,3 +55,52 @@ test('findSessionTab uses actual leaf session identity even with nested wrappers
     assert.equal(api.findSessionTab([outer], b), leaves[1])
     assert.equal(api.findSessionTab([outer], {}), null)
 })
+
+const savedLayout = (id, children) => ({ id, name: id, type: 'split-layout', options: { recoveryToken: { type: 'app:split-tab', children } } })
+const sshToken = (id, name = id) => ({ type: 'app:ssh-tab', profile: { id, type: 'ssh', name, options: { host: 'node.test', port: 22, user: 'test' } } })
+
+test('layout inventory lists each repeated pane separately after the original connection is deleted', () => {
+    const saved = [savedLayout('layout', [sshToken('deleted', 'Old SSH'), { type: 'app:split-tab', children: [sshToken('deleted', 'Old SSH')] }])]
+    const before = JSON.stringify(saved)
+    const targets = api.getLayoutPaneTargets(saved)
+    assert.equal(targets.length, 2)
+    assert.notEqual(targets[0].id, targets[1].id)
+    assert.equal(targets[0].profileId, targets[1].profileId)
+    assert.equal(api.layoutPaneTargetName(targets[1]), 'layout / 2.1 / Old SSH')
+    assert.equal(targets[0].type, 'layout-pane')
+    assert.deepEqual(Object.keys(targets[0]).sort(), ['connectionIds', 'id', 'layoutId', 'layoutName', 'name', 'path', 'profileId', 'type'].sort())
+    assert.equal(JSON.stringify(saved), before)
+    assert.equal(api.matchesScope(selected(targets[0].id), { profileIds: [targets[0].id, 'deleted', 'layout'] }, saved), true)
+    assert.equal(api.matchesScope(selected(targets[0].id), { profileIds: [targets[1].id, 'deleted', 'layout'] }, saved), false)
+})
+
+test('excluding one layout pane overrides its connection and parent without excluding matching siblings', () => {
+    const saved = [{ id: 'shared', type: 'ssh' }, savedLayout('layout', [sshToken('shared'), sshToken('shared')])]
+    const [first, second] = api.getLayoutPaneTargets(saved)
+    const scope = { ...selected('shared', 'layout', first.id, second.id), excludedProfileIds: [first.id] }
+    assert.equal(api.matchesScope(scope, { profileIds: ['shared', 'layout', first.id] }, saved), false)
+    assert.equal(api.matchesScope(scope, { profileIds: ['shared', 'layout', second.id] }, saved), true)
+    assert.equal(api.matchesScope(scope, { profileIds: ['shared'] }, saved), true)
+    assert.equal(api.matchesScope({ ...scope, mode: 'all' }, { profileIds: [first.id] }, saved), true)
+    // Corrupt or old non-pane exclusions must not disable all uses of a connection.
+    assert.equal(api.matchesScope({ ...selected('shared'), excludedProfileIds: ['shared'] }, { profileIds: ['shared'] }, saved), true)
+})
+
+test('deleting a layout or replacing its child profile invalidates the old pane selection', () => {
+    const saved = [savedLayout('layout', [sshToken('old')])]
+    const [target] = api.getLayoutPaneTargets(saved)
+    const context = { profileIds: [target.id, 'layout', 'old'] }
+    assert.equal(api.matchesScope(selected(target.id), context, saved), true)
+    saved[0].options.recoveryToken.children[0] = sshToken('replacement')
+    assert.equal(api.matchesScope(selected(target.id), context, saved), false)
+    assert.equal(api.matchesScope(selected(target.id), context, []), false)
+})
+
+test('layout inventory ignores credentials and survives malformed or cyclic recovery trees', () => {
+    const node = sshToken('a')
+    Object.defineProperty(node.profile.options, 'password', { get() { throw Error('Must not read credentials') } })
+    const saved = savedLayout('layout', [node, null, { type: 'app:ssh-tab', profile: { type: 'ssh' } }])
+    saved.options.recoveryToken.children.push(saved.options.recoveryToken)
+    assert.equal(api.getLayoutPaneTargets([saved]).length, 1)
+    assert.equal(api.getLayoutPaneTargets(null).length, 0)
+})

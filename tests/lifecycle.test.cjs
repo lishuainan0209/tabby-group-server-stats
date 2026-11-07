@@ -27,15 +27,21 @@ function node() {
 function load(relative) {
     const intervals = [];
     const exports = {};
+    let moduleMetadata;
     const source = fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
-    const angular = { Component: decorator, NgModule: decorator, HostListener: decorator, ViewChildren: decorator, ViewChild: decorator };
+    const angular = { Component: decorator, NgModule: metadata => { moduleMetadata = metadata; return target => target; }, HostListener: decorator, ViewChildren: decorator, ViewChild: decorator };
     const serviceClass = class {};
+    const toolbarProvider = class {};
+    const bottomComponent = class {}, floatingComponent = class {};
     const config = { DEFAULT_METRIC_ICONS: {}, evaluateColor: () => '#fff' };
     const context = {
         exports, console,
         require(name) {
             if (name === '@angular/core') return angular;
+            if (name === 'tabby-core') return { ToolbarButtonProvider: toolbarProvider };
             if (name === 'fs' || name === 'os' || name === 'path') return require(name);
+            if (name === './components/bottom-bar.component') return { ServerStatsBottomBarComponent: bottomComponent };
+            if (name === './components/floating-panel.component') return { ServerStatsFloatingPanelComponent: floatingComponent };
             if (name.endsWith('/config')) return config;
             if (name.endsWith('/translations')) return { TRANSLATIONS: {} };
             if (name.endsWith('/services/stats.service')) return { StatsService: serviceClass };
@@ -48,7 +54,7 @@ function load(relative) {
     vm.runInNewContext(ts.transpileModule(source, { compilerOptions: {
         module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
     } }).outputText, context);
-    return { exports, intervals };
+    return { exports, intervals, moduleMetadata, toolbarProvider, bottomComponent, floatingComponent };
 }
 
 function componentFixture(kind) {
@@ -56,8 +62,11 @@ function componentFixture(kind) {
     const { exports } = load(`src/components/${floating ? 'floating-panel' : 'bottom-bar'}.component.ts`);
     const Component = exports[floating ? 'ServerStatsFloatingPanelComponent' : 'ServerStatsBottomBarComponent'];
     const requests = [];
+    const paneVisibility = new WeakMap();
     const service = {
         getServerKey: session => session.id, getCachedStats: () => null, isPlatformSupport: () => true,
+        isPaneVisible: session => paneVisibility.get(session) !== false,
+        setPaneVisible(session, visible) { paneVisibility.set(session, visible); config.changed$.emit(); },
         statsUpdated$: new Signal(), fetchStats(session) { const request = deferred(); requests.push({ ...request, session }); return request.promise; },
     };
     const config = { store: { plugin: { serverStats: { enabled: true, displayMode: floating ? 'floatingPanel' : 'bottomBar' } } }, changed$: new Signal(), ready$: new Signal() };
@@ -110,6 +119,88 @@ for (const kind of ['bottom', 'floating']) {
         assert.notEqual(f.component.currentStats.cpu, 66);
     });
 }
+
+test('legacy floating display preferences render the bottom bar and still respect enabled state', async () => {
+    const f = componentFixture('bottom');
+    f.config.store.plugin.serverStats.displayMode = 'floatingPanel';
+    f.component.ngOnInit();
+    const pending = f.component.checkAndFetch();
+    assert.equal(f.requests.length, 1, 'legacy floating setting must not skip bottom-bar collection');
+    f.requests[0].resolve(stats(28));
+    await pending;
+    assert.equal(f.component.visible, true);
+    assert.equal(f.component.currentStats.cpu, 28);
+    f.config.store.plugin.serverStats.enabled = false;
+    f.config.changed$.emit();
+    assert.equal(f.component.visible, false);
+    f.component.ngOnDestroy();
+});
+
+test('legacy floating preferences also render externally controlled per-pane bars', () => {
+    const f = componentFixture('bottom');
+    f.config.store.plugin.serverStats.displayMode = 'floatingPanel';
+    f.component.useExternalController = true;
+    f.component.bindToSession(f.A);
+    f.component.renderExternalStats(stats(29));
+    assert.equal(f.component.visible, true);
+    assert.equal(f.component.currentStats.cpu, 29);
+    f.component.ngOnDestroy();
+});
+
+test('the pane button hides only its own same-profile pane and stays available to reopen it', () => {
+    const first = componentFixture('bottom'), second = componentFixture('bottom');
+    first.A.profile = second.A.profile = { id: 'same-saved-connection' };
+    second.component.statsService = first.service;
+    for (const f of [first, second]) {
+        f.component.useExternalController = true;
+        f.component.bindToSession(f.A);
+        f.component.ngOnInit();
+        f.component.renderExternalStats(stats(10));
+    }
+    first.component.togglePaneVisibility();
+    assert.equal(first.component.visible, true, 'eligibility stays true so the reopen control remains');
+    assert.equal(first.component.paneVisible, false);
+    assert.equal(first.config.store.plugin.serverStats.enabled, true, 'the master switch must not change');
+    second.component.loadConfig();
+    assert.equal(second.component.paneVisible, true, 'another session of the same profile stays open');
+    first.component.togglePaneVisibility();
+    assert.equal(first.component.paneVisible, true);
+    assert.equal(second.component.paneVisible, true);
+    first.component.ngOnDestroy(); second.component.ngOnDestroy();
+});
+
+test('collapsed bars do not fetch or accept late value/stream results and can resume', async () => {
+    const f = componentFixture('bottom');
+    f.component.ngOnInit();
+    const pending = f.component.checkAndFetch();
+    f.component.togglePaneVisibility();
+    assert.equal(f.component.paneVisible, false);
+    f.requests[0].resolve(stats(88));
+    await pending;
+    assert.notEqual(f.component.currentStats.cpu, 88);
+    f.service.statsUpdated$.emit({ serverKey: 'A', stats: stats(99) });
+    assert.notEqual(f.component.currentStats.cpu, 99);
+    await f.component.checkAndFetch();
+    assert.equal(f.requests.length, 1, 'collapsed polling must not start another request');
+    assert.equal(f.component.visible, true);
+    let resumed;
+    f.component.forceUpdate = () => { resumed = f.component.checkAndFetch(); };
+    f.component.togglePaneVisibility();
+    assert.equal(f.requests.length, 2, 'reopening resumes collection');
+    f.requests[1].resolve(stats(42));
+    await resumed;
+    assert.equal(f.component.currentStats.cpu, 42);
+    f.component.ngOnDestroy();
+});
+
+test('plugin registration exposes only the bottom view and no toolbar toggle', () => {
+    const f = load('src/index.ts');
+    assert(f.moduleMetadata.declarations.includes(f.bottomComponent));
+    assert(f.moduleMetadata.entryComponents.includes(f.bottomComponent));
+    assert(!f.moduleMetadata.declarations.includes(f.floatingComponent));
+    assert(!f.moduleMetadata.entryComponents.includes(f.floatingComponent));
+    assert(!f.moduleMetadata.providers.some(provider => provider.provide === f.toolbarProvider));
+});
 
 test('external bottom-bar binding clears previous data without a new session cache', () => {
     const f = componentFixture('bottom');
@@ -166,6 +257,54 @@ function moduleFixture() {
     module.attachToSshTab(element);
     return { module, state, A, B, calls, requests, element, barRef, poll: intervals[0], instance: module.tabInstances.get(element) };
 }
+
+test('per-pane controller continues polling with a legacy floating setting', async () => {
+    const f = moduleFixture();
+    f.module.config.store.plugin.serverStats.displayMode = 'floatingPanel';
+    assert.equal(f.module.getDisplayMode(), 'bottomBar');
+    const pending = f.poll();
+    assert.equal(f.requests.length, 1);
+    f.requests[0].resolve(stats(30));
+    await pending;
+    assert.equal(f.calls.filter(call => call.name === 'render').at(-1).args[0].cpu, 30);
+    f.instance.teardown();
+});
+
+test('external controller skips hidden panes and discards responses hidden during collection', async () => {
+    const f = moduleFixture();
+    let paneVisible = false;
+    f.module.statsService.isPaneVisible = () => paneVisible;
+    await f.poll();
+    assert.equal(f.requests.length, 0);
+    assert.equal(f.calls.at(-1).name, 'loading');
+    assert.equal(f.calls.at(-1).args[0], false, 'the reopen button remains while loading stops');
+    assert(!f.calls.some(call => call.name === 'hide'), 'collapsed panes must keep their control');
+    paneVisible = true;
+    const pending = f.poll();
+    assert.equal(f.requests.length, 1);
+    paneVisible = false;
+    f.requests[0].resolve(stats(99));
+    await pending;
+    assert.equal(f.calls.filter(call => call.name === 'render').length, 0);
+    paneVisible = true;
+    const reopened = f.poll();
+    f.requests[1].resolve(stats(17));
+    await reopened;
+    assert.equal(f.calls.filter(call => call.name === 'render').at(-1).args[0].cpu, 17);
+    f.instance.teardown();
+});
+
+test('saving a sibling pane preference does not replace existing readings with a loading row', async () => {
+    const f = moduleFixture();
+    const initial = f.poll();
+    f.requests[0].resolve(stats(21));
+    await initial;
+    f.module.config.changed$.emit();
+    const loading = f.calls.filter(call => call.name === 'loading').at(-1);
+    assert.equal(loading.args[0], false);
+    assert.equal(f.calls.filter(call => call.name === 'render').at(-1).args[0].cpu, 21);
+    f.instance.teardown();
+});
 
 test('external collector refreshes same-session scope and renders it before a pending fetch', async () => {
     const bar = componentFixture('bottom');

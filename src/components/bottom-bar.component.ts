@@ -9,8 +9,16 @@ import { BuiltinMetricKey } from '../builtin-metrics'
 @Component({
     selector: 'server-stats-bottom-bar',
     template: `
+      <ng-container *ngIf="visible">
+        <button type="button" class="pane-status-toggle" [class.is-collapsed]="!paneVisible"
+            data-testid="pane-status-toggle" (click)="togglePaneVisibility()"
+            [attr.aria-expanded]="paneVisible"
+            [attr.aria-label]="(paneVisible ? 'Hide this pane status bar' : 'Show this pane status bar') | translate"
+            [title]="(paneVisible ? 'Hide this pane status bar' : 'Show this pane status bar') | translate">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12h5l3-8 4 16 3-8h5"></path></svg>
+        </button>
         <div class="stats-container" 
-             *ngIf="visible"
+             *ngIf="paneVisible"
              [style.background]="styleConfig.background">
             <div class="stat-section" *ngIf="loading">
                 <div class="loading-text">Loading...</div>
@@ -20,6 +28,7 @@ import { BuiltinMetricKey } from '../builtin-metrics'
                 [builtinOrder]="builtinOrder"
                 [stats]="currentStats" [session]="displaySession"></server-stats-metric-strip>
         </div>
+      </ng-container>
     `,
     styles: [`
         :host { display: block; width: 100%; position: relative; box-sizing: border-box; }
@@ -28,7 +37,7 @@ import { BuiltinMetricKey } from '../builtin-metrics'
             width: 100%;
             box-sizing: border-box;
             backdrop-filter: blur(8px);
-            padding: 1px 12px;
+            padding: 1px 12px 1px 29px;
             display: flex;
             flex-wrap: wrap;
             gap: 4px 10px;
@@ -42,10 +51,22 @@ import { BuiltinMetricKey } from '../builtin-metrics'
         }
         .stat-section { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; height: 20px; }
         .loading-text { color: rgba(255,255,255,0.6); font-size: 10px; font-style: italic; }
+        .pane-status-toggle {
+            position: absolute; left: 4px; bottom: 1px; z-index: 5;
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 20px; height: 20px; padding: 2px; margin: 0;
+            border: 1px solid rgba(130,170,210,0.6); border-radius: 3px;
+            color: #8fcaff; background: rgba(20,24,30,0.92); cursor: pointer;
+        }
+        .pane-status-toggle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round; }
+        .pane-status-toggle.is-collapsed { color: #b8c4d0; bottom: 2px; }
+        .pane-status-toggle:hover { color: #fff; border-color: #8fcaff; }
+        .pane-status-toggle:focus-visible { outline: 2px solid #8fcaff; outline-offset: 1px; }
     `]
 })
 export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
     visible = false
+    paneVisible = true
     loading = true
     currentStats: any = { cpu: 0, mem: 0, disk: 0, netRx: 0, netTx: 0, custom: [] }
     customMetrics: CustomMetric[] = []
@@ -82,6 +103,11 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
     }
 
     private synchronizeSession(session: any) {
+        const paneVisible = !session || this.statsService.isPaneVisible?.(session) !== false;
+        if (this.paneVisible !== paneVisible) {
+            this.viewRevision++;
+            this.paneVisible = paneVisible;
+        }
         this.applyMetricScope(session);
         if (this.displaySession === session) return;
         this.viewRevision++;
@@ -101,18 +127,32 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
 
     private canDisplay(session: any): boolean {
         const conf = this.config?.store?.plugin?.serverStats;
-        return !this.destroyed && !!conf?.enabled && (conf.displayMode || 'bottomBar') === 'bottomBar' &&
+        return !this.destroyed && !!conf?.enabled &&
             !!session && session.open !== false && this.resolveSession() === session;
     }
 
     private isCurrentRequest(session: any, revision: number): boolean {
-        return this.viewRevision === revision && this.displaySession === session && this.canDisplay(session);
+        return this.viewRevision === revision && this.displaySession === session && this.canDisplay(session) &&
+            this.paneVisible && this.statsService.isPaneVisible?.(session) !== false;
+    }
+
+    togglePaneVisibility() {
+        const session = this.resolveSession();
+        if (!this.canDisplay(session)) return;
+        this.statsService.setPaneVisible(session, this.statsService.isPaneVisible(session) === false);
+        this.viewRevision++;
+        this.synchronizeSession(session);
+        this.visible = true;
+        if (!this.paneVisible) this.loading = false;
+        this.cdr.detectChanges();
+        if (this.paneVisible) this.forceUpdate();
     }
 
     renderExternalStats(stats: any | null) {
         if (!this.canDisplay(this.boundSession)) return;
         this.synchronizeSession(this.boundSession);
         this.visible = true;
+        if (!this.paneVisible) { this.loading = false; this.cdr.detectChanges(); return; }
         if (stats) {
             this.visible = true;
             this.loading = false;
@@ -128,7 +168,7 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         if (!this.canDisplay(this.boundSession)) return;
         this.synchronizeSession(this.boundSession);
         this.visible = true;
-        this.loading = isLoading;
+        this.loading = this.paneVisible && isLoading;
         this.cdr.detectChanges();
     }
 
@@ -172,6 +212,7 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
             const session = this.resolveSession();
             this.synchronizeSession(session);
             if (!this.canDisplay(session)) { this.hideExternal(); return; }
+            if (!this.paneVisible) { this.loading = false; this.cdr.detectChanges(); return; }
             if (this.canDisplay(session) && this.statsService.getServerKey(session) === event.serverKey) {
                 this.visible = true;
                 this.loading = false;
@@ -208,8 +249,10 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
             this.styleConfig = { ...this.styleConfig, ...conf.style };
         }
         // 加载自定义指标配置
-        this.applyMetricScope(this.resolveSession());
-        if (!this.canDisplay(this.resolveSession())) {
+        const session = this.resolveSession();
+        this.synchronizeSession(session);
+        this.visible = this.canDisplay(session);
+        if (!this.visible) {
             this.visible = false;
             this.synchronizeSession(null);
         }
@@ -224,17 +267,6 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         }
 
         const isEnabled = this.config?.store?.plugin?.serverStats?.enabled;
-        const displayMode = this.config?.store?.plugin?.serverStats?.displayMode || 'bottomBar';
-        
-        if (displayMode !== 'bottomBar') {
-            if (this.visible) {
-                this.visible = false;
-                this.loading = true;
-                this.cdr.detectChanges();
-            }
-            return;
-        }
-
         const session = this.resolveSession();
         this.synchronizeSession(session);
 
@@ -248,6 +280,12 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         }
 
         if (session && this.statsService.isPlatformSupport(session)) {
+            if (!this.paneVisible) {
+                this.visible = true;
+                this.loading = false;
+                this.cdr.detectChanges();
+                return;
+            }
             if (!this.visible) {
                 this.visible = true;
                 this.loading = true;

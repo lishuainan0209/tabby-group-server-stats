@@ -10,6 +10,7 @@ require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileMo
 }).outputText, filename)
 const { getBuiltinDefaults, getBuiltinDefinition, getBuiltinDefinitions, createCpuSampleCommand, createNetworkRateCommand } = require('../src/builtin-metrics.ts')
 const { createGpuGroupPreset, createDiskGroupPreset, createDiskTotalCommand, createGpuCommand, createGpuCheckCommand, getBundledPresets, normalizePresetLibrary, instantiatePreset, exportPresetLibrary, findInstalledPreset, presetDefinitionFingerprint } = require('../src/preset-library.ts')
+const { getLayoutPaneTargets, layoutPaneTargetName, matchesScope } = require('../src/display-scope.ts')
 const gitExecPath = process.platform === 'win32' ? spawnSync('git', ['--exec-path'], { encoding: 'utf8' }).stdout?.trim() : ''
 const gitShell = gitExecPath ? path.resolve(gitExecPath, '../../..', 'bin/sh.exe') : ''
 const shell = process.env.TEST_SH || (process.platform === 'win32' ? [gitShell, 'C:\\Program Files\\Git\\bin\\sh.exe', 'S:\\Git\\bin\\sh.exe'].find(file => file && fs.existsSync(file)) : '/bin/sh')
@@ -379,6 +380,98 @@ test('export and reimport preserve origin even when portable entry IDs change', 
     const imported = instantiatePreset(exported, [])
     assert.deepEqual(findInstalledPreset(preset, imported), { kind: 'group', id: imported.metricGroups[0].id })
     assert.equal(presetDefinitionFingerprint(imported.metricGroups[0], 'group'), presetDefinitionFingerprint(config.metricGroups[0], 'group'))
+})
+
+function layoutScopeFixture(prefix) {
+    const connection = { id: prefix + '-connection', name: 'Shared SSH', type: 'ssh', options: { host: 'node.example.test', port: 2222, user: 'analyst' } }
+    const layout = { id: prefix + '-layout', name: 'Research panes', type: 'split-layout', options: { recoveryToken: {
+        type: 'app:split-tab', children: [
+            { type: 'app:ssh-tab', profile: connection },
+            { type: 'app:ssh-tab', profile: connection },
+        ],
+    } } }
+    return [connection, layout]
+}
+
+test('portable layout pane scopes retain individual exclusions across different local IDs', () => {
+    const sourceProfiles = layoutScopeFixture('source-private')
+    const panes = getLayoutPaneTargets(sourceProfiles)
+    const preset = createGpuGroupPreset()
+    preset.group.displayScope = { mode: 'selected', profileIds: [sourceProfiles[1].id, panes[0].id],
+        excludedProfileIds: [panes[1].id], profileNames: {
+            [sourceProfiles[1].id]: sourceProfiles[1].name,
+            [panes[0].id]: layoutPaneTargetName(panes[0]),
+            [panes[1].id]: layoutPaneTargetName(panes[1]),
+        } }
+    const text = exportPresetLibrary([preset])
+    assert.doesNotMatch(text, /source-private/)
+    const exported = normalizePresetLibrary(JSON.parse(text))[0]
+    assert.deepEqual(exported.profileNames, ['Research panes', layoutPaneTargetName(panes[0])])
+    assert.deepEqual(exported.excludedProfileNames, [layoutPaneTargetName(panes[1])])
+    const destinationProfiles = layoutScopeFixture('destination-private')
+    const destinationPanes = getLayoutPaneTargets(destinationProfiles)
+    const imported = instantiatePreset(exported, destinationProfiles)
+    const scope = imported.metricGroups[0].displayScope
+    assert.deepEqual(imported.missingProfileNames, [])
+    assert.deepEqual(scope.profileIds, [destinationProfiles[1].id, destinationPanes[0].id])
+    assert.deepEqual(scope.excludedProfileIds, [destinationPanes[1].id])
+    assert(matchesScope(scope, { profileIds: [destinationProfiles[1].id, destinationPanes[0].id] }, destinationProfiles))
+    assert(!matchesScope(scope, { profileIds: [destinationProfiles[1].id, destinationPanes[1].id] }, destinationProfiles))
+})
+
+test('portable pane selection works after its original saved connection has been deleted', () => {
+    const profiles = layoutScopeFixture('private')
+    const pane = getLayoutPaneTargets(profiles)[1]
+    const preset = { id: 'single-pane', kind: 'metric', label: 'Only pane two', profileNames: [layoutPaneTargetName(pane)],
+        metric: { id: 'value', command: 'printf 7', type: 'text' } }
+    const result = instantiatePreset(preset, [profiles[1]])
+    assert.deepEqual(result.customMetrics[0].displayScope.profileIds, [pane.id])
+    assert.deepEqual(result.missingProfileNames, [])
+})
+
+test('missing, renamed or ambiguous portable exclusions fail closed instead of widening the scope', () => {
+    const profiles = layoutScopeFixture('first')
+    const panes = getLayoutPaneTargets(profiles)
+    const preset = { id: 'exclude-second', kind: 'metric', label: 'Metric', profileNames: ['Shared SSH'],
+        excludedProfileNames: [layoutPaneTargetName(panes[1])], metric: { id: 'value', command: 'printf 7', type: 'text' } }
+    for (const destination of [
+        [profiles[0]],
+        [profiles[0], { ...profiles[1], name: 'Renamed layout' }],
+        [...profiles, layoutScopeFixture('another')[1]],
+    ]) {
+        const result = instantiatePreset(preset, destination)
+        assert.equal(result.customMetrics[0].displayScope.mode, 'selected')
+        assert.deepEqual(result.customMetrics[0].displayScope.profileIds, [])
+        assert.deepEqual(result.missingProfileNames, preset.excludedProfileNames)
+    }
+    const unnamed = createGpuGroupPreset()
+    unnamed.group.displayScope = { mode: 'selected', profileIds: ['private-layout'], excludedProfileIds: ['private-pane'],
+        profileNames: { 'private-layout': 'Research panes' } }
+    const direct = instantiatePreset(unnamed, profiles)
+    assert.deepEqual(direct.metricGroups[0].displayScope.profileIds, [], 'Direct imports must also retain unnamed opt-outs safely')
+    assert.equal(direct.missingProfileNames.length, 1)
+    const exported = JSON.parse(exportPresetLibrary([unnamed]))[0]
+    assert.deepEqual(exported.profileNames, [], 'An exclusion without a portable name cannot be dropped')
+    assert.doesNotMatch(JSON.stringify(exported), /private-layout|private-pane/)
+    assert.throws(() => normalizePresetLibrary([{ ...preset, excludedProfileNames: 'not an array' }]))
+    assert.throws(() => normalizePresetLibrary([{ ...preset, excludedProfileNames: [7] }]))
+})
+
+test('preset identity distinguishes excluded panes and never imports exclusion names as inclusions', () => {
+    const profiles = layoutScopeFixture('private')
+    const panes = getLayoutPaneTargets(profiles)
+    const preset = { id: 'anonymous', kind: 'metric', label: 'Metric', metric: {
+        id: 'value', command: 'printf 7', type: 'text', displayScope: { mode: 'selected', profileIds: [profiles[1].id],
+            excludedProfileIds: [panes[1].id], profileNames: { [profiles[1].id]: profiles[1].name, [panes[1].id]: layoutPaneTargetName(panes[1]) } },
+    } }
+    const first = instantiatePreset(preset, profiles)
+    assert.deepEqual(first.customMetrics[0].displayScope.profileIds, [profiles[1].id])
+    const secondPreset = JSON.parse(JSON.stringify(preset))
+    secondPreset.metric.displayScope.excludedProfileIds = []
+    const second = instantiatePreset(secondPreset, profiles)
+    assert.notEqual(first.customMetrics[0].presetOrigin.id, second.customMetrics[0].presetOrigin.id)
+    assert.notEqual(presetDefinitionFingerprint(first.customMetrics[0], 'metric'), presetDefinitionFingerprint(second.customMetrics[0], 'metric'))
+    assert.equal(findInstalledPreset(secondPreset, first, profiles), null)
 })
 
 test('built-in overrides are independent drafts, preserve stable IDs and honor legacy flags/icons', () => {
