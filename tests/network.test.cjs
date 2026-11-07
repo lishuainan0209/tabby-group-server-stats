@@ -69,9 +69,9 @@ test('Linux counts default IPv4/IPv6 route interfaces once and excludes duplicat
     assert.equal(linux(createNetworkRateCommand('rx'), options).stdout.trim(), '1.60')
     assert.equal(linux(createNetworkRateCommand('tx'), options).stdout.trim(), '4.80')
     assert.equal(linux(createNetworkRateCommand('total'), options).stdout.trim(), '6.40')
-    assert.equal(linux(createNetworkDetailCommand('rx'), options).stdout.trim(), 'Received total: 3.000 GiB (since interface reset; eth0,eth1)')
-    assert.equal(linux(createNetworkDetailCommand('tx'), options).stdout.trim(), 'Sent total: 5.000 GiB (since interface reset; eth0,eth1)')
-    assert.equal(linux(createNetworkDetailCommand('total'), options).stdout.trim(), 'Combined total: 8.000 GiB (since interface reset; eth0,eth1)')
+    assert.equal(linux(createNetworkDetailCommand('rx'), options).stdout.trim(), 'Received total: 3.000 GB (since interface reset; eth0,eth1)')
+    assert.equal(linux(createNetworkDetailCommand('tx'), options).stdout.trim(), 'Sent total: 5.000 GB (since interface reset; eth0,eth1)')
+    assert.equal(linux(createNetworkDetailCommand('total'), options).stdout.trim(), 'Combined total: 8.000 GB (since interface reset; eth0,eth1)')
 })
 
 test('Linux IPv6-only defaults and containers without sysfs or physical NICs remain usable', () => {
@@ -80,7 +80,7 @@ test('Linux IPv6-only defaults and containers without sysfs or physical NICs rem
     }).stdout.trim(), '0.000977')
     const result = linux(createNetworkDetailCommand('rx'), { before: [['eth0', gib, 200]], ipv4: [], ipv6: [] })
     assert.equal(result.status, 0, result.stderr)
-    assert.equal(result.stdout.trim(), 'Received total: 1.000 GiB (since interface reset; eth0)')
+    assert.equal(result.stdout.trim(), 'Received total: 1.000 GB (since interface reset; eth0)')
 })
 
 test('Linux no-route fallback excludes loopback, slave interfaces and interfaces that are down', () => {
@@ -88,7 +88,7 @@ test('Linux no-route fallback excludes loopback, slave interfaces and interfaces
         before: [['lo', 9 * gib, 0], ['br0', gib, 0], ['eth0', gib, 0], ['eth1', gib, 0]], ipv4: [], ipv6: [],
         sys: { br0: { state: 'up' }, eth0: { master: true, state: 'up' }, eth1: { state: 'down' } },
     })
-    assert.equal(result.stdout.trim(), 'Received total: 1.000 GiB (since interface reset; br0)')
+    assert.equal(result.stdout.trim(), 'Received total: 1.000 GB (since interface reset; br0)')
 })
 
 test('counter resets are clamped per interface without hiding other interface traffic', () => {
@@ -130,8 +130,8 @@ const macEnv = { MAC_BEFORE: macTable(gib, 2 * gib), MAC_AFTER: macTable(gib + 1
 test('macOS reads named byte columns once per link, excluding address aliases and loopback', () => {
     assert.equal(run(createNetworkRateCommand('rx'), macMock, macEnv).stdout.trim(), '0.800000')
     assert.equal(run(createNetworkRateCommand('tx'), macMock, macEnv).stdout.trim(), '1.60')
-    assert.equal(run(createNetworkDetailCommand('rx'), macMock, macEnv).stdout.trim(), 'Received total: 1.000 GiB (since interface reset; en0)')
-    assert.equal(run(createNetworkDetailCommand('tx'), macMock, macEnv).stdout.trim(), 'Sent total: 2.000 GiB (since interface reset; en0)')
+    assert.equal(run(createNetworkDetailCommand('rx'), macMock, macEnv).stdout.trim(), 'Received total: 1.000 GB (since interface reset; en0)')
+    assert.equal(run(createNetworkDetailCommand('tx'), macMock, macEnv).stdout.trim(), 'Sent total: 2.000 GB (since interface reset; en0)')
 })
 
 test('macOS supports low rates, resets, missing high-resolution clock and no-route fallback', () => {

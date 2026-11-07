@@ -2,7 +2,7 @@ import { Component, Input, OnChanges, OnDestroy, OnInit, AfterViewChecked, ViewC
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser'
 import { CustomMetric, CustomMetricGroup, evaluateColor, formatFontAwesomeIcon, getSvgPresetPath, isFaIcon, isUrlOrDataUri } from '../config'
 import { StatsService } from '../services/stats.service'
-import { carouselChildren, nextCarouselId, metricStatus, metricIsVisible, visibleGroupMetrics, parseNetworkDetail, parseNumericRatio, formatNetworkRate, isNumericDisplayValue, DisplayResult } from '../metric-display'
+import { carouselChildren, nextCarouselId, metricStatus, metricIsVisible, visibleGroupMetrics, parseNetworkDetail, parseNumericRatio, formatNetworkRate, formatCapacityUnit, isNumericDisplayValue, DisplayResult } from '../metric-display'
 import { BuiltinMetricKey, OrderedMetricItem, orderBuiltinItems } from '../builtin-metrics'
 import { METRIC_COLORS } from '../metric-colors'
 
@@ -25,7 +25,7 @@ import { METRIC_COLORS } from '../metric-colors'
         <span class="metric-detail" *ngIf="expanded && metric.detailCommand && status(metric) === 'ok'"
               [class.detail-error]="detailError(metric)" [style.color]="detailError(metric) ? colors.red : color(metric)"
               [attr.title]="detailError(metric) ? details[metric.id] : networkDetail(metric) ? (('Since interface creation or counter reset' | translate) + ' · ' + networkDetail(metric).interfaces) : null">
-            <span class="network-detail" *ngIf="networkDetail(metric) as network; else ordinaryDetail"><span>{{network.label | translate}} </span><span class="network-amount">{{network.amount}}</span><span class="network-unit"> GiB</span></span>
+            <span class="network-detail" *ngIf="networkDetail(metric) as network; else ordinaryDetail"><span>{{network.label | translate}} </span><span class="network-amount">{{network.amount}}</span><span class="network-unit"> GB</span></span>
             <ng-template #ordinaryDetail>
               <span class="numeric-ratio" *ngIf="detailRatio(metric) as ratio; else plainDetail"><span class="ratio-numerator">{{ratio.numerator}}</span><span class="ratio-slash">/</span><span class="ratio-denominator">{{ratio.denominator}}</span><span class="ratio-unit">{{ratio.suffix ? ' ' + ratio.suffix : ''}}</span></span>
               <ng-template #plainDetail>{{detailText(metric) | translate}}{{detailExitCode(metric)}}</ng-template>
@@ -261,10 +261,10 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
     displayValue(metric: CustomMetric): string {
         const value = this.result(metric).value
-        return this.isNetworkRate(metric) ? formatNetworkRate(value) : value
+        return this.isNetworkRate(metric) ? formatNetworkRate(value) : this.status(metric) === 'ok' ? formatCapacityUnit(value) : value
     }
     suffix(metric: CustomMetric): string {
-        const suffix = this.isNetworkRate(metric) ? 'MB/s' : metric.suffix?.trim() || (metric.type === 'progress' ? '%' : '')
+        const suffix = this.isNetworkRate(metric) ? 'MB/s' : formatCapacityUnit(metric.suffix?.trim() || (metric.type === 'progress' ? '%' : ''))
         return suffix && !suffix.startsWith('%') ? ' ' + suffix : suffix
     }
     detailRatio(metric: CustomMetric) { return this.detailError(metric) ? null : parseNumericRatio(this.details[metric.id] || '') }
@@ -286,7 +286,7 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
     detailText(metric: CustomMetric): string {
         const value = this.details[metric.id] || ''
-        if (!this.detailError(metric)) return value
+        if (!this.detailError(metric)) return formatCapacityUnit(value)
         if (value === 'Err: No result') return 'No detail received'
         if (value === 'Err: No output') return 'Detail returned no data'
         if (value === 'Err: Incomplete output') return 'Incomplete detail response'

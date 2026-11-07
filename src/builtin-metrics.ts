@@ -37,7 +37,7 @@ const usageRules = [
 ]
 
 const darwinMemory = (detail: boolean): string => {
-    const result = detail ? 'printf "%.1f/%.1f GiB available\\n",available/1073741824,total/1073741824' : 'printf "%.1f\\n",(total-available)*100/total'
+    const result = detail ? 'printf "%.1f/%.1f GB available\\n",available/1073741824,total/1073741824' : 'printf "%.1f\\n",(total-available)*100/total'
     return `total=$(sysctl -n hw.memsize 2>/dev/null) || exit 1; data=$(vm_stat 2>/dev/null) || exit 1; printf '%s\\n' "$data" | awk -v total="$total" '/page size of/ {for(i=1;i<NF;i++) if($i=="of") size=$(i+1)} /^Pages free:/ {free=$3+0} /^Pages inactive:/ {inactive=$3+0} /^Pages speculative:/ {speculative=$3+0} END {if(total<=0 || size<=0) exit 1; available=(free+inactive+speculative)*size; if(available>total) available=total; ${result}}'`
 }
 const linuxOrDarwin = (linux: string, darwin: string): string => `if [ "$(uname -s)" = Darwin ]; then ${darwin}; else ${linux}; fi`
@@ -94,7 +94,7 @@ export function createNetworkDetailCommand(direction: 'rx' | 'tx' | 'total'): st
     const label = direction === 'rx' ? 'Received' : direction === 'tx' ? 'Sent' : 'Combined'
     const value = direction === 'rx' ? '$2' : direction === 'tx' ? '$3' : '$2+$3'
     return `${networkPrelude}
-data=$(tabby_net_snapshot) || exit 1; printf '%s\\n' "$data" | awk -v interfaces="$net_interfaces" '{bytes+=${value}; count++} END {if(!count) exit 1; gsub(/ /,",",interfaces); printf "${label} total: %.3f GiB (since interface reset; %s)\\n",bytes/1073741824,interfaces}'`
+data=$(tabby_net_snapshot) || exit 1; printf '%s\\n' "$data" | awk -v interfaces="$net_interfaces" '{bytes+=${value}; count++} END {if(!count) exit 1; gsub(/ /,",",interfaces); printf "${label} total: %.3f GB (since interface reset; %s)\\n",bytes/1073741824,interfaces}'`
 }
 
 /** Fresh objects are returned so settings drafts cannot mutate the factory defaults. */
@@ -115,11 +115,11 @@ export function getBuiltinDefaults(): BuiltinDefinitions {
             colorRules: usageColorRules(60, 80),
             checkCommand: linuxOrDarwin('test -r /proc/meminfo', 'command -v vm_stat >/dev/null && command -v sysctl >/dev/null'),
             command: linuxOrDarwin(`awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2; found=1} /^MemFree:/ {f=$2} /^Buffers:/ {b=$2} /^Cached:/ {c=$2} END {if(t<=0) exit 1; if(!found) a=f+b+c; printf "%.1f\\n",(t-a)*100/t}' /proc/meminfo`, darwinMemory(false)),
-            detailCommand: linuxOrDarwin(`awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2; found=1} /^MemFree:/ {f=$2} /^Buffers:/ {b=$2} /^Cached:/ {c=$2} END {if(t<=0) exit 1; if(!found) a=f+b+c; printf "%.1f/%.1f GiB available\\n",a/1048576,t/1048576}' /proc/meminfo`, darwinMemory(true)) },
+            detailCommand: linuxOrDarwin(`awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2; found=1} /^MemFree:/ {f=$2} /^Buffers:/ {b=$2} /^Cached:/ {c=$2} END {if(t<=0) exit 1; if(!found) a=f+b+c; printf "%.1f/%.1f GB available\\n",a/1048576,t/1048576}' /proc/meminfo`, darwinMemory(true)) },
         disk: { ...common, id: 'builtin-disk', label: 'Disk', icon: 'stats-system-disk',
             checkCommand: 'df -Pk / >/dev/null 2>&1',
             command: `data=$(df -Pk / 2>/dev/null) || exit 1; printf '%s\\n' "$data" | awk 'NR==2 {gsub(/%/,"",$5); print $5; found=1} END {if(!found) exit 1}'`,
-            detailCommand: `data=$(df -Pk / 2>/dev/null) || exit 1; printf '%s\\n' "$data" | awk 'NR==2 {printf "%.1f/%.1f GiB available\\n",$4/1048576,$2/1048576; found=1} END {if(!found) exit 1}'` },
+            detailCommand: `data=$(df -Pk / 2>/dev/null) || exit 1; printf '%s\\n' "$data" | awk 'NR==2 {printf "%.1f/%.1f GB available\\n",$4/1048576,$2/1048576; found=1} END {if(!found) exit 1}'` },
         net: { id: 'builtin-net', label: 'Network', mode: 'static', layout: 'vertical',
             main: { ...netMetric('builtin-net-main', 'Network', 'total', 'stats-network'), enabled: false },
             children: [netMetric('builtin-net-rx', 'Download', 'rx', 'stats-network-download'), netMetric('builtin-net-tx', 'Upload', 'tx', 'stats-network-upload')] }

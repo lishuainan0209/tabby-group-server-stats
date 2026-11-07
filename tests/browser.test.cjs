@@ -269,7 +269,10 @@ async function main() {
             window.harness.detailResults = { 'disk-total': '551.0/8786.0 GiB', 'disk-root': '38.3/936.4GB',
                 'disk-data': '87.3/7392.2 GiB', 'disk-other': '425.4/457.4' }
         })
-        await page.waitForFunction(() => [...document.querySelectorAll('.metric-group .ratio-unit')].some(node => node.textContent.trim() === 'GB'))
+        await page.waitForFunction(() => {
+            const units = [...document.querySelectorAll('.metric-group .ratio-unit')]
+            return units.length === 4 && units[3].textContent.trim() === ''
+        })
         for (const selector of ['.ratio-numerator', '.ratio-slash', '.ratio-denominator']) {
             const edges = await group.locator(selector).evaluateAll(nodes => nodes.map(node => {
                 const range = document.createRange(); range.selectNodeContents(node)
@@ -278,7 +281,8 @@ async function main() {
             assert.equal(edges.length, 4)
             assert(edges.every(edge => Math.abs(edge - edges[0]) < 1), `${selector}: mixed or absent units must not displace numeric columns`)
         }
-        assert.deepEqual((await group.locator('.ratio-unit').allTextContents()).map(value => value.trim()).filter(Boolean), ['GiB', 'GB', 'GiB'])
+        assert.deepEqual((await group.locator('.ratio-unit').allTextContents()).map(value => value.trim()).filter(Boolean), ['GB', 'GB', 'GB'])
+        assert(!(await group.innerText()).includes('GiB'), 'Legacy saved GiB suffixes and details render GB')
         await page.mouse.move(1040, 650)
         await mutate(() => {
             const h = window.harness, snapshot = h.ratioPreviewSnapshot
@@ -316,7 +320,7 @@ async function main() {
         await page.waitForFunction(() => document.querySelector('.metric-group .metric-detail')?.textContent.includes('累计接收'))
         const networkDetails = group.locator('.metric-detail')
         assert.deepEqual((await networkDetails.allTextContents()).map(value => value.replace(/\s+/g, '')),
-            ['累计接收201.900GiB', '累计发送35.600GiB'])
+            ['累计接收201.900GB', '累计发送35.600GB'])
         assert.deepEqual(await networkDetails.evaluateAll(nodes => nodes.map(node => node.title)),
             ['自网卡建立或计数器重置起 · eth0', '自网卡建立或计数器重置起 · eth0'])
         assert((await group.innerText()).includes('0.001 MB/s'))
@@ -333,7 +337,7 @@ async function main() {
         assert(!(await group.innerText()).includes('since interface reset'))
         if (process.env.NETWORK_SCREENSHOT) await page.screenshot({ path: process.env.NETWORK_SCREENSHOT })
         await mutate(() => { window.harness.previewChinese = false; window.harness.config.store.language = 'en-US' })
-        assert.deepEqual((await networkDetails.allTextContents()).map(value => value.trim()), ['Received total 201.900 GiB', 'Sent total 35.600 GiB'])
+        assert.deepEqual((await networkDetails.allTextContents()).map(value => value.trim()), ['Received total 201.900 GB', 'Sent total 35.600 GB'])
         assert.equal(await networkDetails.first().getAttribute('title'), 'Since interface creation or counter reset · eth0')
         await page.mouse.move(1040, 650)
         await mutate(() => {
@@ -526,6 +530,8 @@ async function main() {
         assert.equal(await page.locator('.group-card .inline-item-editor').count(), 0)
         await page.locator('.group-edit').click()
         assert.equal(await page.locator('.group-card .inline-item-editor').count(), 1)
+        assert.equal(await page.locator('.group-card .member-editor').count(), 0, 'Group Edit opens with all members collapsed')
+        assert.equal(await page.locator('.group-member-main .member-toggle').getAttribute('aria-expanded'), 'false')
         assert.equal(await page.locator('.new-item-editor').count(), 0)
         await page.locator('.group-member-child .member-toggle').first().click()
         assert.equal(await page.locator('.group-member-child .metric-command textarea').inputValue(), 'printf 39')
@@ -626,6 +632,7 @@ async function main() {
         const netBuiltin = page.locator('.builtin-card[data-builtin="net"]')
         await netBuiltin.locator('.builtin-edit').click()
         await netBuiltin.locator('.inline-item-editor').waitFor()
+        assert.equal(await netBuiltin.locator('.member-editor').count(), 0, 'Built-in group Edit also starts collapsed')
         assert.equal(await netBuiltin.locator('.group-member-child').count(), 2)
         assert.equal(await netBuiltin.locator('.group-member-main .member-enabled').getAttribute('aria-pressed'), 'false')
         await netBuiltin.locator('.group-member-child .member-toggle').first().click()

@@ -32,7 +32,7 @@ Display is fixed to the bottom status bar, with an enable switch in settings. Le
 
 Open Tabby Settings → Bottom Status Bar, then choose **Add single label**, or find a library preset and click **Add**. Importing from GitHub or JSON loads choices into the library; adding a preset puts it into the active configuration. Use the pencil button to edit an existing item. Within a group, each main/child label opens its own editor.
 
-Group cards place the main label and child labels on separate adjacent rows. Click a bordered label button to edit that member directly. Delete buttons sit at the lower right of their cards and ask for confirmation with the item's name. Deleting a child takes effect only after saving the whole group.
+Group cards place the main label and child labels on separate adjacent rows. The group's pencil button opens its editor with every member collapsed; clicking a bordered label button opens that member directly. Delete buttons sit at the lower right of their cards and ask for confirmation with the item's name. Deleting a child takes effect only after saving the whole group.
 
 New labels default to **text** and checks default to **output-text comparison**. Configure commands in this order:
 
@@ -89,7 +89,9 @@ Use each card's up/down buttons to reorder CPU, memory, disk and network. The or
 
 **Restore defaults** removes only the selected built-in's override, preserving its top-level enable switch and ordering, and leaving other built-ins and custom labels untouched. Restoring network resets that group's main/child definitions to their factory configuration.
 
-Built-in CPU, memory, disk and network commands support Linux/macOS; most other library presets target Linux. Download and upload show the current received/sent rates in decimal MB/s with three fractional digits and thousands separators. Commands still return KiB/s; thresholds continue to use raw values. Each direction's hover detail shows its own cumulative GiB and the interfaces included. Default-route interfaces are preferred; without a usable default route, eligible non-loopback interfaces are used. **Totals cover the time since interface creation or counter reset, not since the current SSH login.**
+Built-in CPU, memory, disk and network commands support Linux/macOS; most other library presets target Linux. Download and upload show the current received/sent rates in decimal MB/s with three fractional digits and thousands separators. Commands still return KiB/s; thresholds continue to use raw values. Each direction's hover detail shows its own cumulative GB and the interfaces included. Default-route interfaces are preferred; without a usable default route, eligible non-loopback interfaces are used. **Totals cover the time since interface creation or counter reset, not since the current SSH login.**
+
+Capacity and cumulative traffic use the **GB** label while retaining the existing base-1024 calculation (1024³ bytes per displayed unit). Only the unit name changes; readings and alert thresholds stay the same. Network rates in MB/s remain decimal.
 
 The target system needs `timeout`, `gtimeout` or `setsid` for bounded command execution.
 
@@ -116,11 +118,11 @@ The 12 standalone presets cover uptime, temperature, system load, logged-in user
 | GPU memory | Aggregate GPU memory; eight children GPU 0–7 | All panes |
 | CPU load | Thread count; 1-minute and 5-minute load | All panes |
 
-Each disk group's main label shows **aggregate free GiB** across its readable system and mounted data filesystems, deduplicating filesystems so bind mounts are not counted twice. The system disk is the first child, followed by data mounts; hover shows free/total capacity. Missing mounts are omitted from the aggregate while their child labels retain a notice by default. No readable valid filesystem produces an error, not a misleading zero.
+Each disk group's main label shows **aggregate free GB** across its readable system and mounted data filesystems, deduplicating filesystems so bind mounts are not counted twice. The system disk is the first child, followed by data mounts; hover shows free/total capacity. Missing mounts are omitted from the aggregate while their child labels retain a notice by default. No readable valid filesystem produces an error, not a misleading zero.
 
 The **Users** preset counts system login records from `who`, including normal tty, pts and console sessions. Hover groups and sorts counts by username, for example `alice ×2, bob ×1`. Empty records produce a primary value of `0` and a detail of `-`; missing tools or execution failures remain errors. This is neither the current connection's username nor a count of every TCP or background SSH connection.
 
-GPU percentages mean **VRAM usage** (`memory.used / memory.total`), not `utilization.gpu`. Details query `memory.free` directly and divide by 1024 to display free/total GiB. The main GPU label keeps a no-GPU notice; nonexistent GPU children are hidden in every view by default.
+GPU percentages mean **VRAM usage** (`memory.used / memory.total`), not `utilization.gpu`. Details query `memory.free` directly, retain the division by 1024, and show free/total memory with the GB label. The main GPU label keeps a no-GPU notice; nonexistent GPU children are hidden in every view by default.
 
 The P1 host and container are separate presets bound to separate saved connections. They must not be merged merely because they share a host address and use different ports.
 
@@ -134,8 +136,8 @@ The corresponding built-ins and presets use green `#00ff00`, orange `#ffa500` an
 
 | Metric | Red | Orange | Green |
 | --- | --- | --- | --- |
-| Free capacity per disk (GiB) | `< 20` | `20 ≤ x ≤ 40` | `> 40` |
-| Total free disk capacity (GiB) | `< 50` | `50 ≤ x ≤ 100` | `> 100` |
+| Free capacity per disk (GB) | `< 20` | `20 ≤ x ≤ 40` | `> 40` |
+| Total free disk capacity (GB) | `< 50` | `50 ≤ x ≤ 100` | `> 100` |
 | GPU memory usage (%) | `> 80` | `50 < x ≤ 80` | `≤ 50` |
 | RAM usage (%) | `> 80` | `60 < x ≤ 80` | `≤ 60` |
 | Normalized CPU 1min / 5min load (%) | `> 150` | `100 < x ≤ 150` | `≤ 100` |

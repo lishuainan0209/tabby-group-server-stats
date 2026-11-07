@@ -29,6 +29,11 @@ export function formatNetworkRate(value: string): string {
     return networkRateFormat.format(Math.abs(amount) < 0.0005 ? 0 : amount)
 }
 
+/** Use the requested capacity label, retaining the existing numbers and thresholds. */
+export function formatCapacityUnit(value: string): string {
+    return value.replace(/(^|[\d\s])GiB\b/g, '$1GB')
+}
+
 export interface NumericRatio {
     numerator: string
     denominator: string
@@ -42,12 +47,12 @@ export function parseNumericRatio(value: string): NumericRatio | null {
     const numerator = match[1].trim()
     const denominator = match[2].trim()
     if (![numerator, denominator].every(isNumericDisplayValue)) return null
-    return { numerator, denominator, suffix: match[3] || '' }
+    return { numerator, denominator, suffix: formatCapacityUnit(match[3] || '') }
 }
 
 /** Parse the built-in network protocol without translating numbers or interface names. */
 export function parseNetworkDetail(value: string): { label: string; amount: string; interfaces: string } | null {
-    const match = /^(Received|Sent|Combined) total: ([0-9]+(?:\.[0-9]+)?) GiB \(since interface reset; ([^)\r\n]+)\)$/.exec(value || '')
+    const match = /^(Received|Sent|Combined) total: ([0-9]+(?:\.[0-9]+)?) G(?:i)?B \(since interface reset; ([^)\r\n]+)\)$/.exec(value || '')
     return match ? { label: `${match[1]} total`, amount: match[2], interfaces: match[3] } : null
 }
 

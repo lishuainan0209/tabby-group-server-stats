@@ -349,16 +349,22 @@ test('reordering a collapsed child keeps its draft identity and the editor colla
   assert.equal(editor.expandedMemberId, editor.currentGroup.main.id);
 });
 
-test('explicit group edit retains the current draft and Cancel closes it without saving', () => {
+test('group pencil editing starts collapsed and repeat clicks collapse members without discarding drafts', () => {
   const { config, editor } = scopeFixture();
   editor.newGroup();
   Object.assign(editor.currentMetric, { label: 'Main', command: 'printf main' });
   editor.currentGroup.label = 'Stored';
   editor.saveGroup();
   editor.editGroup(0);
+  assert.equal(editor.expandedMemberId, null);
+  editor.toggleGroupMetric(-1);
+  assert.equal(editor.expandedMemberId, editor.currentGroup.main.id);
   editor.currentGroup.label = 'Draft';
   editor.currentMetric.command = 'printf edited';
+  editor.iconPickerOpen = true;
   editor.editGroup(0);
+  assert.equal(editor.expandedMemberId, null);
+  assert.equal(editor.iconPickerOpen, false);
   assert.equal(config.store.plugin.serverStats.metricGroups[0].label, 'Stored');
   assert.equal(editor.currentGroup.label, 'Draft');
   assert.equal(editor.currentMetric.command, 'printf edited');
@@ -366,6 +372,31 @@ test('explicit group edit retains the current draft and Cancel closes it without
   assert.equal(editor.currentGroup, null);
   assert.equal(editor.editingGroupId, null);
   assert.equal(config.store.plugin.serverStats.metricGroups[0].label, 'Stored');
+});
+
+test('new groups open the main form immediately while existing built-in network editing starts collapsed', () => {
+  const { config, editor } = scopeFixture();
+  editor.newGroup();
+  assert.equal(editor.expandedMemberId, editor.currentGroup.main.id);
+  assert.equal(editor.currentMetric.id, editor.currentGroup.main.id);
+  editor.editBuiltin('net');
+  assert.equal(editor.expandedMemberId, null);
+  assert.equal(editor.currentGroup.id, 'builtin-net');
+  editor.toggleGroupMetric(0);
+  assert.equal(editor.expandedMemberId, editor.currentGroup.children[0].id);
+  const draft = editor.currentGroup;
+  const child = editor.currentMetric;
+  child.command = 'printf pending';
+  editor.iconPickerOpen = true;
+  editor.editBuiltin('net');
+  assert.equal(editor.currentGroup, draft);
+  assert.equal(editor.currentMetric, child);
+  assert.equal(editor.expandedMemberId, null);
+  assert.equal(editor.iconPickerOpen, false);
+  assert.equal(config.store.plugin.serverStats.defaultMetricOverrides, undefined);
+  editor.toggleGroupMetric(0);
+  assert.equal(editor.expandedMemberId, child.id);
+  assert.equal(editor.currentMetric.command, 'printf pending');
 });
 
 function groupCardFixture() {

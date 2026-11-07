@@ -49,12 +49,12 @@ test('GPU memory percentage aggregates capacity and detail uses actual free memo
     const value = run(createGpuCommand(), fakeNvidia, { GPU_MEMORY: memory8 })
     assert.equal(value.status, 0, value.stderr)
     assert.equal(value.stdout.trim(), '28')
-    assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), '45.0/64.0 GiB')
+    assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), '45.0/64.0 GB')
     for (let index = 0; index < 8; index++) {
         assert.equal(run(createGpuCheckCommand(index), fakeNvidia, { GPU_MEMORY: memory8 }).status, 0)
         assert.equal(run(createGpuCommand(index), fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), String(Math.floor(512 * (index + 1) * 100 / 8192)))
     }
-    assert.equal(run(createGpuCommand(0, true), fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), '7.4/8.0 GiB')
+    assert.equal(run(createGpuCommand(0, true), fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), '7.4/8.0 GB')
     assert.notEqual(run(createGpuCheckCommand(8), fakeNvidia, { GPU_MEMORY: memory8 }).status, 0)
 })
 
@@ -80,13 +80,13 @@ test('all-device failure or invalid output falls back to readable GPUs and sums 
         const value = run(createGpuCommand(), fakeNvidia, env)
         assert.equal(value.status, 0, value.stderr)
         assert.equal(value.stdout.trim(), '35')
-        assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, env).stdout.trim(), '29.7/48.0 GiB')
+        assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, env).stdout.trim(), '29.7/48.0 GB')
         assert.equal(run(createGpuCommand(0), fakeNvidia, env).stdout.trim(), '66')
         assert.equal(run(createGpuCommand(1), fakeNvidia, env).stdout.trim(), '4')
     }
     const mixed = { GPU_MEMORY: 'N/A, 8192, 0\n512, 0, 0\n1024, 8192, 7000', GPU_ALL_FAIL: '1' }
     assert.equal(run(createGpuCommand(), fakeNvidia, mixed).stdout.trim(), '12')
-    assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, mixed).stdout.trim(), '6.8/8.0 GiB')
+    assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, mixed).stdout.trim(), '6.8/8.0 GB')
     assert.notEqual(run(createGpuCheckCommand(), fakeNvidia, { GPU_MEMORY: '', GPU_ALL_FAIL: '1' }).status, 0)
     assert.notEqual(run(createGpuCommand(), fakeNvidia, { GPU_MEMORY: '', GPU_ALL_FAIL: '1' }).status, 0)
 })
@@ -127,7 +127,7 @@ test('disk presets quote mount paths, keep disappeared disks visible and propaga
     assert.equal(check.stdout.trim().split('\n').at(-1), mount)
     const fakeDf = `df() { [ "$3" = "$EXPECTED_MOUNT" ] || return 9; printf 'Filesystem 1024-blocks Used Available Capacity Mounted\\n/dev/fake 104857600 52428800 52428800 50%% /fake\\n'; }`
     assert.equal(run(metric.command, fakeDf, { EXPECTED_MOUNT: mount }).stdout.trim(), '50')
-    assert.equal(run(metric.detailCommand, fakeDf, { EXPECTED_MOUNT: mount }).stdout.trim(), '50.0/100.0 GiB')
+    assert.equal(run(metric.detailCommand, fakeDf, { EXPECTED_MOUNT: mount }).stdout.trim(), '50.0/100.0 GB')
     assert.notEqual(run(metric.command, `df() { printf 'Filesystem 1024-blocks Used Available Capacity Mounted\\n/dev/fake 104857600 52428800 52428800 50%% /fake\\n'; return 9; }`).status, 0)
     assert.equal(metric.visibleWhenUnavailable, true)
     assert.equal(metric.showWhenUnavailable, true)
@@ -204,10 +204,10 @@ test('disk totals sum valid unique filesystems and never count absent mounts or 
     const value = run(group.main.command, fakeFilesystems)
     assert.equal(value.status, 0, value.stderr)
     assert.equal(value.stdout.trim(), '100')
-    assert.equal(run(group.main.detailCommand, fakeFilesystems).stdout.trim(), '100.0/300.0 GiB')
+    assert.equal(run(group.main.detailCommand, fakeFilesystems).stdout.trim(), '100.0/300.0 GB')
     assert.equal(run(group.main.command, fakeFilesystems, { ROOT_FAIL: '1' }).stdout.trim(), '100', 'Root bind remains a valid sample when only the root query fails')
     assert.equal(run(createDiskTotalCommand(['/data']), fakeFilesystems, { ROOT_FAIL: '1' }).stdout.trim(), '75')
-    assert.equal(run(createDiskTotalCommand(['/data'], true), fakeFilesystems, { ROOT_FAIL: '1' }).stdout.trim(), '75.0/200.0 GiB')
+    assert.equal(run(createDiskTotalCommand(['/data'], true), fakeFilesystems, { ROOT_FAIL: '1' }).stdout.trim(), '75.0/200.0 GB')
     assert(group.children.every(metric => metric.showWhenUnavailable === true && metric.visibleWhenUnavailable === true))
     assert.equal(group.children[0].label, '系统盘')
     assert.equal(group.main.checkCommand, '', 'The aggregate must report no readable results as an execution error')
@@ -231,7 +231,7 @@ test('disk totals and children reject empty or malformed rows while allowing a t
     const full = run(group.main.command, fakeFilesystems, { DISK_MODE: 'full' })
     assert.equal(full.status, 0, full.stderr)
     assert.equal(full.stdout.trim(), '0')
-    assert.equal(run(group.main.detailCommand, fakeFilesystems, { DISK_MODE: 'full' }).stdout.trim(), '0.0/100.0 GiB')
+    assert.equal(run(group.main.detailCommand, fakeFilesystems, { DISK_MODE: 'full' }).stdout.trim(), '0.0/100.0 GB')
 })
 
 test('disk totals quote shell-sensitive paths without executing their contents', () => {
@@ -349,7 +349,7 @@ test('legacy comparison normalizes check defaults while respecting units and emp
     delete metric.presetOrigin
     metric.checkMode = 'exitCode'; metric.checkExpected = '0'
     assert.deepEqual(findInstalledPreset(preset, config), { kind: 'metric', id: metric.id })
-    metric.suffix = 'GiB'
+    metric.suffix = 'GB'
     assert.equal(findInstalledPreset(preset, config), null)
     const selected = { ...preset, profileNames: ['missing-machine'] }
     const old = instantiatePreset(selected, [])
@@ -357,6 +357,36 @@ test('legacy comparison normalizes check defaults while respecting units and emp
     assert.equal(findInstalledPreset(selected, old), null, 'Old empty bindings lack enough information to establish identity safely')
     const current = instantiatePreset(selected, [])
     assert.deepEqual(findInstalledPreset(selected, current), { kind: 'metric', id: current.customMetrics[0].id })
+})
+
+test('legacy GiB display labels do not allow duplicate presets, while paths and calculations stay distinct', () => {
+    const profiles = [{ id: 'p3', name: 'P3' }]
+    for (const preset of [createGpuGroupPreset(), createDiskGroupPreset('P3', ['/data'], ['P3'])]) {
+        const config = instantiatePreset(preset, profiles)
+        const group = config.metricGroups[0]
+        delete group.presetOrigin
+        for (const metric of [group.main, ...group.children]) {
+            metric.suffix = metric.suffix?.replace(/\bGB\b/g, 'GiB')
+            metric.detailCommand = metric.detailCommand?.replace(/\bGB\b/g, 'GiB')
+        }
+        const original = JSON.stringify(group)
+        assert.deepEqual(findInstalledPreset(preset, config, profiles), { kind: 'group', id: group.id })
+        assert.equal(JSON.stringify(group), original, 'Comparing aliases must not rewrite installed commands')
+        group.main.detailCommand = group.main.detailCommand.replace(/\/1024\b|\/1048576\b/, '/1000')
+        assert.equal(findInstalledPreset(preset, config, profiles), null, 'Actual numeric conversion changes remain distinct')
+    }
+    const metric = { id: 'disk', command: 'df /GiB', detailCommand: 'printf "%.1f/%.1f GiB\\n" 1 2', suffix: 'GiB', type: 'text' }
+    const alias = { ...metric, detailCommand: 'printf "%.1f/%.1f GB\\n" 1 2', suffix: 'GB' }
+    assert.equal(presetDefinitionFingerprint(metric, 'metric'), presetDefinitionFingerprint(alias, 'metric'))
+    for (const changed of [
+        { ...alias, command: 'df /GB' },
+        { ...alias, detailCommand: 'cat /GB' },
+        { ...alias, checkCommand: 'test -d /GiB' },
+        { ...alias, suffix: 'MB' },
+    ]) assert.notEqual(presetDefinitionFingerprint(metric, 'metric'), presetDefinitionFingerprint(changed, 'metric'))
+    const originalText = { ...metric, detailCommand: 'printf "GiB storage"' }
+    const changedText = { ...metric, detailCommand: 'printf "GB storage"' }
+    assert.notEqual(presetDefinitionFingerprint(originalText, 'metric'), presetDefinitionFingerprint(changedText, 'metric'))
 })
 
 test('anonymous and reordered flat libraries identify content instead of positional generated IDs', () => {
@@ -505,7 +535,7 @@ ps() { printf '20\\n40\\n60\\n80\\n'; }
 vm_stat() { printf 'Mach Virtual Memory Statistics: (page size of 4096 bytes)\\nPages free: 65536.\\nPages inactive: 32768.\\nPages speculative: 32768.\\n'; }`
     assert.equal(run(defaults.cpu.command, fakeDarwin).stdout.trim(), '50.0')
     assert.equal(run(defaults.ram.command, fakeDarwin).stdout.trim(), '50.0')
-    assert.equal(run(defaults.ram.detailCommand, fakeDarwin).stdout.trim(), '0.5/1.0 GiB available')
+    assert.equal(run(defaults.ram.detailCommand, fakeDarwin).stdout.trim(), '0.5/1.0 GB available')
     assert.equal(run(defaults.cpu.detailCommand, fakeDarwin).stdout.trim(), '{ 0.5 1.0 1.5 }')
     assert.notEqual(run(defaults.disk.command, 'df() { return 9; }').status, 0)
 })

@@ -31,12 +31,12 @@ test('network display does not turn missing or nonnumeric command output into ze
 
 test('capacity ratios preserve precision and expose each right-aligned column independently', () => {
     for (const [raw, numerator, denominator, suffix] of [
-        ['551.0/8786.0 GiB', '551.0', '8786.0', 'GiB'],
+        ['551.0/8786.0 GiB', '551.0', '8786.0', 'GB'],
         ['38.3/936.4GB', '38.3', '936.4', 'GB'],
         [' 38.3 / 936.4 GB ', '38.3', '936.4', 'GB'],
         ['1,234.50/12,345.00 MiB', '1,234.50', '12,345.00', 'MiB'],
         ['17/8850', '17', '8850', ''], ['-1.5/+3.0 %', '-1.5', '+3.0', '%'],
-        ['0.0/0.0 GiB', '0.0', '0.0', 'GiB'],
+        ['0.0/0.0 GiB', '0.0', '0.0', 'GB'],
     ]) {
         const actual = api.parseNumericRatio(raw)
         assert.ok(actual, raw)
@@ -58,8 +58,18 @@ test('network detail separates localizable direction, amount and interface scope
     assert.equal(detail.amount, '201.900')
     assert.equal(detail.interfaces, 'eth0,enp2s0')
     assert.equal(api.parseNetworkDetail('Sent total: 0.001 GiB (since interface reset; en0)').label, 'Sent total')
+    assert.equal(api.parseNetworkDetail('Sent total: 0.001 GB (since interface reset; en0)').amount, '0.001')
     assert.equal(api.parseNetworkDetail('RX 200 GiB / TX 30 GiB'), null)
     assert.equal(api.parseNetworkDetail('Err: No result'), null)
+})
+
+test('GB presentation accepts old capacity labels without changing numbers or unrelated text', () => {
+    for (const [raw, expected] of [
+        ['GiB', 'GB'], [' GiB', ' GB'], ['24GiB', '24GB'],
+        ['38.3/936.4 GiB available', '38.3/936.4 GB available'],
+        ['free 1,234.50 GiB', 'free 1,234.50 GB'], ['24 GB', '24 GB'],
+        ['48 MiB', '48 MiB'], ['GiB_count', 'GiB_count'], ['/data/GiB', '/data/GiB'],
+    ]) assert.equal(api.formatCapacityUnit(raw), expected)
 })
 test('failed children remain in carousel by default', () => assert.equal(api.carouselChildren(group, results).map(m => m.id).join(','), 'a,b,c,d'))
 test('only opted-out children are skipped, including consecutive failures', () => {

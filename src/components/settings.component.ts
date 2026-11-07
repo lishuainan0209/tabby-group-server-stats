@@ -1295,7 +1295,11 @@ export class ServerStatsSettingsComponent {
     editGroup(index: number) {
         const group = this.metricGroups[index];
         if (!group) return;
-        if (this.editingGroupId === group.id && this.currentGroup) return;
+        if (this.editingGroupId === group.id && this.currentGroup) {
+            this.expandedMemberId = null;
+            this.iconPickerOpen = false;
+            return;
+        }
         this.cancelEdit();
         this.editingGroupId = group.id;
         this.currentGroup = {
@@ -1304,6 +1308,7 @@ export class ServerStatsSettingsComponent {
             children: (group.children || []).map(m => this.draftMetric(m))
         };
         this.selectGroupMetric(-1);
+        this.expandedMemberId = null;
     }
 
     editGroupMember(groupIndex: number, memberIndex = -1) {
@@ -1490,7 +1495,13 @@ export class ServerStatsSettingsComponent {
     }
 
     editBuiltin(key: BuiltinMetricKey) {
-        if (this.editingBuiltinKey === key) return;
+        if (this.editingBuiltinKey === key) {
+            if (this.currentGroup) {
+                this.expandedMemberId = null;
+                this.iconPickerOpen = false;
+            }
+            return;
+        }
         this.cancelEdit();
         this.editingBuiltinKey = key;
         const definition = getBuiltinDefinition(key, this.config.store.plugin.serverStats);
@@ -1498,6 +1509,7 @@ export class ServerStatsSettingsComponent {
             const group = JSON.parse(JSON.stringify(definition)) as CustomMetricGroup;
             this.currentGroup = { ...group, main: this.draftMetric(group.main), children: group.children.map(child => this.draftMetric(child)) };
             this.selectGroupMetric(-1);
+            this.expandedMemberId = null;
         } else this.currentMetric = this.draftMetric(definition as CustomMetric);
     }
 

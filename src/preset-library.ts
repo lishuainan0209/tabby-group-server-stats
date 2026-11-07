@@ -41,13 +41,22 @@ function normalizeCommand(value: unknown): string {
     return typeof value === 'string' ? value.replace(/\r\n?/g, '\n').trim() : ''
 }
 
+function normalizedDisplayCommand(value: unknown): string {
+    // Compare the old/new unit labels in our known output formats only.
+    // GiB in paths, executable names, checks or other text must stay distinct.
+    return normalizeCommand(value)
+        .replace(/(\bprintf\s+["']%\.1f\/%\.1f )GiB(?=(?: available)?\\n["'])/g, '$1GB')
+        .replace(/(\bprintf\s+["'](?:Received|Sent|Combined) total: %\.3f )GiB(?= \(since interface reset; %s\)\\n["'])/g, '$1GB')
+}
+
 function metricDefinition(metric: CustomMetric): unknown[] {
     const check = normalizeCommand(metric.checkCommand)
     const mode = metric.checkMode === 'output' ? 'output' : 'exitCode'
-    return [normalizeCommand(metric.command), normalizeCommand(metric.detailCommand),
+    const suffix = metric.suffix?.trim() || (metric.type === 'progress' ? '%' : '')
+    return [normalizedDisplayCommand(metric.command), normalizedDisplayCommand(metric.detailCommand),
         check, check ? mode : '', check ? (metric.checkExpected ?? (mode === 'output' ? '' : '0')).trim() : '',
-        // Units change the meaning of a reading; labels, colors and layout do not.
-        metric.suffix?.trim() || (metric.type === 'progress' ? '%' : '')]
+        // GB is a display alias for the legacy GiB value; other units differ.
+        suffix === 'GiB' ? 'GB' : suffix]
 }
 
 function definitionBody(item: CustomMetric | CustomMetricGroup, kind: 'metric' | 'group'): unknown {
@@ -132,7 +141,7 @@ const localSource = { name: 'lishuainan0209 / Tabby Group Server Stats', url: 'h
 export function createGpuCommand(index?: number, detail = false): string {
     if (index !== undefined && (!Number.isInteger(index) || index < 0)) throw new Error('Invalid GPU index')
     const selected = index === undefined ? '' : ` --id=${index}`
-    const result = detail ? 'printf "%.1f/%.1f GiB\\n",free/1024,total/1024' : 'printf "%d\\n",used*100/total'
+    const result = detail ? 'printf "%.1f/%.1f GB\\n",free/1024,total/1024' : 'printf "%d\\n",used*100/total'
     const query = '--query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits'
     const aggregate = `awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,"",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; ${result}}'`
     if (index !== undefined) return `data=$(nvidia-smi${selected} ${query} 2>/dev/null) || exit 1; printf '%s\\n' "$data" | ${aggregate}`
@@ -162,7 +171,7 @@ function gpuMetric(index?: number): CustomMetric {
 export function createGpuGroupPreset(): MetricPreset {
     return { id: 'gpu-memory-group', kind: 'group', label: 'GPU 显存', labels: { en: 'GPU memory', zh: 'GPU 显存' },
         description: '显存使用率；悬停显示剩余/总显存。自动隐藏不存在的 GPU 0–7。',
-        descriptions: { en: 'VRAM use percentage; hover for free/total GiB. Missing GPUs 0–7 are hidden.', zh: '显存使用率；悬停显示剩余/总显存（GiB）。自动隐藏不存在的 GPU 0–7。' },
+        descriptions: { en: 'VRAM use percentage; hover for free/total GB. Missing GPUs 0–7 are hidden.', zh: '显存使用率；悬停显示剩余/总显存（GB）。自动隐藏不存在的 GPU 0–7。' },
         source: localSource,
         group: { id: 'gpu-memory-group', label: 'GPU 显存', mode: 'overview', layout: 'vertical', interval: 3,
             displayScope: { mode: 'all', profileIds: [] }, main: gpuMetric(), children: Array.from({ length: 8 }, (_, index) => gpuMetric(index)) } }
@@ -175,7 +184,7 @@ const diskValues = `awk 'NR==2 {if(NF<6 || $2 !~ /^[0-9]+$/ || $4 !~ /^[0-9]+$/ 
 /** Sum readable mounted filesystems once, even when bind mounts use different names. */
 export function createDiskTotalCommand(mountPaths: string[], detail = false): string {
     const paths = ['/', ...new Set(mountPaths.filter(path => typeof path === 'string' && path.startsWith('/') && path !== '/'))]
-    const result = detail ? 'printf "%.1f/%.1f GiB\\n",available/1048576,total/1048576' : 'printf "%.0f\\n",int(available/1048576)'
+    const result = detail ? 'printf "%.1f/%.1f GB\\n",available/1048576,total/1048576' : 'printf "%.0f\\n",int(available/1048576)'
     return `_disk_rows=$(
 for _disk_path in ${paths.map(shellQuote).join(' ')}; do
     if [ "$_disk_path" != / ]; then mountpoint -q -- "$_disk_path" 2>/dev/null || continue; fi
@@ -197,11 +206,11 @@ function diskMetric(mountPath: string, system: boolean, index: number): CustomMe
     const quoted = shellQuote(mountPath)
     const query = `data=$(df -Pk -- ${quoted} 2>/dev/null) || exit 1; values=$(printf '%s\\n' "$data" | ${diskValues}) || exit 1; printf '%s\\n' "$values" | awk`
     return { id: system ? 'disk-root' : `disk-mount-${index}`, label: system ? '系统盘' : mountPath,
-        type: 'text', icon: system ? 'stats-system-disk' : 'stats-data-disk', color: METRIC_COLORS.green, suffix: ' GiB', interval: 20, timeout: 60,
+        type: 'text', icon: system ? 'stats-system-disk' : 'stats-data-disk', color: METRIC_COLORS.green, suffix: ' GB', interval: 20, timeout: 60,
         checkCommand: system ? `test -d ${quoted} && df -Pk -- ${quoted} >/dev/null 2>&1` : `mountpoint -q -- ${quoted}`,
         checkMode: 'exitCode', checkExpected: '0', unavailableText: '未挂载', showWhenUnavailable: true, visibleWhenUnavailable: true,
         command: `${query} '{printf "%.0f\\n",int($2/1048576)}'`,
-        detailCommand: `${query} '{printf "%.1f/%.1f GiB\\n",$2/1048576,$1/1048576}'`,
+        detailCommand: `${query} '{printf "%.1f/%.1f GB\\n",$2/1048576,$1/1048576}'`,
         colorRules: capacityColorRules() }
 }
 
