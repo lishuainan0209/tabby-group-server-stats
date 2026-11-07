@@ -231,13 +231,13 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                         <button class="btn btn-outline-secondary" (click)="editMetric(i)" [title]="'Edit' | translate">
                             <i class="fas fa-pen"></i>
                         </button>
-                        <button class="btn btn-outline-danger" (click)="removeMetric(i)" [title]="'Remove' | translate">
-                            <i class="fas fa-trash"></i>
-                        </button>
                     </div>
                 </div>
                 <div class="inline-item-editor" *ngIf="!currentGroup && editingIndex !== -1 && currentMetric.id === metric.id">
                     <ng-container *ngTemplateOutlet="itemEditor"></ng-container>
+                </div>
+                <div class="card-delete-actions">
+                    <button type="button" class="btn btn-outline-danger btn-sm metric-delete" (click)="removeMetric(i)"><i class="fas fa-trash" aria-hidden="true"></i> <span translate>Delete Metric</span></button>
                 </div>
             </div>
             
@@ -276,21 +276,32 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                             <button class="btn btn-outline-secondary" [disabled]="g === 0" (click)="moveGroup(g, -1)" [title]="'Move up' | translate" [attr.aria-label]="'Move up' | translate">↑</button>
                             <button class="btn btn-outline-secondary" [disabled]="g === metricGroups.length - 1" (click)="moveGroup(g, 1)" [title]="'Move down' | translate" [attr.aria-label]="'Move down' | translate">↓</button>
                             <button type="button" class="btn btn-outline-secondary group-edit" (click)="editGroup(g)" [title]="'Edit' | translate" [attr.aria-label]="'Edit' | translate" [attr.aria-controls]="'group-editor-' + group.id"><i class="fas fa-pen" aria-hidden="true"></i></button>
-                            <button class="btn btn-outline-danger" (click)="removeGroup(g)" [title]="'Remove' | translate" [attr.aria-label]="'Remove' | translate"><i class="fas fa-trash" aria-hidden="true"></i></button>
                         </div>
                     </div>
                     <div class="group-card-preview" *ngIf="editingGroupId !== group.id">
-                        <div class="group-main-summary"><span class="member-kind" translate>Main Metric</span><strong>{{ group.main.label || group.main.icon || ('Unnamed Metric' | translate) }}</strong></div>
-                        <div class="command-box group-command" [title]="group.main.command">{{ group.main.command }}</div>
-                        <div class="group-child-summary" *ngIf="group.children.length">
-                            <span *ngFor="let child of group.children" class="child-summary-chip">
-                                <span [style.color]="child.color || '#00ff00'"><ng-container *ngTemplateOutlet="metricIcon; context: { $implicit: child }"></ng-container></span>
-                                {{ child.label || child.icon || ('Unnamed Metric' | translate) }}
-                            </span>
+                        <div class="group-main-summary">
+                            <span class="member-kind" translate>Main Metric</span>
+                            <button type="button" class="member-summary-chip main-summary-chip" (click)="editGroupMember(g, -1)" [title]="'Edit' | translate">
+                                <span [style.color]="group.main.color || '#00ff00'"><ng-container *ngTemplateOutlet="metricIcon; context: { $implicit: group.main }"></ng-container></span>
+                                {{ group.main.label || group.main.icon || ('Unnamed Metric' | translate) }}
+                            </button>
                         </div>
+                        <div class="group-child-summary" *ngIf="group.children.length">
+                            <span class="member-kind" translate>Child Metric</span>
+                            <div class="summary-chips">
+                                <button type="button" *ngFor="let child of group.children; let c = index" class="member-summary-chip child-summary-chip" (click)="editGroupMember(g, c)" [title]="'Edit' | translate">
+                                    <span [style.color]="child.color || '#00ff00'"><ng-container *ngTemplateOutlet="metricIcon; context: { $implicit: child }"></ng-container></span>
+                                    {{ child.label || child.icon || ('Unnamed Metric' | translate) }}
+                                </button>
+                            </div>
+                        </div>
+                        <div class="command-box group-command" [title]="group.main.command">{{ group.main.command }}</div>
                     </div>
                     <div class="inline-item-editor" *ngIf="editingGroupId === group.id" [id]="'group-editor-' + group.id">
                         <ng-container *ngTemplateOutlet="itemEditor"></ng-container>
+                    </div>
+                    <div class="card-delete-actions">
+                        <button type="button" class="btn btn-outline-danger btn-sm group-delete" (click)="removeGroup(g)"><i class="fas fa-trash" aria-hidden="true"></i> <span translate>Delete Group</span></button>
                     </div>
                 </div>
                 <div class="list-group-item text-muted p-3" *ngIf="metricGroups.length === 0" translate>No metric groups defined.</div>
@@ -401,11 +412,13 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                                 <button type="button" class="btn btn-outline-secondary member-enabled" (click)="toggleMemberEnabled(child)" [attr.aria-pressed]="child.enabled !== false">{{ (child.enabled === false ? 'Disabled' : 'Enabled') | translate }}</button>
                                 <button class="btn btn-outline-secondary" [disabled]="c === 0" (click)="moveChild(c, -1)" [title]="'Move up' | translate" [attr.aria-label]="'Move up' | translate">↑</button>
                                 <button class="btn btn-outline-secondary" [disabled]="c === currentGroup.children.length - 1" (click)="moveChild(c, 1)" [title]="'Move down' | translate" [attr.aria-label]="'Move down' | translate">↓</button>
-                                <button class="btn btn-outline-danger" (click)="removeChild(c)" [title]="'Remove Child' | translate" [attr.aria-label]="'Remove Child' | translate">×</button>
                             </div>
                         </div>
                         <div class="member-editor" *ngIf="expandedMemberId === child.id" [id]="'member-editor-' + child.id">
                             <ng-container *ngTemplateOutlet="metricFields"></ng-container>
+                        </div>
+                        <div class="card-delete-actions member-delete-actions">
+                            <button type="button" class="btn btn-outline-danger btn-sm child-delete" (click)="removeChild(c)"><i class="fas fa-trash" aria-hidden="true"></i> <span translate>Remove Child</span></button>
                         </div>
                     </section>
                     <button class="btn btn-outline-primary add-child-btn" (click)="addChild()"><i class="fas fa-plus" aria-hidden="true"></i> <span translate>Add Child</span></button>
@@ -753,11 +766,20 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
         .group-count { background: rgba(128,128,128,.16); color: inherit; font-weight: 500; }
         .group-card-actions { flex: 0 0 auto; }
         .group-card-preview { margin: 14px 0 0 32px; }
-        .group-main-summary { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+        .group-main-summary { display: flex; align-items: center; gap: 10px; }
         .member-kind { font-size: 13px; color: #929ba7; font-weight: 500; white-space: nowrap; }
         .group-command { padding: 10px 12px; background: rgba(0,0,0,.3); border: 1px solid rgba(128,128,128,.12); border-radius: 6px; font-family: monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 62px; overflow: hidden; color: #929ba7; }
-        .group-child-summary { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 12px; padding-left: 16px; border-left: 2px solid rgba(128,128,128,.2); }
-        .child-summary-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; background: rgba(128,128,128,.1); border: 2px solid var(--stats-card-border); border-radius: 5px; font-size: 14px; }
+        .group-child-summary { display: flex; align-items: flex-start; gap: 10px; margin-top: 8px; padding-left: 16px; border-left: 2px solid rgba(128,128,128,.35); }
+        .group-child-summary > .member-kind { padding-top: 7px; }
+        .summary-chips { display: flex; flex: 1; flex-wrap: wrap; gap: 7px; min-width: 0; }
+        .member-summary-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 5px 10px; background: rgba(128,128,128,.1); color: inherit; border: 2px solid var(--stats-card-border); border-radius: 5px; font-size: 14px; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+        .member-summary-chip > span { display: inline-flex; flex-shrink: 0; }
+        .member-summary-chip:hover { border-color: var(--stats-focus); background: rgba(49,118,216,.14); }
+        .member-summary-chip:focus-visible { outline: 2px solid var(--stats-focus); outline-offset: 3px; }
+        .group-card-preview > .group-command { margin-top: 12px; }
+        .card-delete-actions { display: flex; justify-content: flex-end; border-top: 1px solid rgba(128,128,128,.25); margin-top: 14px; padding-top: 10px; }
+        .card-delete-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+        .member-delete-actions { margin: 0 12px; padding: 8px 0; }
         .inline-item-editor { border-top: 1px solid rgba(128,128,128,.2); margin-top: 18px; padding-top: 18px; cursor: default; user-select: text; }
         .group-members { display: flex; flex-direction: column; gap: 10px; }
         .group-member { border: 2px solid var(--stats-card-border); border-radius: 8px; background: var(--stats-card-bg); }
@@ -1284,6 +1306,13 @@ export class ServerStatsSettingsComponent {
         this.selectGroupMetric(-1);
     }
 
+    editGroupMember(groupIndex: number, memberIndex = -1) {
+        const group = this.metricGroups[groupIndex];
+        if (!group || memberIndex < -1 || memberIndex >= group.children.length) return;
+        this.editGroup(groupIndex);
+        this.selectGroupMetric(memberIndex);
+    }
+
     toggleGroupMetric(index: number) {
         if (!this.currentGroup) return;
         const metric = index < 0 ? this.currentGroup.main : this.currentGroup.children[index];
@@ -1334,7 +1363,8 @@ export class ServerStatsSettingsComponent {
     }
 
     removeChild(index: number) {
-        if (!this.currentGroup?.children[index]) return;
+        const child = this.currentGroup?.children[index];
+        if (!child || !confirm(this.uiText('Delete this child metric?') + '\n\n' + (child.label || child.icon || this.uiText('Unnamed Metric')))) return;
         const selectedId = this.currentMetric.id;
         const wasCollapsed = this.expandedMemberId === null;
         this.currentGroup.children.splice(index, 1);
@@ -1367,7 +1397,7 @@ export class ServerStatsSettingsComponent {
 
     removeGroup(index: number) {
         const group = this.metricGroups[index];
-        if (!group || !confirm(this.uiText('Delete this group and all of its metrics?'))) return;
+        if (!group || !confirm(this.uiText('Delete this group and all of its metrics?') + '\n\n' + (group.label || group.main.label || this.uiText('Metric Group')))) return;
         this.config.store.plugin.serverStats.metricGroups = this.metricGroups.filter(g => g.id !== group.id);
         if (this.editingGroupId === group.id) this.cancelEdit();
         this.save();
@@ -1672,8 +1702,10 @@ export class ServerStatsSettingsComponent {
     }
 
     removeMetric(index: number) {
-        if (confirm(this.uiText('Are you sure you want to delete this metric?'))) {
-            const removedId = this.customMetrics[index]?.id;
+        const metric = this.customMetrics[index];
+        if (!metric) return;
+        if (confirm(this.uiText('Are you sure you want to delete this metric?') + '\n\n' + (metric.label || metric.icon || this.uiText('Unnamed Metric')))) {
+            const removedId = metric.id;
             this.config.store.plugin.serverStats.customMetrics.splice(index, 1);
             this.save();
             if (!this.currentGroup && this.currentMetric.id === removedId) {

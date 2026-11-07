@@ -32,6 +32,8 @@ Display is fixed to the bottom status bar, with an enable switch in settings. Le
 
 Open Tabby Settings → Bottom Status Bar, then choose **Add single label**, or find a library preset and click **Add**. Importing from GitHub or JSON loads choices into the library; adding a preset puts it into the active configuration. Use the pencil button to edit an existing item. Within a group, each main/child label opens its own editor.
 
+Group cards place the main label and child labels on separate adjacent rows. Click a bordered label button to edit that member directly. Delete buttons sit at the lower right of their cards and ask for confirmation with the item's name. Deleting a child takes effect only after saving the whole group.
+
 New labels default to **text** and checks default to **output-text comparison**. Configure commands in this order:
 
 1. **Object check, optional:** compare trimmed standard output or an expected exit code. Without a check, the primary command runs directly.

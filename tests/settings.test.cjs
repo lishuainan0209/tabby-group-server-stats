@@ -46,10 +46,17 @@ const compiled = ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
   experimentalDecorators: true,
 }}).outputText;
+let confirmationHandler = () => true;
 vm.runInNewContext(compiled, {
   require: name => { if (!(name in mocks)) throw Error('Unexpected module ' + name); return mocks[name]; },
-  exports: exportsObject, console, confirm: () => true, setTimeout,
+  exports: exportsObject, console, confirm: message => confirmationHandler(message), setTimeout,
 });
+function withConfirmation(answer, run) {
+  const messages = [];
+  const previous = confirmationHandler;
+  confirmationHandler = message => { messages.push(message); return answer; };
+  try { run(messages); } finally { confirmationHandler = previous; }
+}
 let saves = 0;
 const oldMetric = {
   id: 'old', label: 'Old', command: 'printf 17', type: 'text', suffix: 'G',
@@ -359,6 +366,138 @@ test('explicit group edit retains the current draft and Cancel closes it without
   assert.equal(editor.currentGroup, null);
   assert.equal(editor.editingGroupId, null);
   assert.equal(config.store.plugin.serverStats.metricGroups[0].label, 'Stored');
+});
+
+function groupCardFixture() {
+  const fixture = scopeFixture();
+  fixture.config.store.plugin.serverStats.metricGroups = [0, 1].map(index => ({
+    id: `group-${index}`, label: `Disks ${index}`, mode: 'overview', layout: 'vertical',
+    main: { id: `main-${index}`, label: 'Total', command: `printf ${100 + index}`, type: 'text' },
+    children: [0, 1].map(child => ({
+      id: `child-${index}-${child}`, label: 'Disk', command: `printf ${child}`, type: 'text',
+    })),
+  }));
+  return fixture;
+}
+
+test('group summary chips open the exact main or child editor without discarding same-group drafts', () => {
+  const { config, editor } = groupCardFixture();
+  editor.editGroupMember(1, 1);
+  assert.equal(editor.editingGroupId, 'group-1');
+  assert.equal(editor.editingChildIndex, 1);
+  assert.equal(editor.currentMetric.id, 'child-1-1', 'Equal child names must not select the wrong child');
+  assert.equal(editor.expandedMemberId, 'child-1-1');
+  editor.currentMetric.command = 'printf changed';
+  editor.editGroupMember(1);
+  assert.equal(editor.currentMetric.id, 'main-1');
+  assert.equal(editor.expandedMemberId, 'main-1');
+  editor.editGroupMember(1, 1);
+  assert.equal(editor.currentMetric.command, 'printf changed');
+  assert.equal(config.store.plugin.serverStats.metricGroups[1].children[1].command, 'printf 1');
+  const draft = editor.currentGroup;
+  for (const [group, child] of [[99, 0], [1, 99], [1, -2]]) editor.editGroupMember(group, child);
+  assert.equal(editor.currentGroup, draft, 'Invalid card/member targets must leave the editor intact');
+  assert.equal(editor.currentMetric.id, 'child-1-1');
+});
+
+test('child deletion requires a named confirmation, cancellation preserves its draft, and acceptance waits for Save Group', () => {
+  for (const language of ['en', 'zh-CN']) {
+    const { config, editor } = groupCardFixture();
+    config.store.language = language;
+    let saveCalls = 0;
+    config.save = () => saveCalls++;
+    editor.editGroupMember(0, 1);
+    editor.currentMetric.label = 'Data disk draft';
+    editor.currentMetric.command = 'printf draft';
+    const selected = editor.currentMetric;
+    const before = JSON.stringify(editor.currentGroup);
+    withConfirmation(false, messages => {
+      editor.removeChild(1);
+      assert.equal(messages.length, 1);
+      assert.match(messages[0], language === 'en' ? /Delete this child metric\?/ : /删除此子标签/);
+      assert.ok(messages[0].endsWith('\n\nData disk draft'));
+    });
+    assert.equal(editor.currentMetric, selected);
+    assert.equal(editor.expandedMemberId, 'child-0-1');
+    assert.equal(JSON.stringify(editor.currentGroup), before);
+    assert.equal(saveCalls, 0);
+    withConfirmation(true, messages => {
+      editor.removeChild(1);
+      assert.equal(messages.length, 1);
+    });
+    assert.equal(editor.currentGroup.children.length, 1);
+    assert.equal(editor.currentGroup.children[0].id, 'child-0-0');
+    assert.equal(editor.currentMetric.id, 'main-0', 'Deleting the active child returns to its main metric');
+    assert.equal(config.store.plugin.serverStats.metricGroups[0].children.length, 2);
+    assert.equal(saveCalls, 0, 'Confirming child removal edits only the pending group draft');
+    editor.saveGroup();
+    assert.equal(config.store.plugin.serverStats.metricGroups[0].children.length, 1);
+    assert.equal(config.store.plugin.serverStats.metricGroups[1].children.length, 2);
+    assert.equal(saveCalls, 1);
+  }
+});
+
+test('group deletion cancellation keeps configuration and the active draft, then confirmation removes only the named group', () => {
+  const { config, editor } = groupCardFixture();
+  let saveCalls = 0;
+  config.save = () => saveCalls++;
+  editor.editGroupMember(0, 1);
+  editor.currentMetric.command = 'printf pending';
+  const draft = editor.currentGroup;
+  const selected = editor.currentMetric;
+  const before = JSON.stringify(config.store.plugin.serverStats);
+  withConfirmation(false, messages => {
+    editor.removeGroup(0);
+    assert.equal(messages.length, 1);
+    assert.match(messages[0], /Delete this group and all of its metrics\?/);
+    assert.ok(messages[0].endsWith('\n\nDisks 0'));
+  });
+  assert.equal(JSON.stringify(config.store.plugin.serverStats), before);
+  assert.equal(editor.currentGroup, draft);
+  assert.equal(editor.currentMetric, selected);
+  assert.equal(editor.expandedMemberId, 'child-0-1');
+  assert.equal(saveCalls, 0);
+  withConfirmation(true, messages => {
+    editor.removeGroup(0);
+    assert.equal(messages.length, 1);
+  });
+  assert.equal(config.store.plugin.serverStats.metricGroups.length, 1);
+  assert.equal(config.store.plugin.serverStats.metricGroups[0].id, 'group-1');
+  assert.equal(config.store.plugin.serverStats.customMetrics[0].id, 'legacy');
+  assert.equal(editor.currentGroup, null);
+  assert.equal(editor.editingGroupId, null);
+  assert.equal(saveCalls, 1);
+});
+
+test('single-label deletion cancellation preserves edits and confirmation removes only the targeted label', () => {
+  const { config, editor } = scopeFixture();
+  config.store.language = 'zh-CN';
+  config.store.plugin.serverStats.customMetrics.push({ id: 'second', label: 'Second', command: 'printf 2', type: 'text' });
+  let saveCalls = 0;
+  config.save = () => saveCalls++;
+  editor.editMetric(0);
+  editor.currentMetric.command = 'printf pending';
+  const draft = editor.currentMetric;
+  withConfirmation(false, messages => {
+    editor.removeMetric(0);
+    assert.equal(messages.length, 1);
+    assert.match(messages[0], /确定删除此标签/);
+    assert.ok(messages[0].endsWith('\n\nLegacy'));
+  });
+  assert.equal(config.store.plugin.serverStats.customMetrics.length, 2);
+  assert.equal(config.store.plugin.serverStats.customMetrics[0].command, 'printf 1');
+  assert.equal(editor.currentMetric, draft);
+  assert.equal(editor.currentMetric.command, 'printf pending');
+  assert.equal(editor.editingIndex, 0);
+  assert.equal(saveCalls, 0);
+  withConfirmation(true, messages => {
+    editor.removeMetric(0);
+    assert.equal(messages.length, 1);
+  });
+  assert.equal(config.store.plugin.serverStats.customMetrics.length, 1);
+  assert.equal(config.store.plugin.serverStats.customMetrics[0].id, 'second');
+  assert.equal(editor.editingIndex, -1);
+  assert.equal(saveCalls, 1);
 });
 
 test('new single form starts hidden and closes after cancel/save or switching to a group', () => {
