@@ -1,6 +1,8 @@
 # 打包、本地测试与发布
 
-本文面向 `tabby-group-server-stats 1.7.3` 的维护者。源码目录为 `D:\tabby-group-server-stats`；功能与预设说明见 [中文 README](README.md) / [English README](README.en.md)。
+本文面向 `tabby-group-server-stats 1.7.4` 的维护者。源码目录为 `D:\tabby-group-server-stats`；功能与预设说明见 [中文 README](README.md) / [English README](README.en.md)。
+
+1.7.4 增加布局分屏独立范围与持久化底栏开关，组编辑默认折叠，改进标签卡片与删除确认，并统一 GB 单位显示。个人布局启动命令不包含在插件包中。
 
 1.7.3 统一 fork 作者和维护者为 lishuainan0209，加入预设重复添加保护，并完善中英文搜索元数据与安装说明；保留上游 MIT 版权与贡献声明，包含 1.7.2 的显示修正。
 
@@ -46,10 +48,10 @@ TypeScript、Angular 和 Webpack 使用项目内依赖，不需要全局安装�
 ```powershell
 npm.cmd pack --dry-run
 npm.cmd pack
-tar -tf .\tabby-group-server-stats-1.7.3.tgz
+tar -tf .\tabby-group-server-stats-1.7.4.tgz
 ```
 
-`prepack` 自动执行类型检查、普通测试和正式构建；任一失败会阻止打包。浏览器测试需另外运行。产物为 `tabby-group-server-stats-1.7.3.tgz`，后续本地验收与发布应使用同一份已检查的包。[npm pack 文档](https://docs.npmjs.com/cli/v11/commands/npm-pack/)
+`prepack` 自动执行类型检查、普通测试和正式构建；任一失败会阻止打包。浏览器测试需另外运行。产物为 `tabby-group-server-stats-1.7.4.tgz`，后续本地验收与发布应使用同一份已检查的包。[npm pack 文档](https://docs.npmjs.com/cli/v11/commands/npm-pack/)
 
 确认包内包含：
 
@@ -72,7 +74,7 @@ Tabby 1.0.238 在发现 `Tabby.exe` 同级的 `data` 目录时将用户数据放
 ```powershell
 Set-Location -LiteralPath 'D:\tabby-group-server-stats'
 $testRoot = Join-Path (Get-Location).Path 'work\tabby-portable-test'
-$archive = (Resolve-Path -LiteralPath '.\tabby-group-server-stats-1.7.3.tgz').Path
+$archive = (Resolve-Path -LiteralPath '.\tabby-group-server-stats-1.7.4.tgz').Path
 
 if (-not (Test-Path -LiteralPath (Join-Path $testRoot 'Tabby.exe'))) {
     throw '请先将 Tabby 便携版解压到测试目录。'
@@ -127,7 +129,7 @@ npm.cmd whoami --registry=https://registry.npmjs.org/
 验收通过后，手动发布刚才测试的同一个包：
 
 ```powershell
-npm.cmd publish .\tabby-group-server-stats-1.7.3.tgz --access public --registry=https://registry.npmjs.org/
+npm.cmd publish .\tabby-group-server-stats-1.7.4.tgz --access public --registry=https://registry.npmjs.org/
 npm.cmd view tabby-group-server-stats version dist.tarball --registry=https://registry.npmjs.org/
 ```
 

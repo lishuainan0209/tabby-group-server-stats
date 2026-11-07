@@ -1,6 +1,6 @@
 {
     "name": "tabby-group-server-stats",
-    "version": "1.7.3",
+    "version": "1.7.4",
     "description": "Tabby server monitoring: CPU, memory, disk, network and GPU metrics with grouped labels and hover details. Tabby 服务器监控：显存、磁盘、网络、自定义指标与多标签组。",
     "keywords": [
         "tabby-plugin",

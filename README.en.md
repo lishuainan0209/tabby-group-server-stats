@@ -2,11 +2,11 @@
 
 [中文](README.md) | English
 
-SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current version is **1.7.3**, adding duplicate-preset protection while retaining compact rows, three-decimal MB/s rates and aligned capacity columns.
+SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current version is **1.7.4**, adding duplicate-preset protection while retaining compact rows, three-decimal MB/s rates and aligned capacity columns.
 
 Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
-**Source updates (not yet published to npm):** individual layout-pane scopes, linked checks for the same connection ID with individual opt-outs, bottom-bar-only display and a separate lower-left toggle in every pane.
+**1.7.4 updates:** individual layout-pane scopes, linked checks for the same connection ID with individual opt-outs, bottom-bar-only display and a separate lower-left toggle in every pane.
 
 **The SSH hotfix from 1.6.1 is retained.** Previously, oversized SSH execution requests could disconnect the entire connection when many metrics were enabled. A fixed short command now receives the script through standard input in 8 KiB chunks, retaining the bounded completion acknowledgment. Transfer failures close only the statistics channel, without deliberately closing the terminal session or automatically rerunning user commands.
 
@@ -150,7 +150,7 @@ A standalone label or whole group can select saved connections, whole layouts or
 
 Checking a connection selects every entry with the **same original connection ID**; unchecking affects only that entry. Per-pane opt-outs override connection-wide or layout-wide selections and survive saving, reopening and JSON export/import. A layout checkbox selects or clears only its own panes. Equal names with different IDs do not link selections.
 
-Matching prioritizes each pane's **original saved connection ID**, not the focused pane, tab title or a sibling connection. If an old saved layout retains an obsolete connection ID, the plugin looks for exactly one current SSH profile with the same host, port, username and jump/proxy route. Missing or ambiguous matches do not inherit a scope. Hosts and containers on different ports remain separate. This compatibility fix is available in source/local builds and has not yet been published to npm.
+Matching prioritizes each pane's **original saved connection ID**, not the focused pane, tab title or a sibling connection. If an old saved layout retains an obsolete connection ID, the plugin looks for exactly one current SSH profile with the same host, port, username and jump/proxy route. Missing or ambiguous matches do not inherit a scope. Hosts and containers on different ports remain separate. This compatibility fix is included in 1.7.4.
 
 In a `P1 / P2 / P1` layout, P1-bound metrics appear in both P1 panes and P2-bound metrics only in the middle pane. A layout-bound metric applies to all three, executing independently in each session. Multiple selections form a union: choosing P1 plus the whole layout also includes its P2 pane.
 
@@ -181,7 +181,7 @@ npm.cmd run test:ui
 npm.cmd pack
 ```
 
-`npm pack` reruns type checking, unit tests and the production build, producing `tabby-group-server-stats-1.7.3.tgz`; compiled files are in `dist/`. Browser tests use real Angular components with simulated data, while command tests use a local shell. Live SSH command validation and desktop split-pane acceptance need their own recorded results.
+`npm pack` reruns type checking, unit tests and the production build, producing `tabby-group-server-stats-1.7.4.tgz`; compiled files are in `dist/`. Browser tests use real Angular components with simulated data, while command tests use a local shell. Live SSH command validation and desktop split-pane acceptance need their own recorded results.
 
 This fork retains `plugin.serverStats` configuration compatibility. **Enable either the upstream plugin or this fork in a Tabby instance**, to avoid duplicate collection. An isolated portable Tabby installation is recommended for initial testing. See the [packaging, local-installation and publishing guide (Chinese)](PUBLISHING.zh-CN.md) for commands and acceptance checks.
 
@@ -203,3 +203,10 @@ Report problems or suggest improvements through [this project's Issues](https://
 - Retain Akkariin's upstream MIT copyright, source links and contributor credit.
 - Prevent duplicate preset additions using source and stable ID, including renamed or disabled items; use commands and scope to recognize legacy entries.
 - Add relevant bilingual metadata and document installation through maintainer search, without promising a search ranking.
+
+### 1.7.4 pane controls and editing
+
+- Bind individual saved-layout panes, link checks for matching connection IDs and allow individual opt-outs, including legacy layout profiles.
+- Use a fixed bottom bar with a persistent, independent lower-left toggle for each pane.
+- Put main/child buttons together for direct editing; collapse group editors initially and move named deletion confirmations to the lower right.
+- Display capacity as GB while retaining base-1024 readings and thresholds, with compatibility for legacy GiB configuration.
