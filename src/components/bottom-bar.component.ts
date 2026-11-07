@@ -188,14 +188,15 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
     setPaneVisibility(visible: boolean) {
         const session = this.resolveSession();
         if (!this.canDisplay(session)) return;
-        this.statsService.setPaneVisible(session, visible);
         this.viewRevision++;
+        this.statsService.setPaneVisible(session, visible);
         this.synchronizeSession(session);
         this.visible = true;
         if (!this.paneVisible) this.loading = false;
         this.closePaneMenu(true);
         this.cdr.detectChanges();
-        if (this.paneVisible) this.forceUpdate();
+        // The saved preference emits changed$, which refreshes both controller
+        // types. Starting another request here would race the saved revision.
     }
 
     setPaneGroupMode(mode: PaneGroupMode) {
@@ -350,7 +351,12 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
             this.loadConfig();
             setTimeout(() => this.checkAndFetch(), 100);
         }));
-        this.configSubscriptions.push(this.config.changed$.subscribe(() => this.loadConfig()));
+        this.configSubscriptions.push(this.config.changed$.subscribe(() => {
+            this.loadConfig(true);
+            // Per-pane controllers schedule their own refresh; standalone bars
+            // must also refresh on save instead of waiting for the next timer.
+            if (!this.useExternalController) void this.checkAndFetch();
+        }));
 
         this.configSubscriptions.push(this.statsService.statsUpdated$.subscribe(event => {
             if (this.destroyed) return;
@@ -386,7 +392,7 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         })
     }
 
-    loadConfig() {
+    loadConfig(invalidateReadings = false) {
         if (this.destroyed) return;
         this.viewRevision++;
         const conf = this.config?.store?.plugin?.serverStats || {};
@@ -397,6 +403,12 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         const session = this.resolveSession();
         this.synchronizeSession(session);
         this.visible = this.canDisplay(session);
+        if (invalidateReadings) {
+            // Stable metric IDs may now refer to different commands or targets.
+            // Never show a previous value under a newly saved label or binding.
+            this.currentStats = { cpu: 0, mem: 0, disk: 0, netRx: 0, netTx: 0, custom: [] };
+            this.loading = this.visible && this.paneVisible;
+        }
         if (!this.visible) {
             this.visible = false;
             this.menuOpen = false;

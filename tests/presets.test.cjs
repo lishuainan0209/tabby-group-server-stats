@@ -280,7 +280,7 @@ test('shared library removes local binding IDs and keeps the offline single/grou
     const profiles = [{ id: 'host', name: 'P1(ai)' }, { id: 'container', name: 'P1(s_lsn)' }]
     assert.deepEqual(instantiatePreset(host, profiles).metricGroups[0].displayScope.profileIds, ['host'])
     assert.deepEqual(instantiatePreset(container, profiles).metricGroups[0].displayScope.profileIds, ['container'])
-    assert.deepEqual(presets.find(p => p.label === 'P3磁盘').group.children.map(m => m.label), ['系统盘', '/data', '/lsn_disk1'])
+    assert.deepEqual(presets.find(p => p.label === 'P3磁盘').group.children.map(m => m.label), ['系统盘', '/data', '/data2'])
     const source = createGpuGroupPreset()
     source.group.displayScope = { mode: 'selected', profileIds: ['private-local-id'], profileNames: { 'private-local-id': 'My profile' } }
     source.group.children[0].displayScope = { mode: 'selected', profileIds: ['private-child-id'] }
@@ -323,7 +323,7 @@ test('source namespaces separate different libraries with the same preset ID', (
 })
 
 test('legacy matching uses commands and actual target IDs, not names, colors or member order', () => {
-    const preset = createDiskGroupPreset('P3磁盘', ['/data', '/lsn_disk1'], ['P3'])
+    const preset = createDiskGroupPreset('P3磁盘', ['/data', '/data2'], ['P3'])
     const profiles = [{ id: 'p3-id', name: 'P3' }, { id: 'p4-id', name: 'P4' }]
     const config = instantiatePreset(preset, profiles)
     const group = config.metricGroups[0]

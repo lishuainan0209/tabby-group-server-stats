@@ -82,6 +82,34 @@ function componentFixture(kind) {
     return { component, service, config, app, requests, A, B, render };
 }
 
+test('saving a same-ID static group replaces labels and clears old readings before new collection', async () => {
+    const f = componentFixture('bottom');
+    const original = { id: 'p3-group', label: 'P3磁盘', mode: 'static', layout: 'vertical',
+        main: { id: 'main', label: 'Total', type: 'text', command: 'printf 1' },
+        children: [{ id: 'child', label: '/lsn_disk1', type: 'text', command: 'printf old' }] };
+    f.config.store.plugin.serverStats.metricGroups = [original];
+    f.service.getVisibleConfig = () => ({ customMetrics: [], metricGroups: f.config.store.plugin.serverStats.metricGroups });
+    f.component.ngOnInit();
+    f.component.currentStats = stats(10);
+    const oldCollection = f.component.checkAndFetch();
+    assert.equal(f.component.metricGroups[0].children[0].label, '/lsn_disk1');
+    f.config.store.plugin.serverStats.metricGroups = [{ ...original, children: [{ ...original.children[0], label: '/data2', command: 'printf new' }] }];
+    f.config.changed$.emit();
+    assert.equal(f.component.metricGroups[0].children[0].label, '/data2');
+    assert.equal(f.component.metricGroups[0].children[0].command, 'printf new');
+    assert.equal(f.component.currentStats.custom.length, 0, 'Do not pair the new label with the old value');
+    assert.equal(f.component.loading, true);
+    assert.equal(f.requests.length, 2, 'A standalone bar starts collection on Save, without waiting for its timer');
+    f.requests[0].resolve(stats(11));
+    await oldCollection;
+    assert.equal(f.component.currentStats.custom.length, 0, 'Old in-flight data cannot repaint after Save');
+    f.requests[1].resolve(stats(22));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(f.component.currentStats.cpu, 22);
+    assert.equal(f.component.loading, false);
+    f.component.ngOnDestroy();
+});
+
 for (const kind of ['bottom', 'floating']) {
     test(`${kind}: a delayed result from A never overwrites B or supplies B hover data`, async () => {
         const f = componentFixture(kind);
@@ -187,12 +215,10 @@ test('collapsed bars do not fetch or accept late value/stream results and can re
     await f.component.checkAndFetch();
     assert.equal(f.requests.length, 1, 'collapsed polling must not start another request');
     assert.equal(f.component.visible, true);
-    let resumed;
-    f.component.forceUpdate = () => { resumed = f.component.checkAndFetch(); };
     f.component.togglePaneVisibility();
     assert.equal(f.requests.length, 2, 'reopening resumes collection');
     f.requests[1].resolve(stats(42));
-    await resumed;
+    await new Promise(resolve => setImmediate(resolve));
     assert.equal(f.component.currentStats.cpu, 42);
     f.component.ngOnDestroy();
 });
@@ -392,15 +418,48 @@ test('external controller skips hidden panes and discards responses hidden durin
     f.instance.teardown();
 });
 
-test('saving a sibling pane preference does not replace existing readings with a loading row', async () => {
+test('saving configuration starts external recollection immediately and shows a pending state', async () => {
     const f = moduleFixture();
     const initial = f.poll();
     f.requests[0].resolve(stats(21));
     await initial;
     f.module.config.changed$.emit();
     const loading = f.calls.filter(call => call.name === 'loading').at(-1);
-    assert.equal(loading.args[0], false);
-    assert.equal(f.calls.filter(call => call.name === 'render').at(-1).args[0].cpu, 21);
+    assert.equal(loading.args[0], true);
+    assert.equal(f.requests.length, 2, 'Save starts collection immediately, without waiting for the poll timer');
+    f.requests[1].resolve(stats(22));
+    await f.requests[1].promise;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(f.calls.filter(call => call.name === 'render').at(-1).args[0].cpu, 22);
+    f.instance.teardown();
+});
+
+test('configuration saves rebind newly associated labels and never reopen a hidden pane', async () => {
+    const bar = componentFixture('bottom');
+    bar.component.useExternalController = true;
+    bar.component.bindToSession(bar.A);
+    let visible = { customMetrics: [], metricGroups: [] };
+    bar.service.getVisibleConfig = () => visible;
+    bar.component.ngOnInit();
+    bar.component.renderExternalStats(stats(7));
+    visible = { customMetrics: [{ id: 'associated', label: 'New binding' }], metricGroups: [] };
+    bar.config.changed$.emit();
+    assert.equal(bar.component.customMetrics[0].id, 'associated');
+    assert.equal(bar.component.currentStats.custom.length, 0);
+    visible = { customMetrics: [], metricGroups: [] };
+    bar.config.changed$.emit();
+    assert.equal(bar.component.customMetrics.length, 0, 'Deletion is reflected before any new SSH result');
+    bar.component.setPaneVisibility(false);
+    bar.config.changed$.emit();
+    assert.equal(bar.component.paneVisible, false);
+    assert.equal(bar.component.loading, false);
+    bar.component.ngOnDestroy();
+    const f = moduleFixture();
+    f.module.statsService.isPaneVisible = () => false;
+    f.module.config.changed$.emit();
+    await Promise.resolve();
+    assert.equal(f.requests.length, 0);
+    assert.equal(f.calls.filter(call => call.name === 'render').length, 0);
     f.instance.teardown();
 });
 

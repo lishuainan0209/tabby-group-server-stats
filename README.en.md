@@ -2,11 +2,11 @@
 
 [中文](README.md) | English
 
-SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.7.5**, adding per-pane display menus, group/child duplication, capacity thousands separators and offline PDF tutorials.
+SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.7.6**, adding per-pane display menus, group/child duplication, capacity thousands separators and offline PDF tutorials.
 
 Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
-**1.7.5 updates:** built-ins now comprise memory, network and CPU load. Choosing a group mode from a pane's lower-left menu also shows its bar and saves both choices. Standalone hover details open above the bar, and redundant white name tooltips are removed.
+**1.7.6 updates:** saving edits, adding or deleting metrics, and changing display scopes automatically refresh the bar. The P3 disk preset now covers `/`, `/data` and `/data2`. Per-pane menus, copying and bilingual offline tutorials from 1.7.5 remain available.
 
 **The SSH hotfix from 1.6.1 is retained.** Previously, oversized SSH execution requests could disconnect the entire connection when many metrics were enabled. A fixed short command now receives the script through standard input in 8 KiB chunks, retaining the bounded completion acknowledgment. Transfer failures close only the statistics channel, without deliberately closing the terminal session or automatically rerunning user commands.
 
@@ -122,7 +122,7 @@ The 12 standalone presets cover uptime, temperature, system load, logged-in user
 | P1磁盘 | Aggregate free capacity; system `/` child only | P1(ai) |
 | P1容器磁盘 | Aggregate free capacity; system `/`, then `/public` | P1(s_lsn) |
 | P2磁盘 | Aggregate free capacity; system `/`, then `/data` | P2(ai), P2(s_lsn) |
-| P3磁盘 | Aggregate free capacity; system `/`, then `/data` and `/lsn_disk1` | P3(ai), P3(s_lsn) |
+| P3磁盘 | Aggregate free capacity; system `/`, then `/data` and `/data2` | P3(ai), P3(s_lsn) |
 | P4磁盘 | Aggregate free capacity; system `/`, then `/data` | P4(ai), P4(s_lsn) |
 | GPU memory | Aggregate GPU memory; eight children GPU 0–7 | All panes |
 | CPU load | Thread count; 1-minute and 5-minute load | All panes |
@@ -223,6 +223,12 @@ Report problems or suggest improvements through [this project's Issues](https://
 - Use a fixed bottom bar with a persistent, independent lower-left toggle for each pane.
 - Put main/child buttons together for direct editing; collapse group editors initially and move named deletion confirmations to the lower right.
 - Display capacity as GB while retaining base-1024 readings and thresholds, with compatibility for legacy GiB configuration.
+
+### 1.7.6 automatic refresh and P3 disk paths
+
+- Saving edits, adding or deleting metrics, and changing display scopes immediately reload open panes and collect fresh data. Old responses cannot overwrite the new configuration, and hidden panes remain hidden.
+- The P3 disk preset covers only system `/`, `/data` and `/data2`, with matching aggregate and child commands.
+- Both manuals explain automatic refresh and how to check duplicate groups and aggregate mount paths.
 
 ### 1.7.5 pane menus, copies and user manuals
 

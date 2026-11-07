@@ -257,7 +257,7 @@ async function main() {
             h.metrics = []
             const metric = (id, label) => ({ id, label, command: 'printf 1', type: 'text', suffix: 'GiB', detailCommand: 'printf details' })
             h.group = { id: 'disk-ratios', label: 'P3磁盘', mode: 'overview', layout: 'vertical',
-                main: metric('disk-total', '磁盘总余量'), children: [metric('disk-root', '系统盘'), metric('disk-data', '/data'), metric('disk-other', '/lsn_disk1')] }
+                main: metric('disk-total', '磁盘总余量'), children: [metric('disk-root', '系统盘'), metric('disk-data', '/data'), metric('disk-other', '/data2')] }
             h.stats = { custom: [
                 { id: 'disk-total', status: 'ok', value: '551' }, { id: 'disk-root', status: 'ok', value: '38' },
                 { id: 'disk-data', status: 'ok', value: '87' }, { id: 'disk-other', status: 'ok', value: '425' },
@@ -1129,6 +1129,82 @@ async function main() {
         await page.locator('.tutorial-button').click()
         assert((await page.evaluate(() => window.openedTutorial)).endsWith('/docs/tutorial.en.pdf'))
         console.log('PASS copy actions create editable independent groups/children and tutorial button selects local bilingual PDF')
+        // Use the real settings and bottom-bar components. Only the external
+        // controller's new readings are mocked; backend tests cover execution.
+        await mutate(() => {
+            const h = window.harness;
+            h.showSettings = false;
+            h.showVisibilityDemo = false;
+            h.showScopeDemo = false;
+            h.focusFollowsMouse = false;
+            h.paneVisibility = {};
+            h.paneGroupModes = {};
+            h.config.store.profiles = [{ id: 'p1', name: 'P1', type: 'ssh' }, { id: 'p2', name: 'P2', type: 'ssh' }];
+            h.visibilityPanes = ['p1', 'p2'].map(id => ({ open: true, id: `save-${id}`, profile: { id } }));
+            const conf = h.config.store.plugin.serverStats;
+            conf.enabled = true;
+            conf.customMetrics = [];
+            conf.metricGroups = [{
+                id: 'save-disks', label: 'Saved disks', mode: 'static', layout: 'vertical',
+                displayScope: { mode: 'selected', profileIds: ['p1'] },
+                main: { id: 'save-total', label: 'Disk total', type: 'text', command: 'printf 90', suffix: 'GB' },
+                children: [{ id: 'save-disk', label: '/lsn_disk1', type: 'text', suffix: 'GB',
+                    command: 'df -Pk /lsn_disk1', checkCommand: 'mountpoint -q /lsn_disk1',
+                    checkMode: 'exitCode', checkExpected: '0', detailCommand: 'df -Ph /lsn_disk1' }],
+            }];
+            h.stats = { custom: [{ id: 'save-total', value: '90', status: 'ok' }, { id: 'save-disk', value: '45', status: 'ok' }] };
+        })
+        await mutate(() => { window.harness.showSettings = true; window.harness.showVisibilityDemo = true })
+        await page.waitForFunction(() => document.querySelector('visibility-pane .metric-group')?.textContent.includes('/lsn_disk1'))
+        const savedPanes = page.locator('.visibility-demo visibility-pane')
+        assert.equal(await savedPanes.nth(1).locator('.metric-group').count(), 0, 'the second connection starts outside the group scope')
+        await page.locator('.group-edit').click()
+        await page.locator('.group-member-child .member-toggle').click()
+        await page.locator('.group-member-child .metric-fields input[type="text"]').first().fill('/data2')
+        await page.locator('.group-member-child .check-command textarea').fill('mountpoint -q /data2')
+        await page.locator('.group-member-child .metric-command textarea').fill('df -Pk /data2')
+        await page.locator('.group-member-child .detail-command textarea').fill('df -Ph /data2')
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        await page.waitForFunction(() => document.querySelector('visibility-pane .metric-group')?.textContent.includes('/data2'))
+        assert(!(await savedPanes.nth(0).innerText()).includes('/lsn_disk1'), 'saving removes the old child label without reopening the pane')
+        const editedDisk = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups[0].children[0])
+        assert.equal(editedDisk.id, 'save-disk', 'an edit keeps the metric ID')
+        assert.equal(editedDisk.checkCommand, 'mountpoint -q /data2')
+        assert.equal(editedDisk.command, 'df -Pk /data2')
+        assert.equal(editedDisk.detailCommand, 'df -Ph /data2')
+        console.log('PASS saving a same-ID static child replaces its label and all three configured commands in the open pane')
+        await page.locator('.group-edit').click()
+        await page.locator('.scope-option[title="p2"] input').check()
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        await page.waitForFunction(() => document.querySelectorAll('visibility-pane .metric-group').length === 2)
+        assert((await savedPanes.nth(1).innerText()).includes('/data2'), 'new association appears in the already-open second pane')
+        await page.locator('.group-edit').click()
+        await page.locator('.scope-option[title="p1"] input').uncheck()
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        assert.equal(await savedPanes.nth(0).locator('.metric-group').count(), 0, 'removing an association removes the group from its old pane')
+        assert.equal(await savedPanes.nth(1).locator('.metric-group').count(), 1)
+        await page.locator('.group-enabled').click()
+        assert.equal(await savedPanes.locator('.metric-group').count(), 0, 'disabling removes a group immediately')
+        await page.locator('.group-enabled').click()
+        await page.waitForFunction(() => document.querySelectorAll('visibility-pane .metric-group').length === 1)
+        console.log('PASS saved associations and enabled state update existing per-connection panes without reopening them')
+        await page.locator('.group-edit').click()
+        page.once('dialog', dialog => dialog.accept())
+        await page.locator('.child-delete').click()
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        assert(!(await savedPanes.nth(1).innerText()).includes('/data2'), 'deleted child stops displaying after Save Group')
+        assert((await savedPanes.nth(1).innerText()).includes('Disk total'))
+        await page.locator('.group-edit').click()
+        await page.locator('.add-child-btn').click()
+        await page.locator('.group-member-child .metric-fields input[type="text"]').first().fill('/new-data')
+        await page.locator('.group-member-child .metric-command textarea').fill('printf 7')
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        assert((await savedPanes.nth(1).innerText()).includes('/new-data'), 'newly saved child appears without reopening the pane')
+        page.once('dialog', dialog => dialog.accept())
+        await page.locator('.group-delete').click()
+        assert.equal(await savedPanes.locator('.metric-group').count(), 0, 'deleted group immediately leaves every pane')
+        assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.length), 0)
+        console.log('PASS saving child additions/deletions and deleting a group updates existing static strips automatically')
         assert.equal(errors.length, 0, errors.join('\n'))
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)) }
 }

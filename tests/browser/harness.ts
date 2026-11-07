@@ -1,7 +1,8 @@
 import 'reflect-metadata'
 import 'zone.js'
 import '@angular/compiler'
-import { Component, NgModule, ApplicationRef, Input, ViewChild, AfterViewInit, HostListener, ElementRef } from '@angular/core'
+import { Component, NgModule, ApplicationRef, Input, ViewChild, AfterViewInit, OnDestroy, HostListener, ElementRef } from '@angular/core'
+import { Subscription } from 'rxjs'
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
 import { BrowserModule } from '@angular/platform-browser'
@@ -20,8 +21,10 @@ const metric = (id: string, label: string): any => ({ id, label, command: 'print
     template: `<div class="visibility-terminal" tabindex="-1">same-user@same-server:~$</div><server-stats-bottom-bar></server-stats-bottom-bar>`,
     styles: [`:host{display:flex;flex-direction:column;position:relative;background:#171c25;border:1px solid #ffffff40;min-width:260px;height:120px}.visibility-terminal{flex:1;min-height:0;padding:10px;font:12px monospace;color:#82dba0}`]
 })
-class VisibilityPane implements AfterViewInit {
-    constructor(private element: ElementRef<HTMLElement>) {}
+class VisibilityPane implements AfterViewInit, OnDestroy {
+    private configSubscription?: Subscription
+    private destroyed = false
+    constructor(private element: ElementRef<HTMLElement>, private config: ConfigService) {}
     // Tabby refocuses the terminal on each bubbled mousemove, even in the same pane.
     @HostListener('mousemove') followMouseFocus() {
         if ((window as any).harness.focusFollowsMouse) this.element.nativeElement.querySelector<HTMLElement>('.visibility-terminal')?.focus();
@@ -32,6 +35,18 @@ class VisibilityPane implements AfterViewInit {
         this.bar.useExternalController = true
         this.bar.externalSessionResolver = () => this.session
         setTimeout(() => { this.bar.bindToSession(this.session); this.bar.renderExternalStats((window as any).harness.stats) })
+        // The real plugin's external controller recollects after configuration saves.
+        // This harness supplies its mocked completion after BottomBar invalidates
+        // old readings; real collection/cancellation is covered by backend tests.
+        this.configSubscription = this.config.changed$.subscribe(() => {
+            Promise.resolve().then(() => {
+                if (!this.destroyed) this.bar.renderExternalStats((window as any).harness.stats)
+            })
+        })
+    }
+    ngOnDestroy() {
+        this.destroyed = true
+        this.configSubscription?.unsubscribe()
     }
 }
 @Component({

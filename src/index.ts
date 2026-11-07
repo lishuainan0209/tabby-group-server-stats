@@ -537,9 +537,10 @@ export default class ServerStatsModule {
             }
         }
 
-        const syncOnConfigChange = () => {
+        const syncOnConfigChange = (initial = false) => {
             if (!alive) return
             pollRevision++
+            state.last = null
             const isEnabled = this.config?.store?.plugin?.serverStats?.enabled
             const displayMode = this.getDisplayMode()
             if (!isEnabled || displayMode !== 'bottomBar') {
@@ -549,14 +550,15 @@ export default class ServerStatsModule {
                 return
             }
             if ((barRef.instance as any).setExternalLoading) {
-                // Saving one pane's visibility also emits a global config event.
-                // Keep other panes' existing readings on screen while refreshing.
-                (barRef.instance as any).setExternalLoading(state.last === null)
+                // Saved labels, commands and bindings may change without new IDs.
+                // The view reloads its definitions and waits for fresh readings.
+                (barRef.instance as any).setExternalLoading(true)
             }
-            setTimeout(() => runPoll(), 300)
+            if (initial) setTimeout(() => runPoll(), 300)
+            else void runPoll()
         }
 
-        syncOnConfigChange()
+        syncOnConfigChange(true)
         const timerId = window.setInterval(runPoll, 1000)
         const configSub = this.config.changed$?.subscribe(() => {
             syncOnConfigChange()

@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core'
 import { Subject } from 'rxjs'
+import { filterScopedMetrics } from '../../src/display-scope'
 @Injectable() export class StatsService {
     static isDebugEnabled = false
     statsUpdated$ = new Subject<any>()
@@ -24,6 +25,12 @@ import { Subject } from 'rxjs'
         return Object.fromEntries(metrics.map(metric => [metric.id, root.detailResults?.[metric.id] ?? (root.stats.custom.find((r: any) => r.id === metric.id)?.status === 'unavailable' ? '' : '可用 740G / 已用 1.26T')]))
     }
     getServerKey() { return 'demo' }
+    getVisibleConfig(session: any) {
+        const root = (window as any).harness
+        // Exercise the production scope filter while keeping transport data mocked.
+        return filterScopedMetrics(root.config.store.plugin.serverStats,
+            { profileIds: session?.profile?.id ? [session.profile.id] : [] }, root.config.store.profiles || [])
+    }
     getCachedStats() { return null }
     isPlatformSupport() { return true }
     async fetchStats() { return (window as any).harness.stats }

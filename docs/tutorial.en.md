@@ -1,19 +1,19 @@
 # Bottom Status Bar User Guide
 
-Tabby Group Server Stats 1.7.5
+Tabby Group Server Stats 1.7.6
 
 <!-- This Markdown is the PDF source. Keep PAGE/subtitle markers for reproducible pagination. -->
 
 <!-- PAGE: 1 -->
 <a id="page-1"></a>
-<!-- subtitle: User guide · 1.7.5 · Learn by configuring a working example -->
+<!-- subtitle: User guide · 1.7.6 · Learn by configuring a working example -->
 ## Start using the bottom status bar
 
 This guide starts with an installed plugin. You will control individual panes, edit built-in metrics, create single labels and groups, then build a system/data disk group. Example commands run on the connected Linux server, not in Windows PowerShell on your own computer.
 
 ### Open the correct settings page
 
-Open Tabby Settings → Bottom Status Bar and enable Show bottom status bar. Connect to a Linux server you can use for testing. Version 1.7.5 uses a fixed bottom bar; the button at the lower left of each terminal pane controls that pane.
+Open Tabby Settings → Bottom Status Bar and enable Show bottom status bar. Connect to a Linux server you can use for testing. Version 1.7.6 uses a fixed bottom bar; the button at the lower left of each terminal pane controls that pane.
 
 The highlighted Tutorial (PDF) button opens this guide in your default PDF application. A Chinese UI opens the Chinese guide; other languages open the English guide. Use the contents below or PDF bookmarks to navigate. Command blocks contain selectable text.
 
@@ -28,7 +28,7 @@ The highlighted Tutorial (PDF) button opens this guide in your default PDF appli
 - [Disk walkthrough: pages 9-14 build a complete group](#page-9)
 - [Verify results and diagnose missing or empty values](#page-15)
 
-> Try pages 2-4 first, then follow the disk walkthrough on page 9. Save a label or the whole group after editing. Global switches, pane-menu choices and ordering buttons save immediately.
+> Try pages 2-4, then the disk walkthrough on page 9. Save a label or group after editing; switches, pane-menu choices and ordering save immediately. Edits, additions, deletions and binding changes automatically reload affected displays and collect new data. Old results cannot overwrite the new configuration. Hidden panes stay hidden; no manual refresh is needed.
 
 <!-- PAGE: 2 -->
 <a id="page-2"></a>
@@ -64,7 +64,7 @@ Open a saved layout containing three panes. Choose Hide in the first two panes a
 
 ### 1. Enable only the items you need
 
-In Default Metrics, click Enabled/Disabled to toggle an item while keeping its settings. Version 1.7.5 has three defaults: Memory, Network and CPU load. Previously customized CPU or disk defaults may be preserved as single labels during upgrade; check that section before deleting anything.
+In Default Metrics, click Enabled/Disabled to toggle an item while keeping its settings. Version 1.7.6 has three defaults: Memory, Network and CPU load. Previously customized CPU or disk defaults may be preserved as single labels during upgrade; check that section before deleting anything.
 
 ### 2. Reorder, then edit
 
@@ -217,7 +217,7 @@ Invalid targets remain marked Deleted or unavailable. Remove or replace them. An
 
 ### 1. Search and inspect an offline preset
 
-Bundled presets work offline. Search for GPU or disk, read the description, commands and suggested connection targets, then choose Add. It becomes an editable label/group and executes according to its scope. P0-P4 and other Author laboratory only presets are for the author's own lab; others should not download or use them. Build your own disk group instead.
+Bundled presets work offline. Search for GPU or disk, read the description, commands and suggested connection targets, then choose Add. It becomes an editable label/group and executes according to its scope. P0-P4 and other Author laboratory only presets are for the author's own lab; others should not download or use them. Build your own disk group instead. In 1.7.6, the P3 disk template lists /, /data and /data2; review paths in existing groups separately.
 
 ### 2. Fetch the GitHub preset library
 
@@ -258,7 +258,7 @@ Open Tabby Settings → Bottom Status Bar. The page contains default metrics, a 
 
 Choose Add Group beside Metric Groups. Enter Disk demo as its name, select Overview and temporarily leave Display Scope at All terminal panes. Verify it on a test connection, then restrict the scope on page 7.
 
-> For version 1.7.5. Editing an existing group with its pencil button starts with members collapsed. Click a main/child member heading to open it. A newly created group opens its main member so you can start typing.
+> For version 1.7.6. Editing an existing group with its pencil button starts with members collapsed. Click a main/child member heading to open it. A newly created group opens its main member so you can start typing.
 
 Continue on page 10 to verify paths, pages 11-12 for the main member, page 13 for the system disk, page 14 for copied data disks and page 15 for verification. Scope and pane-menu instructions are on pages 7 and 2.
 
@@ -449,6 +449,8 @@ Rules match from top to bottom; the first match wins. Put red before orange and 
 
 For disks, keeping failure notices visible is useful. Turn off Keep in carousel when its check fails if you want the carousel to skip missing disks. Turning off Show this label when its check fails hides that child in every mode and also removes it from the carousel. Save the group to apply your edits.
 
+> Check same-name copies and update all three child commands plus both main path lists. Saving refreshes data automatically; it does not fix old paths or remove an unwanted copy. Review each copy's scope too.
+
 <!-- PAGE: 15 -->
 <a id="page-15"></a>
 <!-- subtitle: Final disk step · Three small checks and a recovery path -->
@@ -475,7 +477,7 @@ Hide one pane and choose Carousel in another. Reopen that layout from saved prof
 | Reading but no details | Ensure the detail field is filled and its command prints output. |
 | Timeout or error | Command syntax, tools and access; then interval and timeout. |
 | Unexpectedly small total | Missing disks are skipped; one filesystem is counted once. |
-| Two groups after copying | Review the copy's paths and scope; disable an unwanted group. |
+| Old or duplicate group | Check same-name copies, member paths and scope; disable the old copy. |
 
 mountpoint -q prints no success text. For Output Text, append && echo exists and compare exists. For Exit Code, use mountpoint -q alone and expect 0.
 

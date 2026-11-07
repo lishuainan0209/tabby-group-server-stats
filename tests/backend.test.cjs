@@ -261,6 +261,60 @@ test('config changes and closed sessions discard late results and emissions', as
         assert.equal(emitted, 0);
     }
 });
+test('saving a group with unchanged IDs immediately refreshes its renamed child and commands', async () => {
+    const child = metric({ id: 'p3-child', label: '/lsn_disk1', interval: 3600,
+        command: 'printf /lsn_disk1', checkCommand: 'test -d /lsn_disk1', detailCommand: 'printf detail-/lsn_disk1' });
+    const group = { id: 'p3-group', label: 'P3磁盘', mode: 'static', layout: 'vertical',
+        main: metric({ id: 'p3-main', command: 'printf total-/lsn_disk1', interval: 3600 }), children: [child] };
+    const { instance, config, session } = service([], [group]);
+    const scripts = [];
+    instance.execute = async (_session, script) => {
+        scripts.push(script);
+        const updated = script.includes('/data2');
+        if (script.includes('RESULT:detail:')) return packet('ok', updated ? 'new-details' : 'old-details', 'detail');
+        return packet('ok', updated ? '200' : '100', 'm_0') + packet('ok', updated ? '40' : '20', 'm_1');
+    };
+    await instance.fetchStats(session);
+    assert.deepEqual(await instance.fetchDetails(session, [child]), { 'p3-child': 'old-details' });
+    const beforeEdit = scripts.length;
+    const replacement = { ...group, main: { ...group.main, command: 'printf total-/data2' },
+        children: [{ ...child, label: '/data2', command: 'printf /data2', checkCommand: 'test -d /data2', detailCommand: 'printf detail-/data2' }] };
+    config.store.plugin.serverStats.metricGroups = [replacement];
+    config.changed$.next();
+    assert.equal(instance.getCachedStats(session), null);
+    assert.equal(instance.getVisibleConfig(session).metricGroups[0].children[0].label, '/data2');
+    const refreshed = await instance.fetchStats(session);
+    assert.deepEqual(refreshed.custom.map(item => item.value), ['200', '40'], 'One-hour intervals cannot defer edited commands');
+    // Resolve even a stale hover input object against the latest saved ID.
+    assert.deepEqual(await instance.fetchDetails(session, [child]), { 'p3-child': 'new-details' });
+    assert.equal(scripts.length, beforeEdit + 2);
+    for (const script of scripts.slice(beforeEdit)) {
+        assert.match(script, /\/data2/);
+        assert.doesNotMatch(script, /\/lsn_disk1/);
+    }
+});
+
+test('saved deletion and added bindings remove stale data and refresh newly associated sessions', async () => {
+    const target = metric({ id: 'scoped-disk', label: '/data', interval: 3600,
+        displayScope: { mode: 'selected', profileIds: ['p1'] } });
+    const { instance, config } = service([target], [], { profiles: [{ id: 'p1' }, { id: 'p2' }] });
+    const first = { open: true, profile: { id: 'p1' } }, second = { open: true, profile: { id: 'p2' } };
+    let calls = 0;
+    instance.execute = async () => { calls++; return packet('ok', '42'); };
+    assert.equal((await instance.fetchStats(first)).custom.length, 1);
+    assert.equal((await instance.fetchStats(second)).custom.length, 0);
+    config.store.plugin.serverStats.customMetrics = [{ ...target, displayScope: { mode: 'selected', profileIds: ['p1', 'p2'] } }];
+    config.changed$.next();
+    assert.equal((await instance.fetchStats(first)).custom[0].value, '42');
+    assert.equal((await instance.fetchStats(second)).custom[0].value, '42');
+    assert.equal(calls, 3);
+    config.store.plugin.serverStats.customMetrics = [];
+    config.changed$.next();
+    assert.deepEqual((await instance.fetchStats(first)).custom, []);
+    assert.deepEqual((await instance.fetchStats(second)).custom, []);
+    assert.equal(calls, 3, 'Deleting the last label must not execute its old command');
+});
+
 test('same saved profile uses independent session caches', () => {
     const { instance } = service();
     assert.notEqual(instance.getServerKey({ profile: { id: 'same' } }), instance.getServerKey({ profile: { id: 'same' } }));
