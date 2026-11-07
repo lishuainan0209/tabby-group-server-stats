@@ -1,6 +1,8 @@
 # 打包、本地测试与发布
 
-本文面向 `tabby-group-server-stats 1.7.6` 的维护者。源码目录为 `D:\tabby-group-server-stats`；功能与预设说明见 [中文 README](README.md) / [English README](README.en.md)。
+本文面向 `tabby-group-server-stats 1.7.7` 的维护者。源码目录为 `D:\tabby-group-server-stats`；功能与预设说明见 [中文 README](README.md) / [English README](README.en.md)。
+
+1.7.7 修复使用教程 PDF 的本地打开路径，并在文件缺失或默认阅读器打开失败时显示双语提示。
 
 1.7.6 改进配置保存后的自动刷新，覆盖增删标签和显示范围关联变动；P3 磁盘预设更新为 `/`、`/data`、`/data2`，并同步中英文教程。
 
@@ -52,10 +54,10 @@ TypeScript、Angular 和 Webpack 使用项目内依赖，不需要全局安装�
 ```powershell
 npm.cmd pack --dry-run
 npm.cmd pack
-tar -tf .\tabby-group-server-stats-1.7.6.tgz
+tar -tf .\tabby-group-server-stats-1.7.7.tgz
 ```
 
-`prepack` 自动执行类型检查、普通测试和正式构建；任一失败会阻止打包。浏览器测试需另外运行。产物为 `tabby-group-server-stats-1.7.6.tgz`，后续本地验收与发布应使用同一份已检查的包。[npm pack 文档](https://docs.npmjs.com/cli/v11/commands/npm-pack/)
+`prepack` 自动执行类型检查、普通测试和正式构建；任一失败会阻止打包。浏览器测试需另外运行。产物为 `tabby-group-server-stats-1.7.7.tgz`，后续本地验收与发布应使用同一份已检查的包。[npm pack 文档](https://docs.npmjs.com/cli/v11/commands/npm-pack/)
 
 确认包内包含：
 
@@ -78,7 +80,7 @@ Tabby 1.0.238 在发现 `Tabby.exe` 同级的 `data` 目录时将用户数据放
 ```powershell
 Set-Location -LiteralPath 'D:\tabby-group-server-stats'
 $testRoot = Join-Path (Get-Location).Path 'work\tabby-portable-test'
-$archive = (Resolve-Path -LiteralPath '.\tabby-group-server-stats-1.7.6.tgz').Path
+$archive = (Resolve-Path -LiteralPath '.\tabby-group-server-stats-1.7.7.tgz').Path
 
 if (-not (Test-Path -LiteralPath (Join-Path $testRoot 'Tabby.exe'))) {
     throw '请先将 Tabby 便携版解压到测试目录。'
@@ -133,7 +135,7 @@ npm.cmd whoami --registry=https://registry.npmjs.org/
 验收通过后，手动发布刚才测试的同一个包：
 
 ```powershell
-npm.cmd publish .\tabby-group-server-stats-1.7.6.tgz --access public --registry=https://registry.npmjs.org/
+npm.cmd publish .\tabby-group-server-stats-1.7.7.tgz --access public --registry=https://registry.npmjs.org/
 npm.cmd view tabby-group-server-stats version dist.tarball --registry=https://registry.npmjs.org/
 ```
 

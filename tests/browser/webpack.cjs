@@ -7,6 +7,7 @@ module.exports = {
         'tabby-core$': path.join(__dirname, 'tabby.mock.ts'),
         'tabby-settings$': path.join(__dirname, 'tabby.mock.ts'),
         [path.join(root, 'src/services/stats.service.ts')]: path.join(__dirname, 'stats.mock.ts'),
+        [path.join(root, 'src/tutorial.ts')]: path.join(__dirname, 'tutorial.mock.ts'),
     } },
     module: { rules: [ { test: /\.ts$/, use: { loader: 'ts-loader', options: { transpileOnly: true, compilerOptions: { rootDir: root } } } }, { test: /\.svg$/, type: 'asset/source' } ] },
     performance: { hints: false }, stats: 'errors-warnings'

@@ -41,6 +41,7 @@ const mocks = {
   '../metric-colors': loadPureSource('src/metric-colors.ts'),
   '../translations': loadPureSource('src/translations.ts'),
   '../display-scope': loadPureSource('src/display-scope.ts'),
+  '../tutorial': { openTutorialPdf: async () => {} },
 };
 const compiled = ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
@@ -1134,13 +1135,44 @@ test('child duplication is an isolated draft until saving its group', () => {
   assert.equal(config.store.plugin.serverStats.metricGroups[0].children.length, 2);
 });
 
-test('tutorial uses the system PDF viewer with the local language-specific file', () => {
+test('tutorial passes the selected locale to the native PDF opener', async () => {
   const { config } = scopeFixture();
-  const paths = [];
-  const editor = new exportsObject.ServerStatsSettingsComponent({ openPath: path => paths.push(path) }, config, {});
-  config.store.language = 'zh-CN'; editor.openTutorial();
-  config.store.language = 'en'; editor.openTutorial();
-  assert.equal(paths.join('|'), '/plugin/dist/../docs/tutorial.zh-CN.pdf|/plugin/dist/../docs/tutorial.en.pdf');
+  const locales = [];
+  mocks['../tutorial'].openTutorialPdf = async locale => locales.push(locale);
+  const editor = new exportsObject.ServerStatsSettingsComponent({}, config, {});
+  config.store.language = 'zh-CN'; await editor.openTutorial();
+  config.store.language = 'en'; await editor.openTutorial();
+  assert.equal(locales.join('|'), 'zh-CN|en');
+});
+
+test('tutorial failures are localized and a retry clears the message', async () => {
+  const { config, editor } = scopeFixture();
+  config.store.language = 'zh-CN';
+  mocks['../tutorial'].openTutorialPdf = async () => { throw { code: 'missing' }; };
+  await editor.openTutorial();
+  assert.equal(editor.tutorialError, '未找到教程 PDF，请重新安装插件后再试。');
+  assert.equal(editor.tutorialOpening, false);
+  mocks['../tutorial'].openTutorialPdf = async () => { throw { code: 'openFailed' }; };
+  config.store.language = 'en';
+  await editor.openTutorial();
+  assert.equal(editor.tutorialError, 'Could not open the tutorial PDF. Check your default PDF reader and try again.');
+  mocks['../tutorial'].openTutorialPdf = async () => {};
+  await editor.openTutorial();
+  assert.equal(editor.tutorialError, '');
+  assert.equal(editor.tutorialOpening, false);
+});
+
+test('tutorial prevents repeated clicks until the system opener completes', async () => {
+  const { editor } = scopeFixture();
+  let finish, calls = 0;
+  mocks['../tutorial'].openTutorialPdf = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+  const pending = editor.openTutorial();
+  assert.equal(editor.tutorialOpening, true);
+  await editor.openTutorial();
+  assert.equal(calls, 1);
+  finish(); await pending;
+  assert.equal(editor.tutorialOpening, false);
+  mocks['../tutorial'].openTutorialPdf = async () => {};
 });
 
 (async () => {

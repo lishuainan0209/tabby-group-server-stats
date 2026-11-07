@@ -1,6 +1,6 @@
 {
     "name": "tabby-group-server-stats",
-    "version": "1.7.6",
+    "version": "1.7.7",
     "description": "Tabby server monitoring: CPU, memory, disk, network and GPU metrics with grouped labels and hover details. Tabby 服务器监控：显存、磁盘、网络、自定义指标与多标签组。",
     "keywords": [
         "tabby-plugin",
@@ -41,7 +41,7 @@
         "build": "webpack --progress --color && tsc -p tsconfig.typings.json",
         "watch": "webpack --watch --progress --color",
         "typecheck": "tsc --noEmit",
-        "test": "node --test tests/backend.test.cjs tests/display.test.cjs tests/settings.test.cjs tests/lifecycle.test.cjs tests/scope.test.cjs tests/scope-runtime.test.cjs tests/presets.test.cjs tests/transport.test.cjs tests/preset-github.test.cjs tests/builtin-order.test.cjs tests/login-users.test.cjs tests/network.test.cjs",
+        "test": "node --test tests/backend.test.cjs tests/display.test.cjs tests/settings.test.cjs tests/lifecycle.test.cjs tests/scope.test.cjs tests/scope-runtime.test.cjs tests/presets.test.cjs tests/transport.test.cjs tests/preset-github.test.cjs tests/builtin-order.test.cjs tests/login-users.test.cjs tests/network.test.cjs tests/tutorial.test.cjs",
         "test:ui": "node tests/browser.test.cjs",
         "prepack": "npm run typecheck && npm test && npm run build"
     },

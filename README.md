@@ -2,7 +2,7 @@
 
 中文 | [English](README.en.md)
 
-为 [Tabby](https://github.com/Eugeny/tabby) 提供 SSH 服务器监控（server monitoring）：CPU 负载、内存、磁盘容量、网络速率和 GPU 显存指标。支持自定义 Shell 命令、悬停详情，以及概览、轮播、静态显示的多标签组（metric groups）。当前源码版本为 **1.7.6**，新增分屏显示菜单、标签组与子标签复制、容量千位分隔和离线 PDF 教程。
+为 [Tabby](https://github.com/Eugeny/tabby) 提供 SSH 服务器监控（server monitoring）：CPU 负载、内存、磁盘容量、网络速率和 GPU 显存指标。支持自定义 Shell 命令、悬停详情，以及概览、轮播、静态显示的多标签组（metric groups）。当前源码版本为 **1.7.7**，新增分屏显示菜单、标签组与子标签复制、容量千位分隔和离线 PDF 教程。
 
 本 fork 作者及维护者：[lishuainan0209](https://github.com/lishuainan0209)。本项目基于 [Akkariin 的 tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats) 二次开发，继续使用 MIT 许可证。版本号不代表已经发布到 npm。
 
@@ -223,6 +223,11 @@ npm.cmd pack
 - 固定底部状态栏，每个分屏左下角独立开关，保存布局重新打开后保持各自状态。
 - 主、子标签按钮相邻排列，可直接编辑对应成员；组编辑默认折叠，删除移至右下角并确认名称。
 - 容量统一显示 GB，保留原有 1024 进制数值与告警阈值，兼容旧 GiB 配置。
+
+### 1.7.7 教程 PDF 打开修复
+
+- 使用规范化的绝对路径调用系统默认 PDF 阅读器，并等待系统返回结果。
+- 教程文件缺失或默认阅读器无法打开时，页面显示中英文提示，避免点击后无反馈。
 
 ### 1.7.6 保存后自动刷新与 P3 磁盘路径
 

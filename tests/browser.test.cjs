@@ -1128,6 +1128,17 @@ async function main() {
         await mutate(() => { window.harness.config.store.language = 'en' })
         await page.locator('.tutorial-button').click()
         assert((await page.evaluate(() => window.openedTutorial)).endsWith('/docs/tutorial.en.pdf'))
+        await mutate(() => { window.tutorialOpenFailure = 'openFailed' })
+        await page.locator('.tutorial-button').click()
+        await page.locator('.tutorial-error').waitFor()
+        assert.equal(await page.locator('.tutorial-error').innerText(), 'Could not open the tutorial PDF. Check your default PDF reader and try again.')
+        await mutate(() => { window.harness.config.store.language = 'zh-CN'; window.tutorialOpenFailure = 'missing' })
+        await page.locator('.tutorial-button').click()
+        await page.waitForFunction(() => document.querySelector('.tutorial-error')?.textContent.includes('未找到教程 PDF'))
+        await mutate(() => { window.tutorialOpenFailure = ''; window.harness.config.store.language = 'en' })
+        await page.locator('.tutorial-button').click()
+        await page.waitForFunction(() => !document.querySelector('.tutorial-error'))
+        console.log('PASS tutorial launch failures show localized feedback and successful retries clear it')
         console.log('PASS copy actions create editable independent groups/children and tutorial button selects local bilingual PDF')
         // Use the real settings and bottom-bar components. Only the external
         // controller's new readings are mocked; backend tests cover execution.

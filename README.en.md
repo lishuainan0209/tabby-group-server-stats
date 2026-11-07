@@ -2,7 +2,7 @@
 
 [中文](README.md) | English
 
-SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.7.6**, adding per-pane display menus, group/child duplication, capacity thousands separators and offline PDF tutorials.
+SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.7.7**, adding per-pane display menus, group/child duplication, capacity thousands separators and offline PDF tutorials.
 
 Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
@@ -223,6 +223,11 @@ Report problems or suggest improvements through [this project's Issues](https://
 - Use a fixed bottom bar with a persistent, independent lower-left toggle for each pane.
 - Put main/child buttons together for direct editing; collapse group editors initially and move named deletion confirmations to the lower right.
 - Display capacity as GB while retaining base-1024 readings and thresholds, with compatibility for legacy GiB configuration.
+
+### 1.7.7 tutorial PDF launch fix
+
+- Resolve the bundled tutorial to a normalized absolute path and await the system PDF opener.
+- Show localized feedback when the file is missing or the default reader cannot open it.
 
 ### 1.7.6 automatic refresh and P3 disk paths
 

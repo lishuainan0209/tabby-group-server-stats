@@ -231,6 +231,8 @@ const GROUP_TRANSLATIONS: Array<[string, string, string]> = [
     ['Show', '显示', 'Mostrar'],
     ['Hide', '隐藏', 'Ocultar'],
     ['Tutorial (PDF)', '使用教程（PDF）', 'Tutorial (PDF)'],
+    ['The tutorial PDF is missing. Reinstall the plugin and try again.', '未找到教程 PDF，请重新安装插件后再试。', 'O PDF do tutorial não foi encontrado. Reinstale o plugin e tente novamente.'],
+    ['Could not open the tutorial PDF. Check your default PDF reader and try again.', '无法打开教程 PDF，请检查默认 PDF 阅读器后重试。', 'Não foi possível abrir o PDF do tutorial. Verifique seu leitor de PDF padrão e tente novamente.'],
     ['Duplicate Group', '复制标签组', 'Duplicar grupo'],
     ['Duplicate Child', '复制子标签', 'Duplicar métrica filha'],
     ['Copy', '副本', 'Cópia'],

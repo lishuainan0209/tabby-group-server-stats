@@ -8,6 +8,7 @@ import { DEFAULT_GITHUB_PRESETS_URL, fetchGitHubPresets, PresetGitHubError } fro
 import { METRIC_COLORS } from '../metric-colors'
 import { TRANSLATIONS } from '../translations'
 import { getLayoutPaneTargets, layoutPaneTargetName } from '../display-scope'
+import { openTutorialPdf } from '../tutorial'
 import { 
     CustomMetric,
     CustomMetricGroup,
@@ -37,8 +38,9 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
     template: `
         <div class="settings-heading">
             <h3 translate>Bottom Status Bar</h3>
-            <button type="button" class="btn tutorial-button" (click)="openTutorial()"><i class="fas fa-book-open" aria-hidden="true"></i> <span translate>Tutorial (PDF)</span></button>
+            <button type="button" class="btn tutorial-button" [disabled]="tutorialOpening" [attr.aria-busy]="tutorialOpening" (click)="openTutorial()"><i class="fas fa-book-open" aria-hidden="true"></i> <span translate>Tutorial (PDF)</span></button>
         </div>
+        <div *ngIf="tutorialError" class="alert alert-warning tutorial-error" role="alert">{{tutorialError}}</div>
         <div class="form-line">
             <div class="header"><div class="title" translate>Show bottom status bar</div></div>
             <div class="form-check form-switch">
@@ -1259,10 +1261,24 @@ export class ServerStatsSettingsComponent {
         return TRANSLATIONS[locale]?.[key] || TRANSLATIONS[locale.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en']?.[key] || key;
     }
 
-    openTutorial() {
+    tutorialOpening = false;
+    tutorialError = '';
+
+    async openTutorial() {
+        if (this.tutorialOpening) return;
+        this.tutorialOpening = true;
+        this.tutorialError = '';
         const configured = this.config.store.language;
         const locale = String(configured && configured !== 'auto' ? configured : typeof navigator !== 'undefined' ? navigator.language : 'en');
-        this.platform.openPath(`${__dirname}/../docs/tutorial.${locale.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en'}.pdf`);
+        try {
+            await openTutorialPdf(locale);
+        } catch (error) {
+            this.tutorialError = this.uiText(error?.code === 'missing'
+                ? 'The tutorial PDF is missing. Reinstall the plugin and try again.'
+                : 'Could not open the tutorial PDF. Check your default PDF reader and try again.');
+        } finally {
+            this.tutorialOpening = false;
+        }
     }
 
     private copyLabel(label: string, existing: string[]): string {
