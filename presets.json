@@ -138,7 +138,7 @@
       "type": "text",
       "icon": "users",
       "color": "#00ff00",
-      "interval": 10,
+      "interval": 30,
       "suffix": "",
       "id": "single-users",
       "displayScope": {
@@ -205,7 +205,7 @@
       "icon": "stats-vram",
       "suffix": "%",
       "color": "#00ff00",
-      "interval": 20,
+      "interval": 30,
       "timeout": 60,
       "command": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
       "detailCommand": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
@@ -490,7 +490,7 @@
         "icon": "stats-vram",
         "suffix": "%",
         "color": "#00ff00",
-        "interval": 20,
+        "interval": 30,
         "timeout": 60,
         "command": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
         "detailCommand": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
@@ -521,7 +521,7 @@
           "icon": "stats-vram",
           "suffix": "%",
           "color": "#00ff00",
-          "interval": 20,
+          "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=0 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
           "detailCommand": "data=$(nvidia-smi --id=0 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
@@ -551,7 +551,7 @@
           "icon": "stats-vram",
           "suffix": "%",
           "color": "#00ff00",
-          "interval": 20,
+          "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=1 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
           "detailCommand": "data=$(nvidia-smi --id=1 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
@@ -581,7 +581,7 @@
           "icon": "stats-vram",
           "suffix": "%",
           "color": "#00ff00",
-          "interval": 20,
+          "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=2 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
           "detailCommand": "data=$(nvidia-smi --id=2 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
@@ -611,7 +611,7 @@
           "icon": "stats-vram",
           "suffix": "%",
           "color": "#00ff00",
-          "interval": 20,
+          "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=3 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
           "detailCommand": "data=$(nvidia-smi --id=3 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
@@ -641,7 +641,7 @@
           "icon": "stats-vram",
           "suffix": "%",
           "color": "#00ff00",
-          "interval": 20,
+          "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=4 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
           "detailCommand": "data=$(nvidia-smi --id=4 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
@@ -671,7 +671,7 @@
           "icon": "stats-vram",
           "suffix": "%",
           "color": "#00ff00",
-          "interval": 20,
+          "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=5 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
           "detailCommand": "data=$(nvidia-smi --id=5 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
@@ -701,7 +701,7 @@
           "icon": "stats-vram",
           "suffix": "%",
           "color": "#00ff00",
-          "interval": 20,
+          "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=6 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
           "detailCommand": "data=$(nvidia-smi --id=6 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
@@ -731,7 +731,7 @@
           "icon": "stats-vram",
           "suffix": "%",
           "color": "#00ff00",
-          "interval": 20,
+          "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=7 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
           "detailCommand": "data=$(nvidia-smi --id=7 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
@@ -774,7 +774,7 @@
         "icon": "stats-disk-space",
         "color": "#00ff00",
         "suffix": " GB",
-        "interval": 20,
+        "interval": 60,
         "timeout": 60,
         "checkCommand": "",
         "checkMode": "exitCode",
@@ -805,7 +805,7 @@
           "icon": "stats-system-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
           "checkMode": "exitCode",
@@ -835,7 +835,7 @@
           "icon": "stats-data-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "mountpoint -q -- '/data'",
           "checkMode": "exitCode",
@@ -897,7 +897,7 @@
         "icon": "stats-disk-space",
         "color": "#00ff00",
         "suffix": " GB",
-        "interval": 20,
+        "interval": 60,
         "timeout": 60,
         "checkCommand": "",
         "checkMode": "exitCode",
@@ -928,7 +928,7 @@
           "icon": "stats-system-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
           "checkMode": "exitCode",
@@ -993,7 +993,7 @@
         "icon": "stats-disk-space",
         "color": "#00ff00",
         "suffix": " GB",
-        "interval": 20,
+        "interval": 60,
         "timeout": 60,
         "checkCommand": "",
         "checkMode": "exitCode",
@@ -1024,7 +1024,7 @@
           "icon": "stats-system-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
           "checkMode": "exitCode",
@@ -1054,7 +1054,7 @@
           "icon": "stats-data-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "mountpoint -q -- '/public'",
           "checkMode": "exitCode",
@@ -1119,7 +1119,7 @@
         "icon": "stats-disk-space",
         "color": "#00ff00",
         "suffix": " GB",
-        "interval": 20,
+        "interval": 60,
         "timeout": 60,
         "checkCommand": "",
         "checkMode": "exitCode",
@@ -1150,7 +1150,7 @@
           "icon": "stats-system-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
           "checkMode": "exitCode",
@@ -1180,7 +1180,7 @@
           "icon": "stats-data-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "mountpoint -q -- '/data'",
           "checkMode": "exitCode",
@@ -1242,7 +1242,7 @@
         "icon": "stats-disk-space",
         "color": "#00ff00",
         "suffix": " GB",
-        "interval": 20,
+        "interval": 60,
         "timeout": 60,
         "checkCommand": "",
         "checkMode": "exitCode",
@@ -1273,7 +1273,7 @@
           "icon": "stats-system-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
           "checkMode": "exitCode",
@@ -1303,7 +1303,7 @@
           "icon": "stats-data-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "mountpoint -q -- '/data'",
           "checkMode": "exitCode",
@@ -1333,7 +1333,7 @@
           "icon": "stats-data-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "mountpoint -q -- '/data2'",
           "checkMode": "exitCode",
@@ -1395,7 +1395,7 @@
         "icon": "stats-disk-space",
         "color": "#00ff00",
         "suffix": " GB",
-        "interval": 20,
+        "interval": 60,
         "timeout": 60,
         "checkCommand": "",
         "checkMode": "exitCode",
@@ -1426,7 +1426,7 @@
           "icon": "stats-system-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "test -d '/' && df -Pk -- '/' >/dev/null 2>&1",
           "checkMode": "exitCode",
@@ -1456,7 +1456,7 @@
           "icon": "stats-data-disk",
           "color": "#00ff00",
           "suffix": " GB",
-          "interval": 20,
+          "interval": 60,
           "timeout": 60,
           "checkCommand": "mountpoint -q -- '/data'",
           "checkMode": "exitCode",
@@ -1541,7 +1541,8 @@
         "showWhenUnavailable": true,
         "id": "cpu-load-main",
         "label": "线程数",
-        "command": "awk '{print $4}' /proc/loadavg"
+        "command": "awk '{print $4}' /proc/loadavg",
+        "interval": 15
       },
       "children": [
         {
@@ -1570,7 +1571,8 @@
           "showWhenUnavailable": true,
           "id": "cpu-load-0",
           "label": "1min",
-          "command": "awk '{printf \"%d\\n\", ($1/'$(nproc)')*100}' /proc/loadavg"
+          "command": "awk '{printf \"%d\\n\", ($1/'$(nproc)')*100}' /proc/loadavg",
+          "interval": 15
         },
         {
           "type": "text",
@@ -1598,13 +1600,558 @@
           "showWhenUnavailable": true,
           "id": "cpu-load-1",
           "label": "5min",
-          "command": "awk '{printf \"%d\\n\", ($2/'$(nproc)')*100}' /proc/loadavg"
+          "command": "awk '{printf \"%d\\n\", ($2/'$(nproc)')*100}' /proc/loadavg",
+          "interval": 15
         }
       ],
       "displayScope": {
         "mode": "all",
         "profileIds": []
       }
+    }
+  },
+  {
+    "id": "disk-io-P0磁盘",
+    "kind": "group",
+    "label": "P0磁盘读写",
+    "labels": {
+      "zh": "P0磁盘读写",
+      "en": "P0 disk I/O"
+    },
+    "description": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+    "descriptions": {
+      "zh": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Every 30s, sample kernel counters for 1s. The main label sums readable unique block-device read/write throughput; children follow system/data mounts. Hover for read/write MB/s, read/write await in ms (including queueing) and average outstanding I/O requests (queue, not file count). These are backing-device totals, not exclusive directory traffic; aliases/bind mounts are counted once. MB uses base 1024. Overlay/network filesystems or missing mounts without block counters remain visibly unavailable and are excluded from the total. No benchmark or filesystem writes."
+    },
+    "source": {
+      "name": "lishuainan0209 / Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "profileNames": [
+      "P0(ai)",
+      "P0(s_lsn)"
+    ],
+    "group": {
+      "id": "disk-io-group",
+      "label": "P0磁盘读写",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      },
+      "main": {
+        "id": "disk-io-total",
+        "label": "总读写",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " MB/s",
+        "interval": 30,
+        "timeout": 15,
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+        "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "unavailableText": "无块设备数据",
+        "visibleWhenUnavailable": true,
+        "showWhenUnavailable": true
+      },
+      "children": [
+        {
+          "id": "disk-io-0",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        },
+        {
+          "id": "disk-io-1",
+          "label": "/data",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        }
+      ]
+    }
+  },
+  {
+    "id": "disk-io-P1磁盘",
+    "kind": "group",
+    "label": "P1磁盘读写",
+    "labels": {
+      "zh": "P1磁盘读写",
+      "en": "P1 disk I/O"
+    },
+    "description": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+    "descriptions": {
+      "zh": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Every 30s, sample kernel counters for 1s. The main label sums readable unique block-device read/write throughput; children follow system/data mounts. Hover for read/write MB/s, read/write await in ms (including queueing) and average outstanding I/O requests (queue, not file count). These are backing-device totals, not exclusive directory traffic; aliases/bind mounts are counted once. MB uses base 1024. Overlay/network filesystems or missing mounts without block counters remain visibly unavailable and are excluded from the total. No benchmark or filesystem writes."
+    },
+    "source": {
+      "name": "lishuainan0209 / Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "profileNames": [
+      "P1(ai)"
+    ],
+    "group": {
+      "id": "disk-io-group",
+      "label": "P1磁盘读写",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      },
+      "main": {
+        "id": "disk-io-total",
+        "label": "总读写",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " MB/s",
+        "interval": 30,
+        "timeout": 15,
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+        "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "unavailableText": "无块设备数据",
+        "visibleWhenUnavailable": true,
+        "showWhenUnavailable": true
+      },
+      "children": [
+        {
+          "id": "disk-io-0",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        }
+      ]
+    }
+  },
+  {
+    "id": "disk-io-P1容器磁盘",
+    "kind": "group",
+    "label": "P1容器磁盘读写",
+    "labels": {
+      "zh": "P1容器磁盘读写",
+      "en": "P1 container  disk I/O"
+    },
+    "description": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+    "descriptions": {
+      "zh": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Every 30s, sample kernel counters for 1s. The main label sums readable unique block-device read/write throughput; children follow system/data mounts. Hover for read/write MB/s, read/write await in ms (including queueing) and average outstanding I/O requests (queue, not file count). These are backing-device totals, not exclusive directory traffic; aliases/bind mounts are counted once. MB uses base 1024. Overlay/network filesystems or missing mounts without block counters remain visibly unavailable and are excluded from the total. No benchmark or filesystem writes."
+    },
+    "source": {
+      "name": "lishuainan0209 / Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "profileNames": [
+      "P1(s_lsn)"
+    ],
+    "group": {
+      "id": "disk-io-group",
+      "label": "P1容器磁盘读写",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      },
+      "main": {
+        "id": "disk-io-total",
+        "label": "总读写",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " MB/s",
+        "interval": 30,
+        "timeout": 15,
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/public'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+        "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/public'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/public'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "unavailableText": "无块设备数据",
+        "visibleWhenUnavailable": true,
+        "showWhenUnavailable": true
+      },
+      "children": [
+        {
+          "id": "disk-io-0",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        },
+        {
+          "id": "disk-io-1",
+          "label": "/public",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/public'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/public'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/public'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        }
+      ]
+    }
+  },
+  {
+    "id": "disk-io-P2磁盘",
+    "kind": "group",
+    "label": "P2磁盘读写",
+    "labels": {
+      "zh": "P2磁盘读写",
+      "en": "P2 disk I/O"
+    },
+    "description": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+    "descriptions": {
+      "zh": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Every 30s, sample kernel counters for 1s. The main label sums readable unique block-device read/write throughput; children follow system/data mounts. Hover for read/write MB/s, read/write await in ms (including queueing) and average outstanding I/O requests (queue, not file count). These are backing-device totals, not exclusive directory traffic; aliases/bind mounts are counted once. MB uses base 1024. Overlay/network filesystems or missing mounts without block counters remain visibly unavailable and are excluded from the total. No benchmark or filesystem writes."
+    },
+    "source": {
+      "name": "lishuainan0209 / Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "profileNames": [
+      "P2(ai)",
+      "P2(s_lsn)"
+    ],
+    "group": {
+      "id": "disk-io-group",
+      "label": "P2磁盘读写",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      },
+      "main": {
+        "id": "disk-io-total",
+        "label": "总读写",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " MB/s",
+        "interval": 30,
+        "timeout": 15,
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+        "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "unavailableText": "无块设备数据",
+        "visibleWhenUnavailable": true,
+        "showWhenUnavailable": true
+      },
+      "children": [
+        {
+          "id": "disk-io-0",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        },
+        {
+          "id": "disk-io-1",
+          "label": "/data",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        }
+      ]
+    }
+  },
+  {
+    "id": "disk-io-P3磁盘",
+    "kind": "group",
+    "label": "P3磁盘读写",
+    "labels": {
+      "zh": "P3磁盘读写",
+      "en": "P3 disk I/O"
+    },
+    "description": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+    "descriptions": {
+      "zh": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Every 30s, sample kernel counters for 1s. The main label sums readable unique block-device read/write throughput; children follow system/data mounts. Hover for read/write MB/s, read/write await in ms (including queueing) and average outstanding I/O requests (queue, not file count). These are backing-device totals, not exclusive directory traffic; aliases/bind mounts are counted once. MB uses base 1024. Overlay/network filesystems or missing mounts without block counters remain visibly unavailable and are excluded from the total. No benchmark or filesystem writes."
+    },
+    "source": {
+      "name": "lishuainan0209 / Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "profileNames": [
+      "P3(ai)",
+      "P3(s_lsn)"
+    ],
+    "group": {
+      "id": "disk-io-group",
+      "label": "P3磁盘读写",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      },
+      "main": {
+        "id": "disk-io-total",
+        "label": "总读写",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " MB/s",
+        "interval": 30,
+        "timeout": 15,
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data' '/data2'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+        "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data' '/data2'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data' '/data2'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "unavailableText": "无块设备数据",
+        "visibleWhenUnavailable": true,
+        "showWhenUnavailable": true
+      },
+      "children": [
+        {
+          "id": "disk-io-0",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        },
+        {
+          "id": "disk-io-1",
+          "label": "/data",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        },
+        {
+          "id": "disk-io-2",
+          "label": "/data2",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data2'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data2'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data2'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        }
+      ]
+    }
+  },
+  {
+    "id": "disk-io-P4磁盘",
+    "kind": "group",
+    "label": "P4磁盘读写",
+    "labels": {
+      "zh": "P4磁盘读写",
+      "en": "P4 disk I/O"
+    },
+    "description": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+    "descriptions": {
+      "zh": "作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。",
+      "en": "For the author's laboratory only. Other users: please do not download or use this preset. Every 30s, sample kernel counters for 1s. The main label sums readable unique block-device read/write throughput; children follow system/data mounts. Hover for read/write MB/s, read/write await in ms (including queueing) and average outstanding I/O requests (queue, not file count). These are backing-device totals, not exclusive directory traffic; aliases/bind mounts are counted once. MB uses base 1024. Overlay/network filesystems or missing mounts without block counters remain visibly unavailable and are excluded from the total. No benchmark or filesystem writes."
+    },
+    "source": {
+      "name": "lishuainan0209 / Tabby Group Server Stats",
+      "url": "https://github.com/lishuainan0209/tabby-group-server-stats",
+      "license": "MIT"
+    },
+    "audience": "author-lab",
+    "profileNames": [
+      "P4(ai)",
+      "P4(s_lsn)"
+    ],
+    "group": {
+      "id": "disk-io-group",
+      "label": "P4磁盘读写",
+      "mode": "overview",
+      "layout": "vertical",
+      "interval": 3,
+      "displayScope": {
+        "mode": "selected",
+        "profileIds": []
+      },
+      "main": {
+        "id": "disk-io-total",
+        "label": "总读写",
+        "type": "text",
+        "icon": "stats-disk-space",
+        "color": "#00ff00",
+        "suffix": " MB/s",
+        "interval": 30,
+        "timeout": 15,
+        "checkMode": "exitCode",
+        "checkExpected": "0",
+        "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+        "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/' '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+        "unavailableText": "无块设备数据",
+        "visibleWhenUnavailable": true,
+        "showWhenUnavailable": true
+      },
+      "children": [
+        {
+          "id": "disk-io-0",
+          "label": "系统盘",
+          "type": "text",
+          "icon": "stats-system-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        },
+        {
+          "id": "disk-io-1",
+          "label": "/data",
+          "type": "text",
+          "icon": "stats-data-disk",
+          "color": "#00ff00",
+          "suffix": " MB/s",
+          "interval": 30,
+          "timeout": 15,
+          "checkMode": "exitCode",
+          "checkExpected": "0",
+          "checkCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\ntabby_io_snapshot >/dev/null",
+          "command": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=0 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "detailCommand": "[ -r /proc/diskstats ] && [ -r /proc/uptime ] && command -v findmnt >/dev/null 2>&1 || exit 1\ntabby_io_devices() {\n    for io_path in '/data'; do\n        io_device=$(findmnt -rn -o MAJ:MIN --mountpoint \"$io_path\" 2>/dev/null) || continue\n        printf '%s\\n' \"$io_device\"\n    done | awk '/^[0-9]+:[0-9]+$/ && !seen[$0]++ {print}'\n}\ntabby_io_resolve() {\n    io_candidates=$(tabby_io_devices) || return 1\n    awk -v devices=\"$io_candidates\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected && NF>=14 {print $1 \":\" $2; found=1} END {if(!found) exit 1}' /proc/diskstats\n}\nio_devices=$(tabby_io_resolve) || exit 1\ntabby_io_snapshot() {\n    awk -v devices=\"$io_devices\" 'BEGIN {n=split(devices,a,\"\\n\"); for(i=1;i<=n;i++) selected[a[i]]=1} ($1 \":\" $2) in selected {\n        if(NF<14) {bad=1; next}\n        for(i=4;i<=14;i++) if($i !~ /^[0-9]+$/) bad=1\n        print $1 \":\" $2,$4,$6,$7,$8,$10,$11,$14\n        seen[$1 \":\" $2]=1\n    } END {for(device in selected) if(!seen[device]) bad=1; if(bad) exit 1}' /proc/diskstats\n}\nio_before=$(tabby_io_snapshot) || exit 1\nio_start=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nsleep 1\nio_after=$(tabby_io_snapshot) || exit 1\nio_finish=$(awk 'NR==1 {print $1; exit}' /proc/uptime) || exit 1\nio_current=$(tabby_io_resolve) || exit 1\n[ \"$io_devices\" = \"$io_current\" ] || exit 1\nprintf '%s\\n--TABBY-IO-NEXT--\\n%s\\n' \"$io_before\" \"$io_after\" | awk -v start=\"$io_start\" -v finish=\"$io_finish\" -v detail=1 '\nBEGIN {if(start !~ /^[0-9]+([.][0-9]+)?$/ || finish !~ /^[0-9]+([.][0-9]+)?$/ || finish<=start) {bad=1; exit 1}; seconds=finish-start}\n$0==\"--TABBY-IO-NEXT--\" {second=1; next}\n!second {for(i=2;i<=8;i++) before[$1,i]=$i; seen[$1]=1; next}\n{\n    if(!($1 in seen)) {bad=1; next}\n    for(i=2;i<=8;i++) {delta[i]=$i-before[$1,i]; if(delta[i]<0) bad=1}\n    reads+=delta[2]; rsectors+=delta[3]; rtime+=delta[4]\n    writes+=delta[5]; wsectors+=delta[6]; wtime+=delta[7]; weighted+=delta[8]; count++\n}\nEND {\n    if(bad || !count) exit 1\n    readMB=rsectors/2048/seconds; writeMB=wsectors/2048/seconds\n    if(detail) {\n        latency=reads+writes>0?sprintf(\"%.1f ms\",(rtime+wtime)/(reads+writes)):\"-\"\n        printf \"R %.2f / W %.2f MB/s | await %s | queue %.2f\\n\",readMB,writeMB,latency,weighted/(seconds*1000)\n    } else printf \"%.2f\\n\",readMB+writeMB\n}'",
+          "unavailableText": "无块设备数据",
+          "visibleWhenUnavailable": true,
+          "showWhenUnavailable": true
+        }
+      ]
     }
   }
 ]

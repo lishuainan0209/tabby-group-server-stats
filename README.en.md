@@ -2,7 +2,7 @@
 
 [中文](README.md) | English
 
-SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.7.7**, adding per-pane display menus, group/child duplication, capacity thousands separators and offline PDF tutorials.
+SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.8.0**, adding per-pane display menus, group/child duplication, capacity thousands separators and offline PDF tutorials.
 
 Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
@@ -13,6 +13,18 @@ Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209).
 ![Offline preset library](docs/images/preset-library.png)
 
 The preview uses example configuration data and the Chinese interface.
+
+## 1.8.0 lower-overhead collection and disk I/O
+
+- Conditional colors now include labels, built-in icons and uploaded icons; separators have stronger contrast and stretch to the tallest item on each wrapped line, while shorter labels remain centered. External URL images retain their original colors to avoid cross-origin mask failures.
+- Lab-only disk capacity and I/O groups cover P0–P4, with a separate P1 container preset and connection bindings.
+- Primary value: combined MB/s. Hover: bilingual read/write throughput, average latency in milliseconds, and average outstanding I/O requests, with right-aligned numeric columns. Outstanding requests include waiting and in-service I/O, not files, and the average can be fractional. Counters belong to backing block devices, not exclusive directory traffic; identical device IDs are deduplicated. MB uses the plugin's base-1024 convention.
+- A 1-second snapshot window every 30 seconds, not a continuous 30-second average. Idle await is “-”. Unsupported Overlay/NFS or absent devices remain unavailable instead of returning fake zeros. No benchmarks, sample-file writes or iostat dependency.
+- Defaults: network 5s, memory 10s, CPU load 15s, users/GPU/disk I/O 30s, disk capacity 60s. Explicit custom intervals remain editable.
+- Background tabs, collapsed bars, disabled metrics and out-of-scope connections start no new collection; in-flight commands finish or time out. Visible split panes all collect. Overview/carousel children still refresh; hidden failed prerequisites retry at least 60s apart to detect recovery.
+- At most four metrics run concurrently per batch. Hover queries share a batch, cached results and in-flight requests. Independent SSH connections still add overhead.
+
+See [iostat](https://man7.org/linux/man-pages/man1/iostat.1.html) and [Linux I/O statistics](https://docs.kernel.org/admin-guide/iostats.html). Appropriate throughput, latency and queue thresholds depend on the device and workload, so these presets do not impose universal thresholds.
 
 ## Features
 
@@ -64,7 +76,7 @@ printf '%s\n' "$data" | awk 'NR==2 {print "available " $4 " / used " $3}'
 
 Set the unavailable message to “Not mounted”. Checking the mount point prevents an unmounted disk's remaining directory from reporting its parent filesystem instead. A failed check skips both the primary and detail commands. Commands run inside the corresponding pane's session with that connection user's permissions and require the appropriate tools on the target.
 
-Details follow the label's refresh interval, or the global interval when unset: 3 seconds by default, with a minimum of 1 second. Repeated mouse events do not rerun a cached command. A bounded SSH completion acknowledgment protects output from fast-closing channels without automatically retrying user commands. Detail errors appear separately in red and preserve a healthy primary value; successful empty detail output stays empty.
+Details follow the label's refresh interval, or the global interval when unset: 10 seconds by default, with a minimum of 1 second. Repeated mouse events do not rerun a cached command. A bounded SSH completion acknowledgment protects output from fast-closing channels without automatically retrying user commands. Detail errors appear separately in red and preserve a healthy primary value; successful empty detail output stays empty.
 
 ## Groups and visibility
 
@@ -224,7 +236,7 @@ Report problems or suggest improvements through [this project's Issues](https://
 - Put main/child buttons together for direct editing; collapse group editors initially and move named deletion confirmations to the lower right.
 - Display capacity as GB while retaining base-1024 readings and thresholds, with compatibility for legacy GiB configuration.
 
-### 1.7.7 tutorial PDF launch fix
+### 1.8.0 tutorial PDF launch fix
 
 - Resolve the bundled tutorial to a normalized absolute path and await the system PDF opener.
 - Show localized feedback when the file is missing or the default reader cannot open it.

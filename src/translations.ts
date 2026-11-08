@@ -1,6 +1,15 @@
 export const TRANSLATIONS: Record<string, Record<string, string>> = {
     'zh-CN': {
         'Server Stats': '服务器状态',
+        'Read': '读取',
+        'Write': '写入',
+        'Latency': '延迟',
+        'Queue': '队列',
+        'requests': '个',
+        'Backing-device throughput, not exclusive directory traffic; MB uses base 1024.': '挂载点背后块设备的读写速率，并非该目录的独占流量；MB 按 1024 进制计算。',
+        'No reads or writes completed during this sample; latency is unavailable, not zero.': '本次采样期间没有读写请求完成，无法计算平均延迟；“-”不代表延迟为零。',
+        'Average read/write completion latency during the sample, including waiting time.': '采样期间已完成读写请求的平均耗时，包括等待时间。',
+        'Average outstanding I/O requests during the sample, including waiting and in-service requests. Fractions are normal; this is not a file count.': '采样期间未完成 I/O 请求数的平均值，包含正在等待和正在处理的请求。小数是正常的；这不是文件数量。',
         'Appearance': '外观',
         'Display Mode': '显示模式',
         'Floating Panel': '浮动面板',
@@ -407,6 +416,7 @@ TRANSLATIONS['pt'] = TRANSLATIONS['pt-BR'];
 for (const [chinese, english] of [
     ['系统盘', 'System disk'], ['数据盘', 'Data disk'], ['磁盘容量', 'Disk capacity'],
     ['磁盘读取', 'Disk read'], ['磁盘写入', 'Disk write'], ['磁盘读写', 'Disk I/O'],
+    ['总读写', 'Total I/O'], ['无块设备数据', 'No block-device data'],
     ['GPU 显卡', 'GPU'], ['GPU 显存', 'GPU memory'], ['CPU 处理器', 'CPU processor'],
     ['CPU 负载', 'CPU load'], ['CPU负载', 'CPU load'], ['线程数', 'Threads'], ['I/O 等待', 'I/O wait'], ['内存', 'Memory'],
     ['交换空间', 'Swap'], ['网络接口', 'Network interface'], ['网络发送', 'Network upload'],

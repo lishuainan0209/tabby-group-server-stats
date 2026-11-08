@@ -394,6 +394,25 @@ test('per-pane controller continues polling with a legacy floating setting', asy
     f.instance.teardown();
 });
 
+test('background tabs stop collecting while every visible split pane remains eligible', async () => {
+    const f = moduleFixture();
+    const leaf = { session: f.A, frontend: {} };
+    f.module.resolveTabForElement = () => leaf;
+    f.module.app.activeTab = { session: f.B, frontend: {} };
+    await f.poll();
+    assert.equal(f.requests.length, 0, 'inactive tab does not send commands');
+    const sibling = { session: f.B, frontend: {} };
+    f.module.app.activeTab = { focusedTab: sibling, getAllTabs: () => [leaf, sibling] };
+    const pending = f.poll();
+    assert.equal(f.requests.length, 1, 'unfocused but visible split pane still collects');
+    f.requests[0].resolve(stats(42));
+    await pending;
+    f.element.getClientRects = () => [];
+    await f.poll();
+    assert.equal(f.requests.length, 1, 'hidden DOM pane does not collect');
+    f.instance.teardown();
+});
+
 test('external controller skips hidden panes and discards responses hidden during collection', async () => {
     const f = moduleFixture();
     let paneVisible = false;

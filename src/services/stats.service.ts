@@ -47,6 +47,10 @@ interface SessionCache {
     metricStates: Map<string, MetricState>
 }
 
+// Limit bursts of shell processes when a large group becomes due together.
+// Value and hover batches may coexist, but each runs at most four metrics.
+const METRIC_BATCH_CONCURRENCY = 4;
+
 @Injectable({ providedIn: 'root' })
 export class StatsService {
     public static isDebugEnabled = false;
@@ -254,12 +258,15 @@ export class StatsService {
         const revision = this.revision;
         const now = Date.now();
         const conf = this.config?.store?.plugin?.serverStats || {};
-        const defaultInterval = Number.isFinite(conf.defaultInterval) && conf.defaultInterval > 0 ? conf.defaultInterval : 3;
+        const defaultInterval = Number.isFinite(conf.defaultInterval) && conf.defaultInterval > 0 ? conf.defaultInterval : 10;
         const due = allMetrics(this.getVisibleConfig(session)).filter(metric => {
             const state = this.getState(cache, metric);
             const interval = Number.isFinite(metric.interval) && metric.interval! > 0 ? metric.interval! : defaultInterval;
+            // Absent optional objects (for example unused GPU slots) still recover,
+            // but need not launch a failing probe every normal refresh cycle.
+            const retryInterval = state.status === 'unavailable' && metric.visibleWhenUnavailable === false ? Math.max(60, interval) : interval;
             return !state.isFetching && !this.detailTasks.has(`${this.getServerKey(session)}:${metric.id}`) &&
-                (state.lastAttempt === 0 || now - state.lastAttempt >= Math.max(1, interval) * 1000);
+                (state.lastAttempt === 0 || now - state.lastAttempt >= Math.max(1, retryInterval) * 1000);
         });
         if (!due.length) return this.snapshot(cache, session);
         logDebug(`[collect] ${this.getServerKey(session)}, metrics=${due.length}`);
@@ -290,12 +297,9 @@ export class StatsService {
             }
             if (changed) this.publish(session, cache, revision);
         };
-        const parts = ['export LC_ALL=C PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"'];
-        tokens.forEach((metric, token) => parts.push(buildMetricCommand(metric, token)));
-        parts.push('wait', 'echo TABBY-STATS-END');
+        const batch = this.commandBatch(tokens);
         try {
-            const timeout = Math.max(15, ...due.map(metric => metricTimeout(metric) * 2 + 5)) * 1000;
-            const buffer = await this.execute(session, parts.join('\n') + '\n', timeout, onBuffer);
+            const buffer = await this.execute(session, batch.script, batch.timeout, onBuffer);
             onBuffer(buffer);
             // A channel that closes without a complete result is an error, not a fresh cached value.
             if (this.isCurrent(session, cache, revision)) {
@@ -325,6 +329,22 @@ export class StatsService {
         return this.isCurrent(session, cache, revision) ? this.snapshot(cache, session) : null;
     }
 
+    private commandBatch(tokens: Map<string, CustomMetric>, kind: 'value' | 'detail' = 'value'): { script: string; timeout: number } {
+        const entries = [...tokens.entries()];
+        const parts = ['export LC_ALL=C PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"'];
+        let seconds = 5;
+        for (let offset = 0; offset < entries.length; offset += METRIC_BATCH_CONCURRENCY) {
+            const wave = entries.slice(offset, offset + METRIC_BATCH_CONCURRENCY);
+            wave.forEach(([token, metric]) => parts.push(buildMetricCommand(metric, token, kind)));
+            parts.push('wait');
+            // A metric can run a prerequisite and its command, each with a timeout.
+            // Account for every sequential wave, including timeout kill grace.
+            seconds += Math.max(...wave.map(([, metric]) => metricTimeout(metric) * 2 + 5));
+        }
+        parts.push('echo TABBY-STATS-END', '');
+        return { script: parts.join('\n'), timeout: Math.max(15, seconds) * 1000 };
+    }
+
     /** Hover details share the metric's refresh interval and deduplicate in-flight requests. */
     async fetchDetails(session: any, metrics: CustomMetric[]): Promise<Record<string, string>> {
         if (!this.isPlatformSupport(session)) return {};
@@ -344,52 +364,78 @@ export class StatsService {
         if (active && waitingForRequestedMetric) await active;
         if (!this.isCurrent(session, cache, revision)) return {};
         const results: Record<string, string> = {};
-        await Promise.all(metrics.map(async input => {
+        const requested = [...new Map(metrics.map(metric => [metric.id, metric])).values()];
+        const fresh: CustomMetric[] = [];
+        const pending = new Map<string, Promise<string>>();
+        for (const input of requested) {
             const metric = current.get(input.id);
-            if (!metric?.detailCommand?.trim()) return;
+            if (!metric?.detailCommand?.trim()) continue;
             const state = this.getState(cache, metric);
-            if (state.status === 'unavailable' || state.status === 'error') { results[metric.id] = ''; return; }
+            if (state.status === 'unavailable' || state.status === 'error') { results[metric.id] = ''; continue; }
             const configuredDefault = this.config?.store?.plugin?.serverStats?.defaultInterval;
-            const defaultInterval = Number.isFinite(configuredDefault) && configuredDefault > 0 ? configuredDefault : 3;
+            const defaultInterval = Number.isFinite(configuredDefault) && configuredDefault > 0 ? configuredDefault : 10;
             const interval = Number.isFinite(metric.interval) && metric.interval! > 0 ? metric.interval! : defaultInterval;
-            if (state.detailAt && Date.now() - state.detailAt < Math.max(1, interval) * 1000) { results[metric.id] = state.detail; return; }
+            if (state.detailAt && Date.now() - state.detailAt < Math.max(1, interval) * 1000) { results[metric.id] = state.detail; continue; }
             const taskKey = `${key}:${metric.id}`;
-            let task = this.detailTasks.get(taskKey);
-            if (!task) {
-                task = this.collectDetail(session, metric, cache, revision);
-                this.detailTasks.set(taskKey, task);
+            const task = this.detailTasks.get(taskKey);
+            if (task) pending.set(metric.id, task);
+            else fresh.push(metric);
+        }
+        if (fresh.length) {
+            // A group hover opens one SSH channel, not one channel per label.
+            const batch = this.collectDetails(session, fresh, cache, revision);
+            for (const metric of fresh) {
+                const task = batch.then(values => values[metric.id] ?? '');
+                this.detailTasks.set(`${key}:${metric.id}`, task);
+                pending.set(metric.id, task);
             }
-            try { results[metric.id] = await task; }
+        }
+        await Promise.all([...pending].map(async ([id, task]) => {
+            const taskKey = `${key}:${id}`;
+            try { results[id] = await task; }
             finally { if (this.detailTasks.get(taskKey) === task) this.detailTasks.delete(taskKey); }
         }));
         return this.isCurrent(session, cache, revision) ? results : {};
     }
 
-    private async collectDetail(session: any, metric: CustomMetric, cache: SessionCache, revision: number): Promise<string> {
-        const state = this.getState(cache, metric);
-        try {
-            const script = ['export LC_ALL=C PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"',
-                buildMetricCommand(metric, 'detail', 'detail'), 'wait', 'echo TABBY-STATS-END', ''].join('\n');
-            const buffer = await this.execute(session, script, (metricTimeout(metric) * 2 + 5) * 1000);
-            if (!this.isCurrent(session, cache, revision)) return '';
-            const result = parseMetricResults(buffer).find(result => result.token === 'detail');
-            if (result?.status === 'unavailable') {
-                state.status = 'unavailable'; state.value = metric.unavailableText ?? 'Unavailable';
-                state.detail = ''; state.detailAt = 0;
-                this.publish(session, cache, revision);
-                return '';
+    private async collectDetails(session: any, metrics: CustomMetric[], cache: SessionCache, revision: number): Promise<Record<string, string>> {
+        const tokens = new Map(metrics.map((metric, index) => [index === 0 ? 'detail' : `detail_${index}`, metric]));
+        const results: Record<string, string> = {};
+        const consume = (buffer: string) => {
+            if (!this.isCurrent(session, cache, revision)) return;
+            for (const result of parseMetricResults(buffer)) {
+                const metric = tokens.get(result.token);
+                if (!metric || Object.prototype.hasOwnProperty.call(results, metric.id)) continue;
+                const state = this.getState(cache, metric);
+                if (result.status === 'unavailable') {
+                    state.status = 'unavailable'; state.value = metric.unavailableText ?? 'Unavailable';
+                    state.detail = ''; state.detailAt = 0;
+                    this.publish(session, cache, revision);
+                } else {
+                    state.detail = result.value;
+                    state.detailAt = Date.now();
+                    if (result.status === 'error') logDebug(`[detail:error] ${metric.id}: ${state.detail}`);
+                }
+                results[metric.id] = state.detail;
             }
-            state.detail = result?.value ?? 'Err: No result';
-            if (!result || result.status === 'error') logDebug(`[detail:error] ${metric.id}: ${state.detail}; stdout=${buffer.length} bytes`);
-            state.detailAt = Date.now();
-            return state.detail;
+        };
+        let failure = 'Err: No result';
+        try {
+            const batch = this.commandBatch(tokens, 'detail');
+            consume(await this.execute(session, batch.script, batch.timeout, consume));
         } catch (error: any) {
-            if (!this.isCurrent(session, cache, revision)) return '';
-            state.detail = this.executionErrorValue(error);
+            failure = this.executionErrorValue(error);
+        }
+        if (!this.isCurrent(session, cache, revision)) return {};
+        for (const metric of metrics) {
+            if (Object.prototype.hasOwnProperty.call(results, metric.id)) continue;
+            const state = this.getState(cache, metric);
+            state.detail = failure;
             state.detailAt = Date.now();
             logDebug(`[detail:error] ${metric.id}: ${state.detail}`);
-            return state.detail;
+            results[metric.id] = state.detail;
         }
+        return results;
     }
 
     private executionErrorValue(error: any): string {

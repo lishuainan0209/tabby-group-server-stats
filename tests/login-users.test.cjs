@@ -80,7 +80,7 @@ test('aggregation and sorting failures remain command errors instead of an empty
 test('the shipped bilingual description explains the system-session scope and preserves the main display type', () => {
     assert.equal(metric.type, 'text')
     assert.equal(metric.suffix, '')
-    assert.equal(metric.interval, 10)
+    assert.equal(metric.interval, 30)
     assert.equal(metric.icon, 'users')
     assert.match(preset.descriptions.en, /recorded by the system/)
     assert.match(preset.descriptions.en, /not a count of all TCP or background SSH/)

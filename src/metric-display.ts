@@ -67,6 +67,21 @@ export function parseNetworkDetail(value: string): { label: string; amount: stri
     return match ? { label: `${match[1]} total`, amount: formatGroupedNumber(match[2]), interfaces: match[3] } : null
 }
 
+export interface DiskIoDetail {
+    read: string
+    write: string
+    latency: string
+    outstanding: string
+}
+
+/** Recognize the disk I/O preset protocol; keep unrelated user output intact. */
+export function parseDiskIoDetail(value: string): DiskIoDetail | null {
+    const match = /^R ([0-9]+(?:\.[0-9]+)?) \/ W ([0-9]+(?:\.[0-9]+)?) MB\/s \| await (?:([0-9]+(?:\.[0-9]+)?) ms|(-)) \| queue ([0-9]+(?:\.[0-9]+)?)$/.exec(value || '')
+    if (!match || ![match[1], match[2], match[3] || '0', match[5]].every(isNumericDisplayValue)) return null
+    return { read: formatGroupedNumber(match[1]), write: formatGroupedNumber(match[2]),
+        latency: match[3] ? formatGroupedNumber(match[3]) : '-', outstanding: formatGroupedNumber(match[5]) }
+}
+
 export function metricStatus(result?: DisplayResult): string {
     return result?.status || (!result || result.value === '-' ? 'pending' : result.value.startsWith('Err:') ? 'error' : 'ok')
 }

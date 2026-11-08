@@ -1181,13 +1181,13 @@ export class ServerStatsSettingsComponent {
     }
 
     get defaultInterval(): number {
-        return this.config?.store?.plugin?.serverStats?.defaultInterval || 3;
+        return this.config?.store?.plugin?.serverStats?.defaultInterval || 10;
     }
 
     set defaultInterval(val: number) {
         if (!this.config?.store?.plugin?.serverStats) return;
         const num = Number(val);
-        this.config.store.plugin.serverStats.defaultInterval = isNaN(num) || num < 1 ? 3 : num;
+        this.config.store.plugin.serverStats.defaultInterval = isNaN(num) || num < 1 ? 10 : num;
     }
 
     get debugLogging(): boolean {

@@ -1,8 +1,7 @@
 import { Component, Input, OnChanges, OnDestroy, OnInit, AfterViewChecked, ViewChild, ViewChildren, QueryList, ElementRef, ChangeDetectorRef, NgZone, HostListener } from '@angular/core'
-import { DomSanitizer, SafeUrl } from '@angular/platform-browser'
 import { CustomMetric, CustomMetricGroup, evaluateColor, formatFontAwesomeIcon, getSvgPresetPath, isFaIcon, isUrlOrDataUri } from '../config'
 import { StatsService } from '../services/stats.service'
-import { carouselChildren, nextCarouselId, metricStatus, metricIsVisible, visibleGroupMetrics, parseNetworkDetail, parseNumericRatio, formatNetworkRate, formatCapacityUnit, formatGroupedNumber, isCapacityUnit, isNumericDisplayValue, DisplayResult } from '../metric-display'
+import { carouselChildren, nextCarouselId, metricStatus, metricIsVisible, visibleGroupMetrics, parseNetworkDetail, parseDiskIoDetail, DiskIoDetail, parseNumericRatio, formatNetworkRate, formatCapacityUnit, formatGroupedNumber, isCapacityUnit, isNumericDisplayValue, DisplayResult } from '../metric-display'
 import { BuiltinMetricKey, OrderedMetricItem, orderBuiltinItems } from '../builtin-metrics'
 import { METRIC_COLORS } from '../metric-colors'
 
@@ -10,9 +9,11 @@ import { METRIC_COLORS } from '../metric-colors'
     selector: 'server-stats-metric-strip',
     template: `
       <ng-template #value let-metric let-expanded="expanded">
-        <span class="metric-label">
+        <span class="metric-label" [style.color]="color(metric)">
           <svg *ngIf="svgPath(metric.icon)" viewBox="0 0 24 24" aria-hidden="true"><path [attr.d]="svgPath(metric.icon)"></path></svg>
-          <img *ngIf="isUrl(metric.icon)" [src]="iconUrl(metric.icon)" alt="">
+          <span *ngIf="isUploadedIcon(metric.icon)" class="metric-image-icon" aria-hidden="true"
+                [style.mask-image]="iconMask(metric.icon)" [style.-webkit-mask-image]="iconMask(metric.icon)"></span>
+          <img *ngIf="isUrl(metric.icon) && !isUploadedIcon(metric.icon)" [src]="metric.icon" alt="">
           <i *ngIf="isFa(metric.icon)" [class]="iconClass(metric.icon)" aria-hidden="true"></i>
           <span>{{metric.label | translate}}</span>
         </span>
@@ -27,6 +28,14 @@ import { METRIC_COLORS } from '../metric-colors'
               [attr.title]="detailError(metric) ? details[metric.id] : networkDetail(metric) ? (('Since interface creation or counter reset' | translate) + ' · ' + networkDetail(metric).interfaces) : null">
             <span class="network-detail" *ngIf="networkDetail(metric) as network; else ordinaryDetail"><span>{{network.label | translate}} </span><span class="network-amount">{{network.amount}}</span><span class="network-unit"> GB</span></span>
             <ng-template #ordinaryDetail>
+              <span class="disk-io-detail" *ngIf="diskIoDetail(metric) as io; else otherDetail">
+                <span class="io-field io-read-field" [attr.title]="'Backing-device throughput, not exclusive directory traffic; MB uses base 1024.' | translate"><span class="io-label">{{'Read' | translate}}</span><span class="io-number io-read">{{io.read}}</span><span class="io-unit">MB/s</span></span>
+                <span class="io-field io-write-field" [attr.title]="'Backing-device throughput, not exclusive directory traffic; MB uses base 1024.' | translate"><span class="io-label">{{'Write' | translate}}</span><span class="io-number io-write">{{io.write}}</span><span class="io-unit">MB/s</span></span>
+                <span class="io-field io-latency-field" [attr.title]="(io.latency === '-' ? 'No reads or writes completed during this sample; latency is unavailable, not zero.' : 'Average read/write completion latency during the sample, including waiting time.') | translate"><span class="io-label">{{'Latency' | translate}}</span><span class="io-number io-latency">{{io.latency}}</span><span class="io-unit">ms</span></span>
+                <span class="io-field io-outstanding-field" [attr.title]="'Average outstanding I/O requests during the sample, including waiting and in-service requests. Fractions are normal; this is not a file count.' | translate"><span class="io-label">{{'Queue' | translate}}</span><span class="io-number io-outstanding">{{io.outstanding}}</span><span class="io-unit">{{'requests' | translate}}</span></span>
+              </span>
+            </ng-template>
+            <ng-template #otherDetail>
               <span class="numeric-ratio" *ngIf="detailRatio(metric) as ratio; else plainDetail"><span class="ratio-numerator">{{ratio.numerator}}</span><span class="ratio-slash">/</span><span class="ratio-denominator">{{ratio.denominator}}</span><span class="ratio-unit">{{ratio.suffix ? ' ' + ratio.suffix : ''}}</span></span>
               <ng-template #plainDetail>{{detailText(metric) | translate}}{{detailExitCode(metric)}}</ng-template>
             </ng-template>
@@ -54,6 +63,8 @@ import { METRIC_COLORS } from '../metric-colors'
            [style.--ratio-left-width]="ratioColumnWidth(group, 'numerator')" [style.--ratio-right-width]="ratioColumnWidth(group, 'denominator')"
            [style.--ratio-unit-width]="ratioUnitWidth(group)"
            [style.--detail-amount-width]="networkAmountWidth(group)"
+           [style.--io-read-width]="diskIoColumnWidth(group, 'read')" [style.--io-write-width]="diskIoColumnWidth(group, 'write')"
+           [style.--io-latency-width]="diskIoColumnWidth(group, 'latency')" [style.--io-outstanding-width]="diskIoColumnWidth(group, 'outstanding')"
            [class.vertical]="group.mode === 'static' && group.layout === 'vertical'"
            (mouseenter)="enterGroup(group, $event)" (mouseleave)="leaveGroup(group)"
            (focusin)="enterGroup(group, $event)" (focusout)="blurGroup(group, $event)"
@@ -83,6 +94,8 @@ import { METRIC_COLORS } from '../metric-colors'
                [style.--ratio-left-width]="ratioColumnWidth(group, 'numerator')" [style.--ratio-right-width]="ratioColumnWidth(group, 'denominator')"
                [style.--ratio-unit-width]="ratioUnitWidth(group)"
                [style.--detail-amount-width]="networkAmountWidth(group)"
+               [style.--io-read-width]="diskIoColumnWidth(group, 'read')" [style.--io-write-width]="diskIoColumnWidth(group, 'write')"
+               [style.--io-latency-width]="diskIoColumnWidth(group, 'latency')" [style.--io-outstanding-width]="diskIoColumnWidth(group, 'outstanding')"
                [style.left.px]="popup.left" [style.top.px]="popup.top" [style.max-height.px]="popup.maxHeight"
                [style.max-width.px]="popup.width" (mouseenter)="keepGroup(group)" (mouseleave)="leaveGroup(group)">
             <div class="details-title">{{(group.label || 'Metric group') | translate}}</div>
@@ -98,11 +111,12 @@ import { METRIC_COLORS } from '../metric-colors'
     `,
     styles: [`
       :host { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; min-width: 0; font-size: 11px; color: #ddd; }
-      .single, .metric-group { border-right: 1px solid #ffffff40; padding-right: 6px; }
+      .single, .metric-group { border-right: 2px solid #aeb9c9; padding-right: 6px; align-self: stretch; }
       .metric-row { display: inline-flex; align-items: center; gap: 6px; min-height: 18px; max-width: 100%; }
       .metric-row:focus-visible, .metric-group:focus-visible { outline: 1px solid #5baaff; outline-offset: 3px; }
-      .metric-label { display: inline-flex; gap: 4px; align-items: center; color: #bfc5cd; white-space: nowrap; }
-      .metric-label svg, .metric-label img { width: 12px; height: 12px; object-fit: contain; fill: currentColor; }
+      .metric-label { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+      .metric-label svg, .metric-label img, .metric-image-icon { width: 12px; height: 12px; flex: 0 0 12px; fill: currentColor; object-fit: contain; }
+      .metric-image-icon { display: inline-block; background: currentColor; mask-size: contain; mask-position: center; mask-repeat: no-repeat; -webkit-mask-size: contain; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat; }
       .metric-value { font: 600 11px monospace; font-variant-numeric: tabular-nums; text-align: right; white-space: pre-wrap; overflow-wrap: anywhere; }
       .metric-detail { font: 11px monospace; font-variant-numeric: tabular-nums; text-align: right; color: #d1d7e0; white-space: pre-wrap; overflow-wrap: anywhere; }
       .numeric-ratio { display: inline-grid; grid-template-columns: var(--ratio-left-width, max-content) 1ch var(--ratio-right-width, max-content) var(--ratio-unit-width, max-content); align-items: baseline; white-space: pre; }
@@ -110,12 +124,22 @@ import { METRIC_COLORS } from '../metric-colors'
       .ratio-numerator, .ratio-denominator, .network-amount { text-align: right; }
       .ratio-slash { text-align: center; }
       .network-detail { display: inline-grid; grid-template-columns: max-content var(--detail-amount-width, max-content) max-content; align-items: baseline; white-space: pre; }
-      .metric-detail:not(:empty) { border-left: 1px solid #ffffff40; padding-left: 6px; }
+      .disk-io-detail { display: inline-grid; grid-template-columns: repeat(4, max-content); column-gap: 10px; row-gap: 3px; white-space: nowrap; text-align: left; }
+      .io-field { display: inline-grid; grid-template-columns: max-content var(--io-column-width, max-content) max-content; align-items: baseline; column-gap: 4px; }
+      .io-read-field { --io-column-width: var(--io-read-width, max-content); }
+      .io-write-field { --io-column-width: var(--io-write-width, max-content); }
+      .io-latency-field { --io-column-width: var(--io-latency-width, max-content); }
+      .io-outstanding-field { --io-column-width: var(--io-outstanding-width, max-content); }
+      .io-number { text-align: right; font-variant-numeric: tabular-nums; }
+      .io-label, .io-unit { opacity: .9; }
+      @media (max-width: 760px) { .disk-io-detail { grid-template-columns: repeat(2, max-content); } }
+      .metric-detail:not(:empty) { border-left: 1px solid #8b99ad; padding-left: 6px; }
       .metric-reading { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
       .meter { display: inline-block; height: 7px; width: 50px; flex: 0 0 50px; overflow: hidden; background: #ffffff26; border-radius: 4px; }
       .meter > span { display: block; height: 100%; transition: width .3s; }
       .metric-group { display: inline-flex; gap: 6px; align-items: center; position: relative; cursor: default; min-width: 0; max-width: 100%; box-sizing: border-box; }
-      .metric-group:not(.vertical) > .metric-row + .metric-row { border-left: 1px solid #ffffff40; padding-left: 6px; }
+      .metric-group:not(.vertical) > .metric-row + .metric-row { border-left: 1px solid #8b99ad; padding-left: 6px; }
+      .metric-group:not(.vertical) > .metric-row { align-self: stretch; }
       .collapsed-slot { min-width: 0; }
       .carousel-slot { flex: 0 1 auto; width: var(--carousel-width, max-content); max-width: calc(100vw - 48px); }
       .carousel-measures { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
@@ -125,9 +149,9 @@ import { METRIC_COLORS } from '../metric-colors'
       .carousel-active .metric-label { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
       .carousel-active .metric-reading { min-width: 0; max-width: 100%; }
       .carousel-active .metric-value { min-width: 0; }
-      .metric-group.vertical { display: grid; grid-template-columns: max-content max-content minmax(0, max-content); align-items: center; gap: 0 6px; }
+      .metric-group.vertical { display: grid; grid-template-columns: max-content max-content minmax(0, max-content); align-items: center; align-content: center; gap: 0 6px; }
       .metric-group.vertical > .metric-row { display: contents; }
-      .metric-group.vertical > .metric-row + .metric-row::before { content: ''; grid-column: 1 / -1; height: 1px; background: #ffffff40; }
+      .metric-group.vertical > .metric-row + .metric-row::before { content: ''; grid-column: 1 / -1; height: 1px; background: #8b99ad; }
       .metric-group.vertical .metric-label, .metric-group.vertical .metric-reading, .metric-group.vertical .metric-value, .metric-group.vertical .metric-detail { line-height: 12px; }
       .metric-group.vertical .metric-label { grid-column: 1; }
       .metric-group.vertical .metric-reading { grid-column: 2; }
@@ -140,7 +164,7 @@ import { METRIC_COLORS } from '../metric-colors'
       .detail-row { display: contents; }
       .detail-row .metric-label { grid-column: 1; min-width: 0; font-size: 14px; white-space: normal; overflow-wrap: anywhere; }
       .detail-row.child-row .metric-label { padding-left: 16px; }
-      .detail-row .metric-label svg, .detail-row .metric-label img { width: 15px; height: 15px; flex: 0 0 15px; }
+      .detail-row .metric-label svg, .detail-row .metric-label img, .detail-row .metric-image-icon { width: 15px; height: 15px; flex: 0 0 15px; }
       .detail-row .metric-reading { grid-column: 2; }
       .detail-row .metric-value, .detail-row .metric-detail { font-size: 13px; }
       .detail-row .metric-detail { grid-column: 3; min-width: 0; }
@@ -176,7 +200,7 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     private previousSession: any
     private configSignature = ''
 
-    constructor(private service: StatsService, private cdr: ChangeDetectorRef, private zone: NgZone, private sanitizer: DomSanitizer) {}
+    constructor(private service: StatsService, private cdr: ChangeDetectorRef, private zone: NgZone, private host: ElementRef<HTMLElement>) {}
 
     ngAfterViewChecked() {
         this.measureCarousels()
@@ -203,13 +227,19 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     ngOnInit() {
         void this.refreshDetails()
         this.zone.runOutsideAngular(() => {
-            this.timer = setInterval(() => this.zone.run(() => {
+            this.timer = setInterval(() => {
                 if (this.destroyed) return
-                if (!this.session || this.session.open === false) { this.closeHover(); return }
-                this.updateCarousel(Date.now(), true)
-                if (Date.now() - this.lastDetailsAt >= 1000) void this.refreshDetails()
-                this.cdr.markForCheck()
-            }), 250)
+                if (!this.isHostVisible()) {
+                    if (this.hoveredMetric || this.hoveredGroup || this.portal) this.zone.run(() => { this.closeHover(); this.cdr.detectChanges() })
+                    return
+                }
+                this.zone.run(() => {
+                    if (!this.session || this.session.open === false) { this.closeHover(); return }
+                    this.updateCarousel(Date.now(), true)
+                    if (Date.now() - this.lastDetailsAt >= 1000) void this.refreshDetails()
+                    this.cdr.markForCheck()
+                })
+            }, 250)
         })
     }
 
@@ -295,6 +325,10 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     networkDetail(metric: CustomMetric) {
         return parseNetworkDetail(this.details[metric.id])
     }
+    diskIoDetail(metric: CustomMetric) { return parseDiskIoDetail(this.details[metric.id]) }
+    diskIoColumnWidth(group: CustomMetricGroup, column: keyof DiskIoDetail): string {
+        return `${Math.max(1, ...this.allMetrics(group).map(metric => this.diskIoDetail(metric)?.[column].length || 0))}ch`
+    }
     detailText(metric: CustomMetric): string {
         const value = this.details[metric.id] || ''
         if (!this.detailError(metric)) return formatCapacityUnit(value)
@@ -313,9 +347,14 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
     svgPath = getSvgPresetPath
     isUrl = isUrlOrDataUri
+    isUploadedIcon(icon?: string): boolean { return !!icon?.startsWith('data:image/') }
     isFa = isFaIcon
     iconClass = formatFontAwesomeIcon
-    iconUrl(icon: string): SafeUrl | string { return icon?.startsWith('data:image/') ? this.sanitizer.bypassSecurityTrustUrl(icon) : icon }
+    // An alpha mask preserves the icon shape while letting its color follow the
+    // same rule as the reading, including SVGs with their own embedded colors.
+    // Remote URLs stay images: masks require CORS and would hide existing icons
+    // hosted on servers that do not opt in to cross-origin access.
+    iconMask(icon: string): string { return `url(${JSON.stringify(icon)})` }
 
     collapsedMetric(group: CustomMetricGroup): CustomMetric | undefined {
         if (group.enabled === false) return undefined
@@ -385,11 +424,19 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         this.hoveredMetric = null
         this.hoveredGroup = null
     }
+    @HostListener('document:visibilitychange') onVisibilityChange() {
+        if (!this.isHostVisible()) { this.closeHover(); this.cdr.markForCheck() }
+    }
+    private isHostVisible(): boolean {
+        if (typeof document !== 'undefined' && document.hidden) return false
+        const element = this.host?.nativeElement
+        return !element?.getClientRects || element.getClientRects().length > 0
+    }
     @HostListener('window:resize')
     positionPopup() {
         if (!this.anchor) return
         const rect = this.anchor.getBoundingClientRect()
-        const width = Math.max(120, Math.min(560, window.innerWidth - 16))
+        const width = Math.max(120, Math.min(1100, window.innerWidth - 16))
         const group = this.groups.find(item => item.id === this.hoveredGroup)
         const height = Math.min(380, 54 + this.allMetrics(group || { children: [] } as any).length * 38)
         const above = rect.top >= Math.min(height, 140)
@@ -402,7 +449,7 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
 
     private async refreshDetails() {
-        if (this.detailRequest || !this.session || this.session.open === false) return
+        if (this.detailRequest || !this.session || this.session.open === false || !this.isHostVisible()) return
         const group = this.visibleGroups.find(item => item.id === this.hoveredGroup)
         const all = [...this.visibleMetrics, ...this.visibleGroups.reduce((items, item) => items.concat(this.allMetrics(item)), [] as CustomMetric[])]
         const requested = group && (group.mode !== 'static' || group.layout === 'vertical') ? this.allMetrics(group) : all.filter(metric => metric.id === (this.hoveredMetric || this.autoDetailMetric))
@@ -413,7 +460,7 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         const generation = this.generation
         try {
             const details = await this.service.fetchDetails(this.session, metrics)
-            if (!this.destroyed && generation === this.generation) {
+            if (!this.destroyed && generation === this.generation && this.isHostVisible()) {
                 this.details = { ...this.details, ...details }
                 this.cdr.markForCheck()
             }

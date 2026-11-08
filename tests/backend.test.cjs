@@ -226,8 +226,106 @@ test('simultaneous hover requests are deduplicated and recent details cached', a
     assert.equal(calls, 1);
 });
 
-test('hover refresh respects metric interval, configured default, fallback three seconds and minimum one second', async () => {
-    for (const [metricInterval, defaultInterval, expected] of [[10, 3, 10], [undefined, 7, 7], [undefined, undefined, 3], [0.1, 3, 1]]) {
+test('group hover shares one channel and overlapping requests never repeat the same metric', async () => {
+    const inputs = ['a', 'b', 'c'].map(id => metric({ id, detailCommand: `printf detail-${id}` }));
+    const { instance, session } = service(inputs);
+    const calls = [];
+    instance.execute = (_session, script) => new Promise(resolve => calls.push({ script, resolve }));
+    const first = instance.fetchDetails(session, [inputs[0], inputs[1], inputs[0]]);
+    const second = instance.fetchDetails(session, [inputs[1], inputs[2]]);
+    assert.equal(calls.length, 2, 'Two partially overlapping requests open two batches, not four channels');
+    assert.match(calls[0].script, /printf detail-a/);
+    assert.match(calls[0].script, /printf detail-b/);
+    assert.doesNotMatch(calls[1].script, /printf detail-a|printf detail-b/);
+    calls[1].resolve(packet('ok', 'detail-c', 'detail'));
+    calls[0].resolve(packet('ok', 'detail-a', 'detail') + packet('ok', 'detail-b', 'detail_1'));
+    assert.deepEqual(await first, { a: 'detail-a', b: 'detail-b' });
+    assert.deepEqual(await second, { b: 'detail-b', c: 'detail-c' });
+    assert.deepEqual(await instance.fetchDetails(session, inputs), { a: 'detail-a', b: 'detail-b', c: 'detail-c' });
+    assert.equal(calls.length, 2);
+});
+
+test('successful value refresh preserves recent hover details while failure invalidates them', async () => {
+    const input = metric({ detailCommand: 'printf details', interval: 30 });
+    const { instance, session } = service([input]);
+    let detailCalls = 0, valueStatus = 'ok';
+    instance.execute = async (_session, script) => {
+        if (script.includes('RESULT:detail:')) { detailCalls++; return packet('ok', 'cached', 'detail'); }
+        return packet(valueStatus, '42');
+    };
+    await instance.fetchStats(session);
+    await instance.fetchDetails(session, [input]);
+    due(instance, session);
+    await instance.fetchStats(session);
+    assert.deepEqual(await instance.fetchDetails(session, [input]), { disk: 'cached' });
+    assert.equal(detailCalls, 1);
+    due(instance, session); valueStatus = 'unavailable';
+    await instance.fetchStats(session);
+    assert.deepEqual(await instance.fetchDetails(session, [input]), { disk: '' });
+    assert.equal(instance.getSessionCache(session).metricStates.get('disk').detailAt, 0);
+});
+
+test('a broken hover batch keeps complete results and marks only unfinished labels as failed', async () => {
+    const inputs = ['a', 'b'].map(id => metric({ id, detailCommand: 'printf details' }));
+    const { instance, session } = service(inputs);
+    instance.execute = async (_session, _script, _timeout, onChunk) => {
+        onChunk(packet('ok', 'received', 'detail'));
+        throw new Error('Stats: Timeout');
+    };
+    assert.deepEqual(await instance.fetchDetails(session, inputs), { a: 'received', b: 'Err: Timeout' });
+});
+
+test('hidden unavailable prerequisites retry at most once per minute and can recover', async () => {
+    for (const hidden of [true, false]) {
+        const input = metric({ visibleWhenUnavailable: !hidden, interval: 10 });
+        const { instance, session } = service([input]);
+        let calls = 0;
+        instance.execute = async () => { calls++; return packet(calls === 1 ? 'unavailable' : 'ok', '42'); };
+        await instance.fetchStats(session);
+        const state = instance.getSessionCache(session).metricStates.get(input.id);
+        state.lastAttempt = Date.now() - 11000;
+        await instance.fetchStats(session);
+        assert.equal(calls, hidden ? 1 : 2);
+        state.lastAttempt = Date.now() - 61000;
+        const result = await instance.fetchStats(session);
+        assert.equal(result.custom[0].status, 'ok');
+        assert.equal(calls, hidden ? 2 : 3);
+    }
+});
+
+test('large value and hover batches bound shell concurrency while collecting every result', async () => {
+    const inputs = Array.from({ length: 9 }, (_, index) => {
+        const command = `printf 'BEGIN:${index}\\n' >&2; sleep 0.08; printf 'END:${index}\\n' >&2; printf ${index}`;
+        return metric({ id: `disk-${index}`, command, detailCommand: command, timeout: 1 });
+    });
+    const { instance, session } = service(inputs);
+    let channels = 0;
+    instance.execute = async (_session, script, timeout) => {
+        channels++;
+        // Three waves must have enough time for two timed stages and kill grace each.
+        assert(timeout >= 21000);
+        const result = spawnSync(shell, ['-s'], { input: script, encoding: 'utf8', timeout: 10000,
+            env: { ...process.env, PATH: shellTools + process.env.PATH } });
+        assert.equal(result.status, 0, result.stderr);
+        let active = 0, maximum = 0;
+        const seen = new Set();
+        for (const line of result.stderr.trim().split(/\r?\n/)) {
+            if (line.startsWith('BEGIN:')) { active++; seen.add(line); maximum = Math.max(maximum, active); }
+            if (line.startsWith('END:')) active--;
+        }
+        assert.equal(seen.size, 9);
+        assert.equal(active, 0);
+        assert(maximum > 1 && maximum <= 4, `Maximum simultaneous metric commands: ${maximum}`);
+        return result.stdout;
+    };
+    assert.deepEqual((await instance.fetchStats(session)).custom.map(item => item.value), inputs.map((_, i) => String(i)));
+    const details = await instance.fetchDetails(session, inputs);
+    assert.deepEqual(details, Object.fromEntries(inputs.map((item, i) => [item.id, String(i)])));
+    assert.equal(channels, 2, 'Nine value commands plus nine detail commands use two SSH batches');
+});
+
+test('hover refresh respects metric interval, configured default, fallback ten seconds and minimum one second', async () => {
+    for (const [metricInterval, defaultInterval, expected] of [[10, 3, 10], [undefined, 7, 7], [undefined, undefined, 10], [0.1, 3, 1]]) {
         const input = metric({ interval: metricInterval, detailCommand: 'printf details' });
         const { instance, session, config } = service([input]);
         config.store.plugin.serverStats.defaultInterval = defaultInterval;

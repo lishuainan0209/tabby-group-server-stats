@@ -59,7 +59,7 @@ export function createCpuLoadCommand(minutes: 1 | 5, detail = false): string {
 }
 
 function createCpuLoadGroup(): CustomMetricGroup {
-    const shared: Partial<CustomMetric> = { type: 'text', color: METRIC_COLORS.green, icon: 'stats-cpu-load',
+    const shared: Partial<CustomMetric> = { type: 'text', color: METRIC_COLORS.green, icon: 'stats-cpu-load', interval: 15,
         checkMode: 'exitCode', checkExpected: '0', unavailableText: 'Unavailable' }
     const child = (minutes: 1 | 5): CustomMetric => ({ ...shared, id: `builtin-load-${minutes}min`,
         type: 'text', label: `${minutes}min`, suffix: '%', colorRules: usageColorRules(100, 150),
@@ -132,7 +132,7 @@ data=$(tabby_net_snapshot) || exit 1; printf '%s\\n' "$data" | awk -v interfaces
 export function getBuiltinDefaults(): BuiltinDefinitions {
     const common = { type: 'progress' as const, maxValue: 100, suffix: '%', color: METRIC_COLORS.green, colorRules: usageRules, checkMode: 'exitCode' as const, checkExpected: '0', unavailableText: 'Unavailable' }
     const netMetric = (id: string, label: string, direction: 'rx' | 'tx' | 'total', icon: string): CustomMetric => ({
-        id, label, type: 'text', icon, color: METRIC_COLORS.green, suffix: ' KiB/s',
+        id, label, type: 'text', icon, color: METRIC_COLORS.green, suffix: ' KiB/s', interval: 5,
         command: createNetworkRateCommand(direction), checkCommand: linuxOrDarwin('test -r /proc/net/dev && test -r /proc/uptime', 'command -v netstat >/dev/null && command -v route >/dev/null && command -v date >/dev/null'),
         checkMode: 'exitCode', checkExpected: '0', unavailableText: 'Unavailable',
         detailCommand: createNetworkDetailCommand(direction)
@@ -142,7 +142,7 @@ export function getBuiltinDefaults(): BuiltinDefinitions {
             command: linuxOrDarwin(createCpuSampleCommand(), `cores=$(sysctl -n hw.logicalcpu 2>/dev/null) || exit 1; data=$(ps -A -o %cpu= 2>/dev/null) || exit 1; printf '%s\\n' "$data" | awk -v cores="$cores" '{sum+=$1} END {if(cores<=0) exit 1; usage=sum/cores; if(usage>100) usage=100; printf "%.1f\\n",usage}'`),
             checkCommand: linuxOrDarwin('test -r /proc/stat', 'command -v ps >/dev/null && command -v sysctl >/dev/null'),
             detailCommand: linuxOrDarwin(`awk '{printf "load %.2f / %.2f / %.2f\\n",$1,$2,$3}' /proc/loadavg`, `sysctl -n vm.loadavg`) },
-        ram: { ...common, id: 'builtin-ram', label: 'Memory', icon: 'stats-memory',
+        ram: { ...common, id: 'builtin-ram', label: 'Memory', icon: 'stats-memory', interval: 10,
             colorRules: usageColorRules(60, 80),
             checkCommand: linuxOrDarwin('test -r /proc/meminfo', 'command -v vm_stat >/dev/null && command -v sysctl >/dev/null'),
             command: linuxOrDarwin(`awk '/^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2; found=1} /^MemFree:/ {f=$2} /^Buffers:/ {b=$2} /^Cached:/ {c=$2} END {if(t<=0) exit 1; if(!found) a=f+b+c; printf "%.1f\\n",(t-a)*100/t}' /proc/meminfo`, darwinMemory(false)),

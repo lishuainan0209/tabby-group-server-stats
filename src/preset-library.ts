@@ -2,6 +2,7 @@ import { CustomMetric, CustomMetricGroup, DisplayScope, shellQuote } from './met
 import { createCpuSampleCommand } from './builtin-metrics'
 import { METRIC_COLORS, capacityColorRules, usageColorRules } from './metric-colors'
 import { getLayoutPaneTargets, layoutPaneTargetName } from './display-scope'
+import { createDiskIoCheckCommand, createDiskIoCommand } from './disk-io'
 
 export interface MetricPreset {
     id: string
@@ -161,7 +162,7 @@ export function createGpuCheckCommand(index?: number): string {
 
 function gpuMetric(index?: number): CustomMetric {
     return { id: index === undefined ? 'gpu-main' : `gpu-${index}`, label: index === undefined ? 'GPU' : `GPU ${index}`,
-        type: 'text', icon: 'stats-vram', suffix: '%', color: METRIC_COLORS.green, interval: 20, timeout: 60,
+        type: 'text', icon: 'stats-vram', suffix: '%', color: METRIC_COLORS.green, interval: 30, timeout: 60,
         command: createGpuCommand(index), detailCommand: createGpuCommand(index, true),
         checkCommand: createGpuCheckCommand(index), checkMode: 'exitCode', checkExpected: '0', unavailableText: '无GPU',
         showWhenUnavailable: index === undefined, visibleWhenUnavailable: index === undefined,
@@ -206,7 +207,7 @@ function diskMetric(mountPath: string, system: boolean, index: number): CustomMe
     const quoted = shellQuote(mountPath)
     const query = `data=$(df -Pk -- ${quoted} 2>/dev/null) || exit 1; values=$(printf '%s\\n' "$data" | ${diskValues}) || exit 1; printf '%s\\n' "$values" | awk`
     return { id: system ? 'disk-root' : `disk-mount-${index}`, label: system ? '系统盘' : mountPath,
-        type: 'text', icon: system ? 'stats-system-disk' : 'stats-data-disk', color: METRIC_COLORS.green, suffix: ' GB', interval: 20, timeout: 60,
+        type: 'text', icon: system ? 'stats-system-disk' : 'stats-data-disk', color: METRIC_COLORS.green, suffix: ' GB', interval: 60, timeout: 60,
         checkCommand: system ? `test -d ${quoted} && df -Pk -- ${quoted} >/dev/null 2>&1` : `mountpoint -q -- ${quoted}`,
         checkMode: 'exitCode', checkExpected: '0', unavailableText: '未挂载', showWhenUnavailable: true, visibleWhenUnavailable: true,
         command: `${query} '{printf "%.0f\\n",int($2/1048576)}'`,
@@ -232,6 +233,35 @@ export function createDiskGroupPreset(name: string, mountPaths: string[], profil
         description: noticeZh + '主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。',
         descriptions: { en: noticeEn + 'Total free capacity across valid unique filesystems; children show the system disk first, then data mounts. Hover for free/total capacity; missing mounts remain visible.', zh: noticeZh + '主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。' },
         profileNames: [...new Set(profileNames.map(profile => profile.trim()).filter(Boolean))] }
+}
+
+/** Lab mounts are shared with capacity presets, but counters describe block devices. */
+export function createDiskIoGroupPreset(capacityPreset: MetricPreset): MetricPreset {
+    if (!capacityPreset.group || !capacityPreset.id.startsWith('disks-')) throw new Error('A disk capacity group is required')
+    const paths = ['/', ...capacityPreset.group.children.map(metric => metric.label || '').filter(label => label.startsWith('/') && label !== '/')]
+    const label = capacityPreset.label.replace(/磁盘$/, '磁盘读写')
+    const metric = (mounts: string[], id: string, name: string, icon: string): CustomMetric => ({
+        id, label: name, type: 'text', icon, color: METRIC_COLORS.green, suffix: ' MB/s',
+        interval: 30, timeout: 15, checkMode: 'exitCode', checkExpected: '0',
+        checkCommand: createDiskIoCheckCommand(mounts), command: createDiskIoCommand(mounts), detailCommand: createDiskIoCommand(mounts, true),
+        unavailableText: '无块设备数据', visibleWhenUnavailable: true, showWhenUnavailable: true,
+    })
+    const descriptions = {
+        zh: '作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。',
+        en: "For the author's laboratory only. Other users: please do not download or use this preset. Every 30s, sample kernel counters for 1s. The main label sums readable unique block-device read/write throughput; children follow system/data mounts. Hover for read/write MB/s, read/write await in ms (including queueing) and average outstanding I/O requests (queue, not file count). These are backing-device totals, not exclusive directory traffic; aliases/bind mounts are counted once. MB uses base 1024. Overlay/network filesystems or missing mounts without block counters remain visibly unavailable and are excluded from the total. No benchmark or filesystem writes.",
+    }
+    return {
+        id: `disk-io-${capacityPreset.id.slice('disks-'.length)}`, kind: 'group', label,
+        labels: { zh: label, en: label.replace('容器', ' container ').replace('磁盘读写', ' disk I/O') },
+        description: descriptions.zh, descriptions, source: localSource, audience: 'author-lab',
+        profileNames: [...(capacityPreset.profileNames || [])], excludedProfileNames: capacityPreset.excludedProfileNames?.slice(),
+        group: {
+            id: 'disk-io-group', label, mode: 'overview', layout: 'vertical', interval: 3,
+            displayScope: { mode: 'selected', profileIds: [] },
+            main: metric(paths, 'disk-io-total', '总读写', 'stats-disk-space'),
+            children: paths.map((mount, index) => metric([mount], `disk-io-${index}`, mount === '/' ? '系统盘' : mount, mount === '/' ? 'stats-system-disk' : 'stats-data-disk')),
+        },
+    }
 }
 
 function validMetric(value: any): value is CustomMetric {

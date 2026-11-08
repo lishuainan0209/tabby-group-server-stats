@@ -450,6 +450,7 @@ export default class ServerStatsModule {
         const collector = async () => {
             if (!alive) return null
             const currentTab = this.resolveTabForElement(sshTabEl)
+            if (!this.isPaneOnScreen(currentTab, sshTabEl)) return null
             if (currentTab) {
                 if (currentTab.frontendIsReady === false || !currentTab.frontend) {
                     return { data: null, session: null, supported: false }
@@ -564,12 +565,14 @@ export default class ServerStatsModule {
             syncOnConfigChange()
         })
         const layoutSub = this.app.tabsChanged$?.subscribe(() => { void runPoll() })
+        const activeTabSub = this.app.activeTabChange$?.subscribe(() => { void runPoll() })
 
         const teardown = () => {
             if (!alive) return
             alive = false
             pollRevision++
             layoutSub?.unsubscribe()
+            activeTabSub?.unsubscribe()
             if (resizeObserver) {
                 try { resizeObserver.disconnect() } catch {}
                 resizeObserver = null
@@ -599,6 +602,30 @@ export default class ServerStatsModule {
 
         this.tabInstances.set(sshTabEl, { teardown, timerId, collector, state, configSub })
         this.attachedTabs.add(sshTabEl)
+    }
+
+    /** All visible split panes collect, not just the keyboard-focused leaf. */
+    private isPaneOnScreen(tab: any, element: HTMLElement): boolean {
+        if (document.hidden) return false
+        if (typeof element.getClientRects === 'function' && !element.getClientRects().length) return false
+        const active = this.app.activeTab
+        if (!active || !tab) return true
+        const seen = new Set<any>()
+        const contains = (candidate: any): boolean => {
+            if (!candidate || seen.has(candidate)) return false
+            if (candidate === tab) return true
+            seen.add(candidate)
+            const children = typeof candidate.getAllTabs === 'function' ? candidate.getAllTabs() : []
+            return Array.isArray(children) && children.some(contains)
+        }
+        if (contains(active)) return true
+        // Some host versions expose the parent link before the split tree updates.
+        const ancestors = new Set<any>()
+        for (let parent = tab.parent; parent && !ancestors.has(parent); parent = parent.parent) {
+            if (parent === active) return true
+            ancestors.add(parent)
+        }
+        return false
     }
 
     private detachFromTab(tabEl: HTMLElement) {

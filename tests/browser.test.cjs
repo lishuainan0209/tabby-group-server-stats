@@ -15,6 +15,7 @@ async function main() {
     const server = http.createServer((req, res) => {
         if (req.url === '/harness.js') { res.setHeader('Content-Type', 'text/javascript'); res.end(bundle) }
         else if (req.url === '/host-theme.css') { res.setHeader('Content-Type', 'text/css'); res.end(hostTheme) }
+        else if (req.url === '/test-icon.svg') { res.setHeader('Content-Type', 'image/svg+xml'); res.end('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><path fill="blue" d="M4 4H20V20H4Z"/></svg>') }
         else res.end('<!doctype html><html data-bs-theme="dark" style="--theme-bg:#171717;--theme-fg:#ddd;--bs-body-bg:#171717;--bs-body-color:#ddd"><meta charset="UTF-8"><link rel="stylesheet" href="/host-theme.css"><style>body{margin:30px;background:#11151c;color:#ddd;font-family:Segoe UI,Microsoft YaHei,sans-serif;overflow:auto!important}*{box-sizing:border-box}test-app{display:block}</style><test-app></test-app><script src="/harness.js"></script></html>')
     })
     // Some Windows ephemeral-port ranges include Chromium's blocked ports.
@@ -372,6 +373,179 @@ async function main() {
             delete h.networkPreviewSnapshot
         })
         console.log('PASS network hover localizes received/sent totals and counter scope while retaining independent live rates')
+        await mutate(() => {
+            const h = window.harness
+            h.ioPreviewSnapshot = { metrics: h.metrics, group: h.group, stats: h.stats, detailResults: h.detailResults,
+                previewChinese: h.previewChinese, language: h.config.store.language }
+            const label = (id, name) => ({ id, label: name, icon: 'stats-system-disk', type: 'text', command: 'printf 1', detailCommand: 'printf detail', color: '#00ff00', suffix: 'MB/s' })
+            h.metrics = [{ ...label('io-single', 'RAM'), detailCommand: '', suffix: '%', icon: 'stats-memory' },
+                { ...label('io-other', 'Users'), detailCommand: '', suffix: '', icon: 'fa-users' }]
+            h.group = { id: 'io-preview', label: 'P3磁盘读写', mode: 'static', layout: 'vertical',
+                main: label('io-total', '总读写'), children: [label('io-root', '系统盘'), label('io-data', '/data')] }
+            h.stats = { custom: [{ id: 'io-single', value: '35', status: 'ok' }, { id: 'io-other', value: '4', status: 'ok' },
+                { id: 'io-total', value: '4255.12', status: 'ok' }, { id: 'io-root', value: '0.00', status: 'ok' }, { id: 'io-data', value: '3020.62', status: 'ok' }] }
+            h.detailResults = { 'io-total': 'R 1234.50 / W 3020.62 MB/s | await 37.2 ms | queue 7.05',
+                'io-root': 'R 0.00 / W 0.00 MB/s | await - | queue 0.00',
+                'io-data': 'R 20.50 / W 3000.12 MB/s | await 11.3 ms | queue 0.04' }
+            h.previewChinese = true; h.config.store.language = 'zh-CN'
+        })
+        const assertIoColumns = async target => {
+            for (const column of ['read', 'write', 'latency', 'outstanding']) {
+                const edges = await target.locator(`.io-${column}`).evaluateAll(nodes => nodes.map(node => {
+                    const range = document.createRange(); range.selectNodeContents(node)
+                    return range.getBoundingClientRect().right
+                }))
+                assert.equal(edges.length, 3)
+                assert(edges.every(edge => Math.abs(edge - edges[0]) < 1), `Disk I/O ${column} values align across total and child rows`)
+            }
+        }
+        const assertSeparatorHeights = async () => {
+            const entries = await page.locator('.bar server-stats-metric-strip > .single, .bar server-stats-metric-strip > .metric-group').evaluateAll(nodes => nodes.map(node => {
+                const rect = node.getBoundingClientRect(), css = getComputedStyle(node), label = node.querySelector('.metric-label')?.getBoundingClientRect()
+                return { y: rect.y, bottom: rect.bottom, height: rect.height, border: css.borderRightWidth,
+                    single: node.classList.contains('single'), labelCenter: label ? label.y + label.height / 2 : null, center: rect.y + rect.height / 2 }
+            }))
+            for (const entry of entries) {
+                assert.equal(entry.border, '2px')
+                const sameLine = entries.filter(other => Math.abs(other.y - entry.y) < 1)
+                assert(sameLine.every(other => Math.abs(other.bottom - entry.bottom) < 1), 'Separators share each flex line height, including wrapped lines')
+                if (entry.single) assert(Math.abs(entry.labelCenter - entry.center) < 1, 'Single labels remain vertically centered beside tall groups')
+            }
+            return entries
+        }
+        const unexpandedEntries = await assertSeparatorHeights()
+        assert(unexpandedEntries[0].height >= 36, 'Single-label separator spans the neighboring three-row group')
+        await group.hover()
+        await page.waitForFunction(() => document.querySelectorAll('.bar .disk-io-detail').length === 3)
+        await assertIoColumns(group)
+        assert.deepEqual((await group.locator('.disk-io-detail').first().locator('.io-label').allTextContents()).map(text => text.trim()), ['读取', '写入', '延迟', '队列'])
+        assert((await group.locator('.io-latency-field').nth(1).getAttribute('title')).includes('没有读写请求完成'))
+        assert((await group.locator('.io-outstanding-field').first().getAttribute('title')).includes('正在等待和正在处理'))
+        assert((await group.locator('.io-outstanding-field').first().getAttribute('title')).includes('不是文件数量'))
+        assert.equal((await group.locator('.io-read').first().innerText()).trim(), '1,234.50')
+        await assertSeparatorHeights()
+        if (process.env.DISK_IO_STATIC_SCREENSHOT) await page.screenshot({ path: process.env.DISK_IO_STATIC_SCREENSHOT })
+        await page.mouse.move(1040, 650)
+        await page.waitForFunction(() => !document.querySelector('.bar .disk-io-detail'))
+        await page.locator('.bar').evaluate(node => { node.style.width = '260px' })
+        const wrappedEntries = await assertSeparatorHeights()
+        assert(new Set(wrappedEntries.map(entry => Math.round(entry.y))).size > 1, 'Fixture covers multiple wrapped flex lines')
+        await page.locator('.bar').evaluate(node => { node.style.width = '' })
+        await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'overview' } })
+        await group.hover()
+        await page.waitForFunction(() => document.querySelectorAll('.group-details .disk-io-detail').length === 3)
+        await assertIoColumns(page.locator('.group-details'))
+        assert(await page.locator('.group-details').evaluate(node => node.scrollWidth <= Math.ceil(node.getBoundingClientRect().width)), 'Full disk I/O details fit the wide popup without horizontal clipping')
+        if (process.env.DISK_IO_SCREENSHOT) await page.screenshot({ path: process.env.DISK_IO_SCREENSHOT })
+        await mutate(() => { window.harness.previewChinese = false; window.harness.config.store.language = 'en-US' })
+        assert.deepEqual(await page.locator('.group-details .disk-io-detail').first().locator('.io-label').allTextContents(), ['Read', 'Write', 'Latency', 'Queue'])
+        assert.equal(await page.locator('.group-details .io-outstanding-field .io-unit').first().innerText(), 'requests')
+        await assertIoColumns(page.locator('.group-details'))
+        await page.mouse.move(1040, 650)
+        await mutate(() => {
+            const h = window.harness, snapshot = h.ioPreviewSnapshot
+            h.metrics = snapshot.metrics; h.group = snapshot.group; h.stats = snapshot.stats; h.detailResults = snapshot.detailResults
+            h.previewChinese = snapshot.previewChinese; h.config.store.language = snapshot.language
+            delete h.ioPreviewSnapshot
+        })
+        console.log('PASS disk I/O detail columns are bilingual, aligned and explained; mixed-height/wrapped bar separators span each row')
+        await mutate(() => {
+            const h = window.harness
+            h.colorPreviewSnapshot = { metrics: h.metrics, group: h.group, stats: h.stats, detailResults: h.detailResults }
+            const rules = [{ operator: '>', value: 80, color: '#ff0000' }, { operator: '>', value: 50, color: '#ffa500' }]
+            const label = (id, icon) => ({ id, label: id, icon, type: 'text', command: 'printf 1', detailCommand: 'printf detail', color: '#00ff00', colorRules: rules })
+            h.metrics = [label('color-single', 'fa-users')]
+            h.group = { id: 'color-group', label: 'Rule colors', mode: 'static', layout: 'horizontal', interval: 1,
+                main: label('color-main', 'stats-system-disk'), children: [
+                    label('color-upload', 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="blue" d="M4 4H20V20H4Z"/></svg>')),
+                    label('color-missing', 'stats-gpu'), label('color-remote', location.origin + '/test-icon.svg')] }
+            h.stats = { custom: [{ id: 'color-single', value: '70', status: 'ok' }, { id: 'color-main', value: '90', status: 'ok' },
+                { id: 'color-upload', value: '10', status: 'ok' }, { id: 'color-missing', value: 'Missing', status: 'unavailable' },
+                { id: 'color-remote', value: '90', status: 'ok' }] }
+            h.detailResults = { 'color-single': 'detail', 'color-main': 'detail', 'color-upload': 'detail' }
+        })
+        const assertRuleColors = async locator => {
+            const rows = await locator.evaluateAll(nodes => nodes.map(node => {
+                const label = node.querySelector('.metric-label'), value = node.querySelector('.metric-value')
+                const icon = label?.querySelector('svg, i, img, .metric-image-icon')
+                const color = element => element && getComputedStyle(element).color
+                return { label: label?.textContent.trim(), labelColor: color(label), valueColor: color(value), iconColor: color(icon),
+                    fill: icon?.tagName.toLowerCase() === 'svg' ? getComputedStyle(icon).fill : null,
+                    mask: icon?.classList.contains('metric-image-icon') ? getComputedStyle(icon).maskImage : null,
+                    background: icon?.classList.contains('metric-image-icon') ? getComputedStyle(icon).backgroundColor : null }
+            }))
+            assert(rows.length > 0)
+            for (const row of rows) {
+                assert.equal(row.labelColor, row.valueColor, `${row.label}: label follows the value rule`)
+                assert.equal(row.iconColor, row.valueColor, `${row.label}: icon follows the value rule`)
+                if (row.fill) assert.equal(row.fill, row.valueColor, 'Built-in SVG fill follows the rule')
+                if (row.mask) {
+                    assert(row.mask.includes('data:image/svg+xml;base64,'), 'Uploaded SVG retains its alpha mask')
+                    assert.equal(row.background, row.valueColor, 'Embedded SVG colors do not override the rule')
+                }
+            }
+        }
+        await assertRuleColors(page.locator('.bar .single, .bar .metric-group > .metric-row'))
+        assert.deepEqual(await page.locator('.bar .metric-value').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).color)),
+            ['rgb(255, 165, 0)', 'rgb(255, 0, 0)', 'rgb(0, 255, 0)', 'rgb(255, 165, 0)', 'rgb(255, 0, 0)'])
+        await page.waitForFunction(() => document.querySelector('.bar .metric-label img')?.naturalWidth > 0)
+        assert.equal(await page.locator('.bar .metric-label img').count(), 1, 'Remote URL icons remain ordinary images without imposing mask CORS requirements')
+        const boundaries = await page.locator('.bar .single, .bar .metric-group').evaluateAll(nodes => nodes.map(node => {
+            const css = getComputedStyle(node)
+            return { width: css.borderRightWidth, color: css.borderRightColor, style: css.borderRightStyle }
+        }))
+        assert(boundaries.every(line => line.width === '2px' && line.style === 'solid' && line.color === 'rgb(174, 185, 201)'), 'Labels/groups have bright opaque 2px separators')
+        await mutate(() => { window.harness.group = { ...window.harness.group, layout: 'vertical' } })
+        await group.hover()
+        await page.waitForFunction(() => document.querySelectorAll('.metric-group .metric-detail').length === 3)
+        await assertRuleColors(page.locator('.bar .metric-group > .metric-row'))
+        await page.mouse.move(1040, 650)
+        await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'overview' } })
+        await assertRuleColors(page.locator('.bar .collapsed-row'))
+        await group.hover()
+        await page.waitForFunction(() => document.querySelector('.group-details .metric-image-icon'))
+        await assertRuleColors(page.locator('.group-details .detail-row'))
+        await page.locator('.bar').evaluate(node => { node.style.display = 'none' })
+        await page.waitForFunction(() => !document.querySelector('.group-details'))
+        const hiddenDetailCalls = await page.evaluate(() => window.harness.detailCalls.length)
+        await page.waitForTimeout(1200)
+        assert.equal(await page.evaluate(() => window.harness.detailCalls.length), hiddenDetailCalls, 'Hidden pane must stop hover collection even when mouseleave never fires')
+        await page.locator('.bar').evaluate(node => { node.style.display = '' })
+        await page.mouse.move(1040, 650)
+        await group.hover()
+        await page.waitForFunction(() => document.querySelector('.group-details .metric-image-icon'))
+        await page.evaluate(() => {
+            Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+            document.dispatchEvent(new Event('visibilitychange'))
+            window.tick()
+        })
+        await page.waitForFunction(() => !document.querySelector('.group-details'))
+        const hiddenDocumentCalls = await page.evaluate(() => window.harness.detailCalls.length)
+        await page.waitForTimeout(1200)
+        assert.equal(await page.evaluate(() => window.harness.detailCalls.length), hiddenDocumentCalls, 'Background/minimized document must stop hover collection')
+        await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); window.tick() })
+        console.log('PASS hidden panes and background documents close stale hover popups and stop detail collection')
+        await page.mouse.move(1040, 650)
+        await mutate(() => {
+            const h = window.harness
+            h.group = { ...h.group, mode: 'carousel' }
+            h.stats = { custom: h.stats.custom.map(value => value.id === 'color-single' ? { ...value, value: 'Err: Timeout', status: 'error' } : value) }
+        })
+        await assertRuleColors(page.locator('.bar .single, .bar .carousel-active'))
+        assert.equal(await page.locator('.bar .single .metric-label').evaluate(node => getComputedStyle(node).color), 'rgb(255, 0, 0)')
+        await mutate(() => {
+            const h = window.harness
+            h.stats = { custom: h.stats.custom.map(value => value.id === 'color-single' ? { ...value, value: '-', status: 'pending' } : value) }
+        })
+        await assertRuleColors(page.locator('.bar .single'))
+        assert.equal(await page.locator('.bar .single .metric-label').evaluate(node => getComputedStyle(node).color), 'rgb(138, 146, 158)')
+        if (process.env.RULE_COLORS_SCREENSHOT) await page.screenshot({ path: process.env.RULE_COLORS_SCREENSHOT })
+        await mutate(() => {
+            const h = window.harness, snapshot = h.colorPreviewSnapshot
+            h.metrics = snapshot.metrics; h.group = snapshot.group; h.stats = snapshot.stats; h.detailResults = snapshot.detailResults
+            delete h.colorPreviewSnapshot
+        })
+        console.log('PASS label text, built-in/custom icons and readings share rule/status colors in all group modes, with clear separators')
         await mutate(() => { window.harness.showSettings = true })
         await page.locator('server-stats-settings').waitFor()
         assert.equal(errors.length, 0, errors.join('\n'))
@@ -703,7 +877,7 @@ async function main() {
         assert.equal(await page.locator('.builtin-card').last().locator('.builtin-move-down').isDisabled(), true)
         console.log('PASS built-in move buttons update saved order and a recreated settings component restores it')
         await page.locator('.preset-search').fill('Uptime')
-        const uptimePreset = page.locator('.preset-card').filter({ hasText: 'Uptime' })
+        const uptimePreset = page.locator('.preset-card').filter({ has: page.locator('.preset-card-header strong', { hasText: /^Uptime$/ }) })
         await uptimePreset.waitFor()
         const singlesBeforePreset = await page.evaluate(() => window.harness.config.store.plugin.serverStats.customMetrics.length)
         await mutate(() => { window.harness.singleDuplicateSnapshot = JSON.stringify(window.harness.config.store.plugin.serverStats.customMetrics) })
@@ -767,7 +941,7 @@ async function main() {
         })
         console.log('PASS group preset Add is idempotent and localized Already added remains disabled after rename/disable')
         await page.locator('.preset-search').fill('P3')
-        const labPreset = page.locator('.preset-card').filter({ hasText: 'P3' })
+        const labPreset = page.locator('.preset-card').filter({ has: page.locator('.preset-card-header strong', { hasText: /^(P3 disks|P3磁盘)$/ }) })
         assert.equal((await labPreset.locator('.preset-lab-badge').innerText()).trim(), "Author's lab only")
         assert((await labPreset.locator('.preset-description').innerText()).includes('please do not download or use'))
         await mutate(() => { window.harness.config.store.language = 'zh-CN'; window.harness.previewChinese = true })
@@ -775,7 +949,7 @@ async function main() {
         assert((await labPreset.locator('.preset-description').innerText()).startsWith('作者实验室自用，其他人请勿下载使用。'))
         if (process.env.LAB_PRESETS_SCREENSHOT) await labPreset.screenshot({ path: process.env.LAB_PRESETS_SCREENSHOT })
         await mutate(() => { window.harness.config.store.language = 'en'; window.harness.previewChinese = false })
-        await page.locator('.preset-card').filter({ hasText: 'P3' }).locator('.preset-add').click()
+        await labPreset.locator('.preset-add').click()
         const importedDisk = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.at(-1))
         assert.equal(importedDisk.displayScope.mode, 'selected')
         assert.deepEqual(importedDisk.displayScope.profileIds, [])

@@ -70,6 +70,24 @@ test('network detail separates localizable direction, amount and interface scope
     assert.equal(api.parseNetworkDetail('Err: No result'), null)
 })
 
+test('disk I/O details preserve precision, group numbers and distinguish missing latency from zero', () => {
+    const detail = api.parseDiskIoDetail('R 1234.50 / W 20.00 MB/s | await 12.3 ms | queue 0.04')
+    assert.equal(detail.read, '1,234.50')
+    assert.equal(detail.write, '20.00')
+    assert.equal(detail.latency, '12.3')
+    assert.equal(detail.outstanding, '0.04')
+    assert.equal(api.parseDiskIoDetail('R 0.00 / W 0.00 MB/s | await - | queue 0.00').latency, '-')
+    assert.equal(api.parseDiskIoDetail('R 0.00 / W 0.00 MB/s | await 0.0 ms | queue 0.00').latency, '0.0')
+})
+
+test('disk I/O parsing leaves malformed, non-finite and unrelated user details unchanged', () => {
+    for (const value of [undefined, '', 'Err: No output', 'R 1 / W 2 MB/s',
+        'R -1 / W 2 MB/s | await 1 ms | queue 0', 'R 1 / W 2 MB/s | await NaN ms | queue 0',
+        'R 1 / W 2 MiB/s | await 1 ms | queue 0', 'R 1 / W 2 MB/s | await - ms | queue 0',
+        'R 1 / W 2 MB/s | await 1 ms | queue files', 'R 1 / W 2 MB/s | await 1 ms | queue 0 extra',
+        `R ${'9'.repeat(400)} / W 2 MB/s | await 1 ms | queue 0`]) assert.equal(api.parseDiskIoDetail(value), null)
+})
+
 test('GB presentation accepts old capacity labels without changing numbers or unrelated text', () => {
     for (const [raw, expected] of [
         ['GiB', 'GB'], [' GiB', ' GB'], ['24GiB', '24GB'],

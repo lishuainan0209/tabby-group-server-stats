@@ -265,8 +265,8 @@ test('portable profile bindings resolve locally and never become global when mis
 test('shared library removes local binding IDs and keeps the offline single/group inventory', () => {
     const presets = getBundledPresets()
     assert.equal(presets.filter(p => p.kind === 'metric').length, 12)
-    assert.equal(presets.filter(p => p.kind === 'group').length, 8)
-    assert.equal(new Set(presets.map(p => p.id)).size, 20)
+    assert.equal(presets.filter(p => p.kind === 'group').length, 14)
+    assert.equal(new Set(presets.map(p => p.id)).size, 26)
     const host = presets.find(p => p.label === 'P1磁盘')
     const container = presets.find(p => p.label === 'P1容器磁盘')
     assert.deepEqual(host.profileNames, ['P1(ai)'])

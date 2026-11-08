@@ -108,7 +108,7 @@ export class ServerStatsConfigProvider extends ConfigProvider {
                 displayMode: 'bottomBar',
                 paneVisibility: { __nonStructural: true } as Record<string, boolean>,
                 paneGroupModes: { __nonStructural: true } as Record<string, string | boolean>,
-                defaultInterval: 3,
+                defaultInterval: 10,
                 debugLogging: false,
                 location: { x: null, y: null },
                 style: {
