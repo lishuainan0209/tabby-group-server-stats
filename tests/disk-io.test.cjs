@@ -107,7 +107,7 @@ test('mount paths remain shell-quoted and exact, including punctuation and white
 
 test('six lab I/O groups mirror current capacity mount bindings and stay safely scoped', () => {
     const bundled = getBundledPresets()
-    const disks = bundled.filter(entry => entry.id.startsWith('disks-') && entry.audience === 'author-lab')
+    const disks = bundled.filter(entry => entry.id.startsWith('disks-') && !entry.id.endsWith('-used') && entry.audience === 'author-lab')
     assert.equal(disks.length, 6)
     for (const disk of disks) {
         const expected = createDiskIoGroupPreset(disk)

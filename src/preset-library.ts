@@ -264,6 +264,37 @@ export function createDiskIoGroupPreset(capacityPreset: MetricPreset): MetricPre
     }
 }
 
+/** Alternative presentations retain the original scopes and checks. */
+export function createGpuFreePreset(): MetricPreset {
+    const p = createGpuGroupPreset()
+    p.id = 'gpu-free-group'; p.label = 'GPU余量'; p.labels = { zh: 'GPU余量', en: 'GPU free' }
+    p.description = '剩余显存百分比；悬停显示剩余/总显存。自动隐藏不存在的 GPU。'
+    p.descriptions = { zh: p.description, en: 'Free VRAM percentage; hover for free/total memory. Missing GPUs are hidden.' }
+    p.group!.id = p.id; p.group!.label = p.label; p.group!.main.label = p.label
+    for (const m of [p.group!.main, ...p.group!.children]) {
+        m.command = m.command.replace('used*100/total', 'free*100/total')
+        m.detailCommand = m.detailCommand!.replace('used/1024,total/1024', 'free/1024,total/1024')
+        m.colorRules = [{ operator: '<', value: '20', color: METRIC_COLORS.red }, { operator: '<', value: '50', color: METRIC_COLORS.orange }]
+    }
+    return p
+}
+
+export function createDiskUsagePreset(base: MetricPreset): MetricPreset {
+    const p = clone(base)
+    p.id = base.id + '-used'; p.label = base.label + '用量'
+    p.labels = { zh: p.label, en: (base.labels?.en || base.label) + ' usage' }
+    p.description = (base.audience === 'author-lab' ? '作者实验室自用，其他人请勿下载使用。' : '') + '已用容量百分比；悬停显示已用/总容量。大于80%橙色，大于90%红色。'
+    p.descriptions = { zh: p.description, en: (base.audience === 'author-lab' ? "For the author's laboratory only. Other users: please do not download or use this preset. " : '') + 'Used disk percentage; hover for used/total capacity. Orange above 80%, red above 90%.' }
+    p.group!.id = p.id; p.group!.label = p.label; p.group!.main.label = '磁盘用量'
+    for (const m of [p.group!.main, ...p.group!.children]) {
+        // df column 3 is used space; column 4 is space available to ordinary users.
+        m.command = m.command.split(diskValues).join( diskValues.replace(/\$4/g, '$3')).replace('int(available/1048576)', 'available*100/total').replace('int($2/1048576)', '$2*100/$1')
+        m.detailCommand = m.detailCommand!.split(diskValues).join( diskValues.replace(/\$4/g, '$3'))
+        m.suffix = '%'; m.colorRules = usageColorRules(80, 90)
+    }
+    return p
+}
+
 function validMetric(value: any): value is CustomMetric {
     return Boolean(value && typeof value === 'object' && typeof value.command === 'string' && (value.type === undefined || value.type === 'text' || value.type === 'progress'))
 }

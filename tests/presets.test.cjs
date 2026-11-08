@@ -9,7 +9,7 @@ require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileMo
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2017 }
 }).outputText, filename)
 const { getBuiltinDefaults, getBuiltinDefinition, getBuiltinDefinitions, createCpuSampleCommand, createCpuLoadCommand, createNetworkRateCommand } = require('../src/builtin-metrics.ts')
-const { createGpuGroupPreset, createDiskGroupPreset, createDiskTotalCommand, createGpuCommand, createGpuCheckCommand, getBundledPresets, normalizePresetLibrary, instantiatePreset, exportPresetLibrary, findInstalledPreset, presetDefinitionFingerprint } = require('../src/preset-library.ts')
+const { createGpuFreePreset, createDiskUsagePreset, createGpuGroupPreset, createDiskGroupPreset, createDiskTotalCommand, createGpuCommand, createGpuCheckCommand, getBundledPresets, normalizePresetLibrary, instantiatePreset, exportPresetLibrary, findInstalledPreset, presetDefinitionFingerprint } = require('../src/preset-library.ts')
 const { getLayoutPaneTargets, layoutPaneTargetName, matchesScope } = require('../src/display-scope.ts')
 const gitExecPath = process.platform === 'win32' ? spawnSync('git', ['--exec-path'], { encoding: 'utf8' }).stdout?.trim() : ''
 const gitShell = gitExecPath ? path.resolve(gitExecPath, '../../..', 'bin/sh.exe') : ''
@@ -264,9 +264,9 @@ test('portable profile bindings resolve locally and never become global when mis
 
 test('shared library removes local binding IDs and keeps the offline single/group inventory', () => {
     const presets = getBundledPresets()
-    assert.equal(presets.filter(p => p.kind === 'metric').length, 12)
-    assert.equal(presets.filter(p => p.kind === 'group').length, 14)
-    assert.equal(new Set(presets.map(p => p.id)).size, 26)
+    assert.equal(presets.filter(p => p.kind === 'metric').length, 13)
+    assert.equal(presets.filter(p => p.kind === 'group').length, 21)
+    assert.equal(new Set(presets.map(p => p.id)).size, 34)
     const host = presets.find(p => p.label === 'P1磁盘')
     const container = presets.find(p => p.label === 'P1容器磁盘')
     assert.deepEqual(host.profileNames, ['P1(ai)'])
@@ -559,4 +559,23 @@ vm_stat() { printf 'Mach Virtual Memory Statistics: (page size of 4096 bytes)\\n
     assert.equal(run(defaults.ram.detailCommand, fakeDarwin).stdout.trim(), '0.5/1.0 GB available')
     assert.equal(run(defaults.cpu.detailCommand, fakeDarwin).stdout.trim(), '{ 0.5 1.0 1.5 }')
     assert.notEqual(run(defaults.disk.command, 'df() { return 9; }').status, 0)
+})
+
+
+test('free GPU preset uses real free memory and low-free warning rules', () => {
+    const p = createGpuFreePreset()
+    assert.equal(run(p.group.main.command, fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), '70')
+    assert.equal(run(p.group.main.detailCommand, fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), '45.0/64.0 GB')
+    assert.equal(p.group.main.colorRules[0].operator, '<')
+    assert.equal(p.group.main.colorRules[0].value, '20')
+})
+
+test('disk used preset reads df used column rather than total minus available reserved space', () => {
+    const p = createDiskUsagePreset(createDiskGroupPreset('test', [], []))
+    const fake = "stat() { echo 1; }; df() { printf 'Filesystem 1024-blocks Used Available Capacity Mounted\\n/dev/root 104857600 62914560 31457280 67%% /\\n'; }"
+    for (const m of [p.group.main, ...p.group.children]) {
+        assert.equal(run(m.command, fake).stdout.trim(), '60')
+        assert.equal(run(m.detailCommand, fake).stdout.trim(), '60.0/100.0 GB')
+        assert.equal(m.suffix, '%')
+    }
 })

@@ -257,3 +257,5 @@ Report problems or suggest improvements through [this project's Issues](https://
 - Open bundled English/Chinese complete user manuals, including the disk-group walkthrough, through the highlighted tutorial button.
 - Fix the lower-left menu closing as the pointer moves upward with focus-follows-mouse enabled.
 - Fix a configuration migration incompatibility that left the settings page blank, and persist built-in ordering and first-time edits across restarts.
+
+The library offers GPU usage/free presets and P0–P4 disk usage/free groups. GPU values are VRAM percentages and details follow the chosen direction; free below 20% is red, below 50% orange. Disk usage reads the df Used column (excluding reserved space), shows used percentage and used/total details, and turns orange above 80% or red above 90%. Disk free retains free GB and its existing capacity thresholds.
