@@ -142,7 +142,7 @@ const localSource = { name: 'lishuainan0209 / Tabby Group Server Stats', url: 'h
 export function createGpuCommand(index?: number, detail = false): string {
     if (index !== undefined && (!Number.isInteger(index) || index < 0)) throw new Error('Invalid GPU index')
     const selected = index === undefined ? '' : ` --id=${index}`
-    const result = detail ? 'printf "%.1f/%.1f GB\\n",free/1024,total/1024' : 'printf "%d\\n",used*100/total'
+    const result = detail ? 'printf "%.1f/%.1f GB\\n",used/1024,total/1024' : 'printf "%d\\n",used*100/total'
     const query = '--query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits'
     const aggregate = `awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,"",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; ${result}}'`
     if (index !== undefined) return `data=$(nvidia-smi${selected} ${query} 2>/dev/null) || exit 1; printf '%s\\n' "$data" | ${aggregate}`
@@ -161,7 +161,7 @@ export function createGpuCheckCommand(index?: number): string {
 }
 
 function gpuMetric(index?: number): CustomMetric {
-    return { id: index === undefined ? 'gpu-main' : `gpu-${index}`, label: index === undefined ? 'GPU' : `GPU ${index}`,
+    return { id: index === undefined ? 'gpu-main' : `gpu-${index}`, label: index === undefined ? 'GPU用量' : `GPU ${index}`,
         type: 'text', icon: 'stats-vram', suffix: '%', color: METRIC_COLORS.green, interval: 30, timeout: 60,
         command: createGpuCommand(index), detailCommand: createGpuCommand(index, true),
         checkCommand: createGpuCheckCommand(index), checkMode: 'exitCode', checkExpected: '0', unavailableText: '无GPU',
@@ -170,11 +170,11 @@ function gpuMetric(index?: number): CustomMetric {
 }
 
 export function createGpuGroupPreset(): MetricPreset {
-    return { id: 'gpu-memory-group', kind: 'group', label: 'GPU 显存', labels: { en: 'GPU memory', zh: 'GPU 显存' },
-        description: '显存使用率；悬停显示剩余/总显存。自动隐藏不存在的 GPU 0–7。',
-        descriptions: { en: 'VRAM use percentage; hover for free/total GB. Missing GPUs 0–7 are hidden.', zh: '显存使用率；悬停显示剩余/总显存（GB）。自动隐藏不存在的 GPU 0–7。' },
+    return { id: 'gpu-memory-group', kind: 'group', label: 'GPU用量', labels: { en: 'GPU usage', zh: 'GPU用量' },
+        description: '显存使用率；悬停显示已用/总显存。自动隐藏不存在的 GPU 0–7。',
+        descriptions: { en: 'VRAM use percentage; hover for used/total GB. Missing GPUs 0–7 are hidden.', zh: '显存使用率；悬停显示已用/总显存（GB）。自动隐藏不存在的 GPU 0–7。' },
         source: localSource,
-        group: { id: 'gpu-memory-group', label: 'GPU 显存', mode: 'overview', layout: 'vertical', interval: 3,
+        group: { id: 'gpu-memory-group', label: 'GPU用量', mode: 'overview', layout: 'vertical', interval: 3,
             displayScope: { mode: 'all', profileIds: [] }, main: gpuMetric(), children: Array.from({ length: 8 }, (_, index) => gpuMetric(index)) } }
 }
 
@@ -220,7 +220,7 @@ export function createDiskGroupPreset(name: string, mountPaths: string[], profil
     const noticeZh = labOnly ? '作者实验室自用，其他人请勿下载使用。' : ''
     const noticeEn = labOnly ? "For the author's laboratory only. Other users: please do not download or use this preset. " : ''
     const paths = [...new Set(mountPaths.filter(path => typeof path === 'string' && path.startsWith('/') && path !== '/'))]
-    const main: CustomMetric = { ...diskMetric('/', true, 0), id: 'disk-total', label: '磁盘总余量', icon: 'stats-disk-space',
+    const main: CustomMetric = { ...diskMetric('/', true, 0), id: 'disk-total', label: '磁盘余量', icon: 'stats-disk-space',
         // The aggregate validates every candidate itself; no valid rows is an
         // execution error, while a legitimately full readable filesystem is 0.
         checkCommand: '', command: createDiskTotalCommand(paths), detailCommand: createDiskTotalCommand(paths, true),

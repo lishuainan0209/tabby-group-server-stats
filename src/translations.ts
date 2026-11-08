@@ -417,7 +417,7 @@ for (const [chinese, english] of [
     ['系统盘', 'System disk'], ['数据盘', 'Data disk'], ['磁盘容量', 'Disk capacity'],
     ['磁盘读取', 'Disk read'], ['磁盘写入', 'Disk write'], ['磁盘读写', 'Disk I/O'],
     ['总读写', 'Total I/O'], ['无块设备数据', 'No block-device data'],
-    ['GPU 显卡', 'GPU'], ['GPU 显存', 'GPU memory'], ['CPU 处理器', 'CPU processor'],
+    ['GPU用量', 'GPU usage'], ['磁盘余量', 'Disk free'], ['GPU 显卡', 'GPU'], ['GPU 显存', 'GPU memory'], ['CPU 处理器', 'CPU processor'],
     ['CPU 负载', 'CPU load'], ['CPU负载', 'CPU load'], ['线程数', 'Threads'], ['I/O 等待', 'I/O wait'], ['内存', 'Memory'],
     ['交换空间', 'Swap'], ['网络接口', 'Network interface'], ['网络发送', 'Network upload'],
     ['网络接收', 'Network download'], ['网络延迟', 'Network latency'], ['温度', 'Temperature'],

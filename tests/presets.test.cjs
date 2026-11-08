@@ -44,17 +44,17 @@ const fakeNvidia = `nvidia-smi() {
 }`
 const memory8 = Array.from({ length: 8 }, (_, i) => `${512 * (i + 1)}, 8192, ${8192 - 512 * (i + 1) - 128}`).join('\n')
 
-test('GPU memory percentage aggregates capacity and detail uses actual free memory', () => {
+test('GPU memory percentage aggregates capacity and detail uses actual used memory', () => {
     assert.equal(run(createGpuCheckCommand(), fakeNvidia, { GPU_MEMORY: memory8 }).status, 0)
     const value = run(createGpuCommand(), fakeNvidia, { GPU_MEMORY: memory8 })
     assert.equal(value.status, 0, value.stderr)
     assert.equal(value.stdout.trim(), '28')
-    assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), '45.0/64.0 GB')
+    assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), '18.0/64.0 GB')
     for (let index = 0; index < 8; index++) {
         assert.equal(run(createGpuCheckCommand(index), fakeNvidia, { GPU_MEMORY: memory8 }).status, 0)
         assert.equal(run(createGpuCommand(index), fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), String(Math.floor(512 * (index + 1) * 100 / 8192)))
     }
-    assert.equal(run(createGpuCommand(0, true), fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), '7.4/8.0 GB')
+    assert.equal(run(createGpuCommand(0, true), fakeNvidia, { GPU_MEMORY: memory8 }).stdout.trim(), '0.5/8.0 GB')
     assert.notEqual(run(createGpuCheckCommand(8), fakeNvidia, { GPU_MEMORY: memory8 }).status, 0)
 })
 
@@ -80,13 +80,13 @@ test('all-device failure or invalid output falls back to readable GPUs and sums 
         const value = run(createGpuCommand(), fakeNvidia, env)
         assert.equal(value.status, 0, value.stderr)
         assert.equal(value.stdout.trim(), '35')
-        assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, env).stdout.trim(), '29.7/48.0 GB')
+        assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, env).stdout.trim(), '17.2/48.0 GB')
         assert.equal(run(createGpuCommand(0), fakeNvidia, env).stdout.trim(), '66')
         assert.equal(run(createGpuCommand(1), fakeNvidia, env).stdout.trim(), '4')
     }
     const mixed = { GPU_MEMORY: 'N/A, 8192, 0\n512, 0, 0\n1024, 8192, 7000', GPU_ALL_FAIL: '1' }
     assert.equal(run(createGpuCommand(), fakeNvidia, mixed).stdout.trim(), '12')
-    assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, mixed).stdout.trim(), '6.8/8.0 GB')
+    assert.equal(run(createGpuCommand(undefined, true), fakeNvidia, mixed).stdout.trim(), '1.0/8.0 GB')
     assert.notEqual(run(createGpuCheckCommand(), fakeNvidia, { GPU_MEMORY: '', GPU_ALL_FAIL: '1' }).status, 0)
     assert.notEqual(run(createGpuCommand(), fakeNvidia, { GPU_MEMORY: '', GPU_ALL_FAIL: '1' }).status, 0)
 })
@@ -131,7 +131,7 @@ test('disk presets quote mount paths, keep disappeared disks visible and propaga
     assert.notEqual(run(metric.command, `df() { printf 'Filesystem 1024-blocks Used Available Capacity Mounted\\n/dev/fake 104857600 52428800 52428800 50%% /fake\\n'; return 9; }`).status, 0)
     assert.equal(metric.visibleWhenUnavailable, true)
     assert.equal(metric.showWhenUnavailable, true)
-    assert.equal(preset.group.main.label, '磁盘总余量')
+    assert.equal(preset.group.main.label, '磁盘余量')
     assert.equal(preset.group.main.id, 'disk-total')
     assert.equal(preset.group.children[0].id, 'disk-root')
     assert.equal(preset.group.children[0].label, '系统盘')

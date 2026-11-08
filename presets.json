@@ -188,19 +188,19 @@
   {
     "id": "single-gpu-memory",
     "kind": "metric",
-    "label": "GPU 显存",
+    "label": "GPU用量",
     "labels": {
-      "en": "GPU memory",
-      "zh": "GPU 显存"
+      "zh": "GPU用量",
+      "en": "GPU usage"
     },
-    "description": "总显存使用率；悬停显示剩余/总显存（GB）。",
+    "description": "总显存使用率；悬停显示已用/总显存（GB）。",
     "descriptions": {
-      "en": "Total VRAM usage percentage; hover for free/total GB.",
-      "zh": "总显存使用率；悬停显示剩余/总显存（GB）。"
+      "en": "Total VRAM usage percentage; hover for used/total GB.",
+      "zh": "总显存使用率；悬停显示已用/总显存（GB）。"
     },
     "metric": {
       "id": "single-gpu-memory",
-      "label": "GPU",
+      "label": "GPU用量",
       "type": "text",
       "icon": "stats-vram",
       "suffix": "%",
@@ -208,7 +208,7 @@
       "interval": 30,
       "timeout": 60,
       "command": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
-      "detailCommand": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
+      "detailCommand": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",used/1024,total/1024}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
       "checkCommand": "tabby_gpu_exists() { gpu_data=$(nvidia-smi \"$@\" --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || return 1; printf '%s\\n' \"$gpu_data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 ~ /^[0-9]+$/) found=1} END {exit !found}'; }; tabby_gpu_exists || (for gpu_index in 0 1 2 3 4 5 6 7; do tabby_gpu_exists --id=\"$gpu_index\" && exit 0; done; exit 1)",
       "checkMode": "exitCode",
       "checkExpected": "0",
@@ -458,15 +458,15 @@
   {
     "id": "gpu-memory-group",
     "kind": "group",
-    "label": "GPU 显存",
+    "label": "GPU用量",
     "labels": {
-      "en": "GPU memory",
-      "zh": "GPU 显存"
+      "en": "GPU usage",
+      "zh": "GPU用量"
     },
-    "description": "显存使用率；悬停显示剩余/总显存。自动隐藏不存在的 GPU 0–7。",
+    "description": "显存使用率；悬停显示已用/总显存。自动隐藏不存在的 GPU 0–7。",
     "descriptions": {
-      "en": "VRAM use percentage; hover for free/total GB. Missing GPUs 0–7 are hidden.",
-      "zh": "显存使用率；悬停显示剩余/总显存（GB）。自动隐藏不存在的 GPU 0–7。"
+      "en": "VRAM use percentage; hover for used/total GB. Missing GPUs 0–7 are hidden.",
+      "zh": "显存使用率；悬停显示已用/总显存（GB）。自动隐藏不存在的 GPU 0–7。"
     },
     "source": {
       "name": "lishuainan0209 / Tabby Group Server Stats",
@@ -475,7 +475,7 @@
     },
     "group": {
       "id": "gpu-memory-group",
-      "label": "GPU 显存",
+      "label": "GPU用量",
       "mode": "overview",
       "layout": "vertical",
       "interval": 3,
@@ -485,7 +485,7 @@
       },
       "main": {
         "id": "gpu-main",
-        "label": "GPU",
+        "label": "GPU用量",
         "type": "text",
         "icon": "stats-vram",
         "suffix": "%",
@@ -493,7 +493,7 @@
         "interval": 30,
         "timeout": 60,
         "command": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
-        "detailCommand": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
+        "detailCommand": "tabby_gpu_value() { printf '%s\\n' \"$1\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",used/1024,total/1024}'; }; if gpu_data=$(nvidia-smi --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) && tabby_gpu_value \"$gpu_data\"; then :; else gpu_data=$(for gpu_index in 0 1 2 3 4 5 6 7; do gpu_row=$(nvidia-smi --id=\"$gpu_index\" --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || continue; tabby_gpu_value \"$gpu_row\" >/dev/null && printf '%s\\n' \"$gpu_row\"; done); tabby_gpu_value \"$gpu_data\"; fi",
         "checkCommand": "tabby_gpu_exists() { gpu_data=$(nvidia-smi \"$@\" --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || return 1; printf '%s\\n' \"$gpu_data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 ~ /^[0-9]+$/) found=1} END {exit !found}'; }; tabby_gpu_exists || (for gpu_index in 0 1 2 3 4 5 6 7; do tabby_gpu_exists --id=\"$gpu_index\" && exit 0; done; exit 1)",
         "checkMode": "exitCode",
         "checkExpected": "0",
@@ -524,7 +524,7 @@
           "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=0 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
-          "detailCommand": "data=$(nvidia-smi --id=0 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
+          "detailCommand": "data=$(nvidia-smi --id=0 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",used/1024,total/1024}'",
           "checkCommand": "data=$(nvidia-smi --id=0 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"0\") found=1} END {exit !found}'",
           "checkMode": "exitCode",
           "checkExpected": "0",
@@ -554,7 +554,7 @@
           "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=1 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
-          "detailCommand": "data=$(nvidia-smi --id=1 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
+          "detailCommand": "data=$(nvidia-smi --id=1 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",used/1024,total/1024}'",
           "checkCommand": "data=$(nvidia-smi --id=1 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"1\") found=1} END {exit !found}'",
           "checkMode": "exitCode",
           "checkExpected": "0",
@@ -584,7 +584,7 @@
           "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=2 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
-          "detailCommand": "data=$(nvidia-smi --id=2 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
+          "detailCommand": "data=$(nvidia-smi --id=2 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",used/1024,total/1024}'",
           "checkCommand": "data=$(nvidia-smi --id=2 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"2\") found=1} END {exit !found}'",
           "checkMode": "exitCode",
           "checkExpected": "0",
@@ -614,7 +614,7 @@
           "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=3 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
-          "detailCommand": "data=$(nvidia-smi --id=3 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
+          "detailCommand": "data=$(nvidia-smi --id=3 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",used/1024,total/1024}'",
           "checkCommand": "data=$(nvidia-smi --id=3 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"3\") found=1} END {exit !found}'",
           "checkMode": "exitCode",
           "checkExpected": "0",
@@ -644,7 +644,7 @@
           "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=4 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
-          "detailCommand": "data=$(nvidia-smi --id=4 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
+          "detailCommand": "data=$(nvidia-smi --id=4 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",used/1024,total/1024}'",
           "checkCommand": "data=$(nvidia-smi --id=4 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"4\") found=1} END {exit !found}'",
           "checkMode": "exitCode",
           "checkExpected": "0",
@@ -674,7 +674,7 @@
           "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=5 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
-          "detailCommand": "data=$(nvidia-smi --id=5 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
+          "detailCommand": "data=$(nvidia-smi --id=5 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",used/1024,total/1024}'",
           "checkCommand": "data=$(nvidia-smi --id=5 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"5\") found=1} END {exit !found}'",
           "checkMode": "exitCode",
           "checkExpected": "0",
@@ -704,7 +704,7 @@
           "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=6 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
-          "detailCommand": "data=$(nvidia-smi --id=6 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
+          "detailCommand": "data=$(nvidia-smi --id=6 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",used/1024,total/1024}'",
           "checkCommand": "data=$(nvidia-smi --id=6 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"6\") found=1} END {exit !found}'",
           "checkMode": "exitCode",
           "checkExpected": "0",
@@ -734,7 +734,7 @@
           "interval": 30,
           "timeout": 60,
           "command": "data=$(nvidia-smi --id=7 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%d\\n\",used*100/total}'",
-          "detailCommand": "data=$(nvidia-smi --id=7 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",free/1024,total/1024}'",
+          "detailCommand": "data=$(nvidia-smi --id=7 --query-gpu=memory.used,memory.total,memory.free --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk -F, 'NF { if(NF!=3) {bad=1; next} for(i=1;i<=3;i++) {gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$i); if($i !~ /^[0-9]+([.][0-9]+)?$/) bad=1} if($2<=0) bad=1; used+=$1; total+=$2; free+=$3; count++ } END {if(bad || !count || total<=0) exit 1; printf \"%.1f/%.1f GB\\n\",used/1024,total/1024}'",
           "checkCommand": "data=$(nvidia-smi --id=7 --query-gpu=index --format=csv,noheader,nounits 2>/dev/null) || exit 1; printf '%s\\n' \"$data\" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,\"\",$0); if($0 == \"7\") found=1} END {exit !found}'",
           "checkMode": "exitCode",
           "checkExpected": "0",
@@ -769,7 +769,7 @@
       "interval": 3,
       "main": {
         "id": "disk-total",
-        "label": "磁盘总余量",
+        "label": "磁盘余量",
         "type": "text",
         "icon": "stats-disk-space",
         "color": "#00ff00",
@@ -892,7 +892,7 @@
       "interval": 3,
       "main": {
         "id": "disk-total",
-        "label": "磁盘总余量",
+        "label": "磁盘余量",
         "type": "text",
         "icon": "stats-disk-space",
         "color": "#00ff00",
@@ -988,7 +988,7 @@
       "interval": 3,
       "main": {
         "id": "disk-total",
-        "label": "磁盘总余量",
+        "label": "磁盘余量",
         "type": "text",
         "icon": "stats-disk-space",
         "color": "#00ff00",
@@ -1114,7 +1114,7 @@
       "interval": 3,
       "main": {
         "id": "disk-total",
-        "label": "磁盘总余量",
+        "label": "磁盘余量",
         "type": "text",
         "icon": "stats-disk-space",
         "color": "#00ff00",
@@ -1237,7 +1237,7 @@
       "interval": 3,
       "main": {
         "id": "disk-total",
-        "label": "磁盘总余量",
+        "label": "磁盘余量",
         "type": "text",
         "icon": "stats-disk-space",
         "color": "#00ff00",
@@ -1390,7 +1390,7 @@
       "interval": 3,
       "main": {
         "id": "disk-total",
-        "label": "磁盘总余量",
+        "label": "磁盘余量",
         "type": "text",
         "icon": "stats-disk-space",
         "color": "#00ff00",

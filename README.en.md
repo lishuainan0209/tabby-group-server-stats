@@ -143,7 +143,7 @@ Each disk group's main label shows **aggregate free GB** across its readable sys
 
 The **Users** preset counts system login records from `who`, including normal tty, pts and console sessions. Hover groups and sorts counts by username, for example `alice ×2, bob ×1`. Empty records produce a primary value of `0` and a detail of `-`; missing tools or execution failures remain errors. This is neither the current connection's username nor a count of every TCP or background SSH connection.
 
-GPU percentages mean **VRAM usage** (`memory.used / memory.total`), not `utilization.gpu`. Details query `memory.free` directly, retain the division by 1024, and show free/total memory with the GB label. The main GPU label keeps a no-GPU notice; nonexistent GPU children are hidden in every view by default.
+GPU percentages mean **VRAM usage** (`memory.used / memory.total`), not `utilization.gpu`. The GPU usage details use `memory.used`, retain the division by 1024, and show used/total memory with the GB label. The main GPU label keeps a no-GPU notice; nonexistent GPU children are hidden in every view by default.
 
 The P1 host and container are separate presets bound to separate saved connections. They must not be merged merely because they share a host address and use different ports.
 
