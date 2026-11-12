@@ -221,7 +221,7 @@ export class MetricScopeService implements OnDestroy {
         return key
     }
 
-    private savePanePreference(session: any, map: 'paneVisibility' | 'paneGroupModes', value: boolean | PaneGroupMode) {
+    private savePanePreference(session: any, map: 'paneVisibility' | 'paneGroupModes' | 'paneIconCorners' | 'paneAlignments', value: boolean | string) {
         const key = this.panePreferenceKey(session)
         if (!key) return
         if (!this.config.store.plugin) this.config.store.plugin = {}
@@ -234,6 +234,25 @@ export class MetricScopeService implements OnDestroy {
 
     setPaneVisible(session: any, visible: boolean) {
         this.savePanePreference(session, 'paneVisibility', Boolean(visible))
+    }
+
+    getPaneIconCorner(session: any): string {
+        const key = this.visibilityKey(session)
+        const value = key && this.config.store?.plugin?.serverStats?.paneIconCorners?.[key]
+        return ['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(value) ? value : 'bottom-right'
+    }
+
+    getPaneAlignment(session: any): string {
+        const key = this.visibilityKey(session)
+        return key && this.config.store?.plugin?.serverStats?.paneAlignments?.[key] === 'center' ? 'center' : 'top'
+    }
+
+    setPaneAlignment(session: any, alignment: string) {
+        if (alignment === 'top' || alignment === 'center') this.savePanePreference(session, 'paneAlignments', alignment)
+    }
+
+    setPaneIconCorner(session: any, corner: string) {
+        if (['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(corner)) this.savePanePreference(session, 'paneIconCorners', corner)
     }
 
     getPaneGroupMode(session: any): PaneGroupMode | undefined {

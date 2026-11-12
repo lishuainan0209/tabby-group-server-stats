@@ -44,6 +44,8 @@ function load(relative) {
             if (name === './components/bottom-bar.component') return { ServerStatsBottomBarComponent: bottomComponent };
             if (name === './components/floating-panel.component') return { ServerStatsFloatingPanelComponent: floatingComponent };
             if (name.endsWith('/config')) return config;
+            if (name.endsWith('/collection-config')) return load('src/collection-config.ts').exports;
+            if (name.endsWith('/metric-display')) return load('src/metric-display.ts').exports;
             if (name.endsWith('/translations')) return { TRANSLATIONS: {} };
             if (name.endsWith('/services/stats.service')) return { StatsService: serviceClass };
             return {};
@@ -98,7 +100,7 @@ test('saving a same-ID static group replaces labels and clears old readings befo
     assert.equal(f.component.metricGroups[0].children[0].label, '/data2');
     assert.equal(f.component.metricGroups[0].children[0].command, 'printf new');
     assert.equal(f.component.currentStats.custom.length, 0, 'Do not pair the new label with the old value');
-    assert.equal(f.component.loading, true);
+    assert.equal(f.component.loading, false, 'Keep the existing strip mounted during recollection');
     assert.equal(f.requests.length, 2, 'A standalone bar starts collection on Save, without waiting for its timer');
     f.requests[0].resolve(stats(11));
     await oldCollection;
@@ -437,20 +439,59 @@ test('external controller skips hidden panes and discards responses hidden durin
     f.instance.teardown();
 });
 
-test('saving configuration starts external recollection immediately and shows a pending state', async () => {
+test('saving collection configuration refreshes immediately without replacing the strip with Loading', async () => {
     const f = moduleFixture();
     const initial = f.poll();
     f.requests[0].resolve(stats(21));
     await initial;
+    f.module.config.store.plugin.serverStats.defaultInterval = 20;
     f.module.config.changed$.emit();
     const loading = f.calls.filter(call => call.name === 'loading').at(-1);
-    assert.equal(loading.args[0], true);
+    assert.equal(loading.args[0], false);
     assert.equal(f.requests.length, 2, 'Save starts collection immediately, without waiting for the poll timer');
     f.requests[1].resolve(stats(22));
     await f.requests[1].promise;
     await new Promise(resolve => setImmediate(resolve));
     assert.equal(f.calls.filter(call => call.name === 'render').at(-1).args[0].cpu, 22);
     f.instance.teardown();
+});
+
+test('corner saves preserve sibling strips and do not start extra external collection', async () => {
+    const f = moduleFixture();
+    const pending = f.poll();
+    f.module.config.store.plugin.serverStats.paneIconCorners = { other: 'top-left' };
+    f.module.config.store.plugin.serverStats.paneAlignments = { other: 'center' };
+    const count = f.calls.length;
+    f.module.config.changed$.emit();
+    assert.equal(f.calls.length, count, 'No Loading, reset or extra fetch on a presentation save');
+    f.requests[0].resolve(stats(42));
+    await pending;
+    assert.equal(f.calls.filter(call => call.name === 'render').at(-1).args[0].cpu, 42);
+    f.instance.teardown();
+});
+
+test('bottom bar retains optional visibility during config refresh and data during corner saves', () => {
+    const f = componentFixture('bottom');
+    const metrics = ['shown', 'hidden', 'new'].map(id => ({ id, command: 'printf 1', visibleWhenUnavailable: false }));
+    f.config.store.plugin.serverStats.customMetrics = metrics;
+    f.service.getVisibleConfig = () => ({ customMetrics: metrics, metricGroups: [] });
+    f.component.useExternalController = true;
+    f.component.bindToSession(f.A);
+    f.component.ngOnInit();
+    const previous = { ...stats(42), custom: [{ id: 'shown', value: '42', status: 'ok', available: true },
+        { id: 'hidden', value: 'Unavailable', status: 'unavailable', available: false }] };
+    f.component.renderExternalStats(previous);
+    f.config.store.plugin.serverStats.paneIconCorners = { B: 'top-left' };
+    f.config.store.plugin.serverStats.paneAlignments = { B: 'center' };
+    f.config.changed$.emit();
+    assert.equal(f.component.currentStats, previous);
+    assert.equal(f.component.loading, false);
+    metrics[0].command = 'printf 2';
+    f.config.changed$.emit();
+    assert.equal(JSON.stringify(f.component.currentStats.custom.map(row => row.available)), '[true,false,false]');
+    assert(f.component.currentStats.custom.every(row => row.status === 'pending'));
+    assert.equal(f.component.loading, false);
+    f.component.ngOnDestroy();
 });
 
 test('configuration saves rebind newly associated labels and never reopen a hidden pane', async () => {
@@ -462,6 +503,7 @@ test('configuration saves rebind newly associated labels and never reopen a hidd
     bar.component.ngOnInit();
     bar.component.renderExternalStats(stats(7));
     visible = { customMetrics: [{ id: 'associated', label: 'New binding' }], metricGroups: [] };
+    bar.config.store.plugin.serverStats.customMetrics = visible.customMetrics;
     bar.config.changed$.emit();
     assert.equal(bar.component.customMetrics[0].id, 'associated');
     assert.equal(bar.component.currentStats.custom.length, 0);

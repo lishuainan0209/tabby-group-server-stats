@@ -1,5 +1,6 @@
 import { NgModule, ComponentFactoryResolver, ApplicationRef, Injector, EmbeddedViewRef } from '@angular/core'
 import { CommonModule } from '@angular/common'
+import { collectionConfigSignature } from './collection-config'
 import { FormsModule } from '@angular/forms'
 import { NgbModule } from '@ng-bootstrap/ng-bootstrap'
 import TabbyCoreModule, { ConfigProvider, TranslateService, AppService, ConfigService } from 'tabby-core'
@@ -166,6 +167,7 @@ export default class ServerStatsModule {
         style.setAttribute('data-server-stats-style', '1')
         style.textContent = `
             ssh-tab.server-stats-tab {
+                position: relative;
                 display: flex;
                 flex-direction: column;
             }
@@ -178,6 +180,7 @@ export default class ServerStatsModule {
                 min-height: 0;
             }
             .server-stats-bottom-host {
+                position: static;
                 width: 100%;
             }
         `
@@ -538,10 +541,15 @@ export default class ServerStatsModule {
             }
         }
 
+        let controllerConfigSignature = ''
         const syncOnConfigChange = (initial = false) => {
             if (!alive) return
+            const session = this.resolveSessionForElement(sshTabEl)
+            const signature = JSON.stringify([collectionConfigSignature(this.config.store),
+                !!this.config?.store?.plugin?.serverStats?.enabled, this.statsService.isPaneVisible?.(session) !== false])
+            if (!initial && signature === controllerConfigSignature) return
+            controllerConfigSignature = signature
             pollRevision++
-            state.last = null
             const isEnabled = this.config?.store?.plugin?.serverStats?.enabled
             const displayMode = this.getDisplayMode()
             if (!isEnabled || displayMode !== 'bottomBar') {
@@ -551,9 +559,8 @@ export default class ServerStatsModule {
                 return
             }
             if ((barRef.instance as any).setExternalLoading) {
-                // Saved labels, commands and bindings may change without new IDs.
-                // The view reloads its definitions and waits for fresh readings.
-                (barRef.instance as any).setExternalLoading(true)
+                // Keep an already rendered strip mounted throughout refresh.
+                (barRef.instance as any).setExternalLoading(!state.last)
             }
             if (initial) setTimeout(() => runPoll(), 300)
             else void runPoll()

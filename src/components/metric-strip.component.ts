@@ -23,9 +23,12 @@ import { METRIC_COLORS } from '../metric-colors'
           </span>
           <span class="metric-value" [style.color]="color(metric)">{{status(metric) === 'unavailable' ? (result(metric).value | translate) : displayValue(metric)}}<span *ngIf="status(metric) === 'ok'">{{suffix(metric)}}</span></span>
         </span>
-        <span class="metric-detail" *ngIf="expanded && metric.detailCommand && status(metric) === 'ok'"
+        <span class="metric-detail" *ngIf="expanded && metric.detailCommand && status(metric) !== 'unavailable'"
+              [class.detail-pending]="detailPending(metric)" [attr.aria-busy]="detailPending(metric)"
               [class.detail-error]="detailError(metric)" [style.color]="detailError(metric) ? colors.red : color(metric)"
               [attr.title]="detailError(metric) ? details[metric.id] : networkDetail(metric) ? (('Since interface creation or counter reset' | translate) + ' · ' + networkDetail(metric).interfaces) : null">
+            <span *ngIf="detailPending(metric); else loadedDetail" role="status">{{'Collecting details...' | translate}}</span>
+            <ng-template #loadedDetail>
             <span class="network-detail" *ngIf="networkDetail(metric) as network; else ordinaryDetail"><span>{{network.label | translate}} </span><span class="network-amount">{{network.amount}}</span><span class="network-unit"> GB</span></span>
             <ng-template #ordinaryDetail>
               <span class="disk-io-detail" *ngIf="diskIoDetail(metric) as io; else otherDetail">
@@ -39,6 +42,7 @@ import { METRIC_COLORS } from '../metric-colors'
               <span class="numeric-ratio" *ngIf="detailRatio(metric) as ratio; else plainDetail"><span class="ratio-numerator">{{ratio.numerator}}</span><span class="ratio-slash">/</span><span class="ratio-denominator">{{ratio.denominator}}</span><span class="ratio-unit">{{ratio.suffix ? ' ' + ratio.suffix : ''}}</span></span>
               <ng-template #plainDetail>{{detailText(metric) | translate}}{{detailExitCode(metric)}}</ng-template>
             </ng-template>
+            </ng-template>
         </span>
       </ng-template>
 
@@ -46,11 +50,12 @@ import { METRIC_COLORS } from '../metric-colors'
       <div *ngIf="item.metric as metric" class="single metric-row" tabindex="0"
            (mouseenter)="enterSingle(metric, $event)" (mouseleave)="leaveSingle(metric)"
            (focusin)="enterSingle(metric, $event)" (focusout)="leaveSingle(metric)"
-           [attr.aria-expanded]="metric.detailCommand ? hoveredMetric === metric.id : null"
+           (click)="toggleSingleDetails(metric, $event)" (keydown.enter)="toggleSingleDetails(metric, $event)" (keydown.space)="toggleSingleDetails(metric, $event)"
+           [attr.aria-expanded]="metric.detailCommand ? expandedTarget === 'metric:' + metric.id : null"
            [attr.aria-label]="(metric.label || metric.id) | translate">
         <ng-container *ngTemplateOutlet="value; context: { $implicit: metric, expanded: false }"></ng-container>
-        <div *ngIf="hoveredMetric === metric.id && !hoveredGroup && metric.detailCommand && status(metric) === 'ok'"
-             #singlePopup class="group-details single-details" role="region" [attr.aria-label]="metric.label | translate"
+        <div *ngIf="expandedTarget === 'metric:' + metric.id && hoveredMetric === metric.id && !hoveredGroup && metric.detailCommand"
+             #singlePopup class="group-details single-details" role="region" [attr.aria-label]="metric.label | translate" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()"
              [style.left.px]="popup.left" [style.top.px]="popup.top" [style.max-height.px]="popup.maxHeight"
              [style.max-width.px]="popup.width" (mouseenter)="keepSingle(metric)" (mouseleave)="leaveSingle(metric)">
           <div class="detail-grid"><div class="metric-row detail-row">
@@ -68,10 +73,12 @@ import { METRIC_COLORS } from '../metric-colors'
            [class.vertical]="group.mode === 'static' && group.layout === 'vertical'"
            (mouseenter)="enterGroup(group, $event)" (mouseleave)="leaveGroup(group)"
            (focusin)="enterGroup(group, $event)" (focusout)="blurGroup(group, $event)"
+           (click)="toggleGroupDetails(group, $event)" (keydown.enter)="toggleGroupDetails(group, $event)" (keydown.space)="toggleGroupDetails(group, $event)"
            [attr.aria-label]="(group.label || 'Metric group') | translate"
-           [attr.aria-expanded]="group.mode !== 'static' ? hoveredGroup === group.id : null">
+           [attr.aria-expanded]="expandedTarget === 'group:' + group.id">
         <ng-container *ngIf="group.mode === 'static'">
-          <div *ngFor="let metric of allMetrics(group); trackBy: trackId" class="metric-row" tabindex="0" [class.child-row]="metric.id !== group.main?.id"
+          <div *ngFor="let metric of allMetrics(group); trackBy: trackId" class="metric-row" tabindex="0" [class.child-row]="metric.id !== group.main?.id" [class.main-row]="metric.id === group.main?.id"
+               (click)="toggleGroupDetails(group, $event, metric)" (keydown.enter)="toggleGroupDetails(group, $event, metric)" (keydown.space)="toggleGroupDetails(group, $event, metric)"
                (mouseenter)="enterChild(group, metric)" (mouseleave)="leaveMetric(metric)"
                (focusin)="enterChild(group, metric)" (focusout)="leaveMetric(metric)">
             <ng-container *ngTemplateOutlet="value; context: { $implicit: metric, expanded: expanded(group, metric) }"></ng-container>
@@ -84,13 +91,13 @@ import { METRIC_COLORS } from '../metric-colors'
                 <ng-container *ngTemplateOutlet="value; context: { $implicit: candidate, expanded: false }"></ng-container>
               </div>
             </div>
-            <div class="metric-row collapsed-row" [class.carousel-active]="group.mode === 'carousel'" *ngIf="collapsedMetric(group) as metric; else empty">
+            <div class="metric-row collapsed-row" [class.main-row]="metric.id === group.main?.id" [class.carousel-active]="group.mode === 'carousel'" *ngIf="collapsedMetric(group) as metric; else empty">
               <ng-container *ngTemplateOutlet="value; context: { $implicit: metric, expanded: false }"></ng-container>
             </div>
             <ng-template #empty><span class="empty">{{group.emptyText || ('No available items' | translate)}}</span></ng-template>
           </div>
           <span class="expand-hint" aria-hidden="true">▴</span>
-          <div *ngIf="hoveredGroup === group.id" #groupPopup class="group-details" role="region"
+          <div *ngIf="expandedTarget === 'group:' + group.id && hoveredGroup === group.id" #groupPopup class="group-details" role="region" (click)="$event.stopPropagation()" (keydown)="$event.stopPropagation()"
                [style.--ratio-left-width]="ratioColumnWidth(group, 'numerator')" [style.--ratio-right-width]="ratioColumnWidth(group, 'denominator')"
                [style.--ratio-unit-width]="ratioUnitWidth(group)"
                [style.--detail-amount-width]="networkAmountWidth(group)"
@@ -100,7 +107,7 @@ import { METRIC_COLORS } from '../metric-colors'
                [style.max-width.px]="popup.width" (mouseenter)="keepGroup(group)" (mouseleave)="leaveGroup(group)">
             <div class="details-title">{{(group.label || 'Metric group') | translate}}</div>
             <div class="detail-grid">
-              <div *ngFor="let metric of allMetrics(group); trackBy: trackId" class="metric-row detail-row" [class.child-row]="metric.id !== group.main?.id">
+              <div *ngFor="let metric of allMetrics(group); trackBy: trackId" class="metric-row detail-row" [class.child-row]="metric.id !== group.main?.id" [class.main-row]="metric.id === group.main?.id">
                 <ng-container *ngTemplateOutlet="value; context: { $implicit: metric, expanded: true }"></ng-container>
               </div>
             </div>
@@ -110,7 +117,9 @@ import { METRIC_COLORS } from '../metric-colors'
       </ng-container>
     `,
     styles: [`
-      :host { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; min-width: 0; font-size: 11px; color: #ddd; }
+      :host { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px 6px; min-width: 0; font-size: 11px; color: #ddd; }
+      .main-row .metric-label, .collapsed-row .metric-label { font-weight: 700; }
+      .single.metric-row { align-items: flex-start; }
       .single, .metric-group { border-right: 2px solid #aeb9c9; padding-right: 6px; align-self: stretch; }
       .metric-row { display: inline-flex; align-items: center; gap: 6px; min-height: 18px; max-width: 100%; }
       .metric-row:focus-visible, .metric-group:focus-visible { outline: 1px solid #5baaff; outline-offset: 3px; }
@@ -119,6 +128,7 @@ import { METRIC_COLORS } from '../metric-colors'
       .metric-image-icon { display: inline-block; background: currentColor; mask-size: contain; mask-position: center; mask-repeat: no-repeat; -webkit-mask-size: contain; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat; }
       .metric-value { font: 600 11px monospace; font-variant-numeric: tabular-nums; text-align: right; white-space: pre-wrap; overflow-wrap: anywhere; }
       .metric-detail { font: 11px monospace; font-variant-numeric: tabular-nums; text-align: right; color: #d1d7e0; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .metric-detail.detail-pending { min-width: 8em; color: #aeb9c9 !important; }
       .numeric-ratio { display: inline-grid; grid-template-columns: var(--ratio-left-width, max-content) 1ch var(--ratio-right-width, max-content) var(--ratio-unit-width, max-content); align-items: baseline; white-space: pre; }
       .ratio-unit { text-align: left; }
       .ratio-numerator, .ratio-denominator, .network-amount { text-align: right; }
@@ -137,7 +147,7 @@ import { METRIC_COLORS } from '../metric-colors'
       .metric-reading { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
       .meter { display: inline-block; height: 7px; width: 50px; flex: 0 0 50px; overflow: hidden; background: #ffffff26; border-radius: 4px; }
       .meter > span { display: block; height: 100%; transition: width .3s; }
-      .metric-group { display: inline-flex; gap: 6px; align-items: center; position: relative; cursor: default; min-width: 0; max-width: 100%; box-sizing: border-box; }
+      .metric-group { display: inline-flex; gap: 6px; align-items: flex-start; position: relative; cursor: default; min-width: 0; max-width: 100%; box-sizing: border-box; }
       .metric-group:not(.vertical) > .metric-row + .metric-row { border-left: 1px solid #8b99ad; padding-left: 6px; }
       .metric-group:not(.vertical) > .metric-row { align-self: stretch; }
       .collapsed-slot { min-width: 0; }
@@ -149,7 +159,9 @@ import { METRIC_COLORS } from '../metric-colors'
       .carousel-active .metric-label { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
       .carousel-active .metric-reading { min-width: 0; max-width: 100%; }
       .carousel-active .metric-value { min-width: 0; }
-      .metric-group.vertical { display: grid; grid-template-columns: max-content max-content minmax(0, max-content); align-items: center; align-content: center; gap: 0 6px; }
+      .metric-group.vertical { display: grid; grid-template-columns: max-content max-content minmax(0, max-content); align-items: center; align-content: start; gap: 0 6px; }
+      :host(.center-aligned) .single.metric-row, :host(.center-aligned) .metric-group { align-items: center; }
+      :host(.center-aligned) .metric-group.vertical { align-content: center; }
       .metric-group.vertical > .metric-row { display: contents; }
       .metric-group.vertical > .metric-row + .metric-row::before { content: ''; grid-column: 1 / -1; height: 1px; background: #8b99ad; }
       .metric-group.vertical .metric-label, .metric-group.vertical .metric-reading, .metric-group.vertical .metric-value, .metric-group.vertical .metric-detail { line-height: 12px; }
@@ -195,7 +207,10 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     private anchor: HTMLElement | null = null
     private generation = 0
     private destroyed = false
-    private detailRequest = false
+    private detailRequests = new Set<string>()
+    private hoverTarget = ''
+    private hoverGeneration = 0
+    private checkedHoverGroup: string | null = null
     private lastDetailsAt = 0
     private previousSession: any
     private configSignature = ''
@@ -290,7 +305,10 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         const status = this.status(metric)
         if (status === 'pending') return '#8a929e'
         if (status === 'error') return METRIC_COLORS.red
-        return evaluateColor(this.result(metric).value, metric.colorRules, status === 'unavailable' ? METRIC_COLORS.orange : metric.color || METRIC_COLORS.green)
+        const result = this.result(metric)
+        if (metric.valueFormat === 'disk-io-rate' && !Number.isFinite(result.colorValue)) return status === 'unavailable' ? METRIC_COLORS.orange : metric.color || METRIC_COLORS.green
+        const colorValue = metric.valueFormat === 'disk-io-rate' ? result.colorValue : result.value
+        return evaluateColor(colorValue, metric.colorRules, status === 'unavailable' ? METRIC_COLORS.orange : metric.color || METRIC_COLORS.green)
     }
     progress(metric: CustomMetric): number {
         const number = parseFloat(this.result(metric).value)
@@ -322,6 +340,9 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         return `${Math.max(1, ...this.allMetrics(group).map(metric => this.networkDetail(metric)?.amount.length || 0))}ch`
     }
     detailError(metric: CustomMetric): boolean { return (this.details[metric.id] || '').startsWith('Err:') }
+    detailPending(metric: CustomMetric): boolean {
+        return !Object.prototype.hasOwnProperty.call(this.details, metric.id) && ['ok', 'pending'].includes(this.status(metric))
+    }
     networkDetail(metric: CustomMetric) {
         return parseNetworkDetail(this.details[metric.id])
     }
@@ -330,7 +351,9 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         return `${Math.max(1, ...this.allMetrics(group).map(metric => this.diskIoDetail(metric)?.[column].length || 0))}ch`
     }
     detailText(metric: CustomMetric): string {
+        if (!Object.prototype.hasOwnProperty.call(this.details, metric.id) && this.status(metric) === 'error') return 'Unable to fetch details'
         const value = this.details[metric.id] || ''
+        if (!value) return 'Detail returned no data'
         if (!this.detailError(metric)) return formatCapacityUnit(value)
         if (value === 'Err: No result') return 'No detail received'
         if (value === 'Err: No output') return 'Detail returned no data'
@@ -381,49 +404,82 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
 
     expanded(group: CustomMetricGroup, metric: CustomMetric): boolean {
-        return group.layout === 'vertical' ? this.hoveredGroup === group.id : this.hoveredMetric === metric.id
+        return group.layout === 'vertical' ? this.expandedTarget === 'group:' + group.id : this.expandedTarget === 'metric:' + metric.id
     }
-    enterMetric(metric: CustomMetric) { this.hoveredMetric = metric.id; void this.refreshDetails() }
-    enterSingle(metric: CustomMetric, event: Event) {
+    expandedTarget = ''
+    toggleSingleDetails(metric: CustomMetric, event: Event) {
+        event.preventDefault(); event.stopPropagation()
+        this.enterSingle(metric, event, false)
+        this.expandedTarget = this.expandedTarget === 'metric:' + metric.id ? '' : 'metric:' + metric.id
+        this.cdr.detectChanges()
+        void this.refreshDetails()
+    }
+    toggleGroupDetails(group: CustomMetricGroup, event: Event, metric?: CustomMetric) {
+        event.preventDefault(); event.stopPropagation()
+        this.enterGroup(group, event, false)
+        if (metric) this.enterChild(group, metric, false)
+        const target = group.mode === 'static' && group.layout !== 'vertical' && metric ? 'metric:' + metric.id : 'group:' + group.id
+        this.expandedTarget = this.expandedTarget === target ? '' : target
+        this.cdr.detectChanges()
+        void this.refreshDetails()
+    }
+    enterMetric(metric: CustomMetric, refresh = true) { this.hoveredMetric = metric.id; if (refresh) void this.refreshDetails() }
+    enterSingle(metric: CustomMetric, event: Event, refresh = true) {
         clearTimeout(this.closeTimer)
+        if (this.hoveredMetric !== metric.id || this.hoveredGroup) this.expandedTarget = ''
         this.hoveredGroup = null
+        this.checkedHoverGroup = null
         this.anchor = event.currentTarget as HTMLElement
-        this.enterMetric(metric)
+        this.enterMetric(metric, refresh)
         this.positionPopup()
     }
-    keepSingle(metric: CustomMetric) { clearTimeout(this.closeTimer); this.hoveredMetric = metric.id }
+    keepSingle(metric: CustomMetric) { clearTimeout(this.closeTimer); this.enterMetric(metric) }
     leaveSingle(metric: CustomMetric) {
         this.closeTimer = setTimeout(() => {
-            if (this.singlePopup?.nativeElement.matches(':hover, :focus-within')) return
-            if (this.hoveredMetric === metric.id && !this.hoveredGroup) { this.hoveredMetric = null; this.cdr.markForCheck() }
+            if (this.singlePopup?.nativeElement.matches(':hover')) return
+            if (this.hoveredMetric === metric.id && !this.hoveredGroup) { this.closeHover(); this.cdr.markForCheck() }
         }, 100)
     }
-    leaveMetric(metric: CustomMetric) { if (this.hoveredMetric === metric.id) this.hoveredMetric = null }
-    enterChild(group: CustomMetricGroup, metric: CustomMetric) {
-        if (group.layout !== 'vertical') this.enterMetric(metric)
+    leaveMetric(metric: CustomMetric) {
+        if (this.expandedTarget === 'metric:' + metric.id) this.expandedTarget = ''
+        if (this.hoveredMetric === metric.id) {
+            this.hoveredMetric = null
+            this.invalidateHover()
+        }
     }
-    enterGroup(group: CustomMetricGroup, event: Event) {
+    enterChild(group: CustomMetricGroup, metric: CustomMetric, refresh = true) {
+        if (group.layout !== 'vertical') {
+            this.hoveredGroup = group.id
+            this.enterMetric(metric, refresh)
+        }
+    }
+    enterGroup(group: CustomMetricGroup, event: Event, refresh = true) {
         clearTimeout(this.closeTimer)
-        if (group.mode !== 'static' || group.layout === 'vertical') this.hoveredMetric = null
+        if (this.hoveredGroup !== group.id) this.expandedTarget = ''
+        if (this.hoveredGroup !== group.id || group.mode !== 'static' || group.layout === 'vertical') this.hoveredMetric = null
         this.hoveredGroup = group.id
         this.anchor = event.currentTarget as HTMLElement
         this.positionPopup()
-        void this.refreshDetails()
+        if (refresh) void this.refreshDetails()
     }
-    keepGroup(group: CustomMetricGroup) { clearTimeout(this.closeTimer); this.hoveredGroup = group.id }
+    keepGroup(group: CustomMetricGroup) { clearTimeout(this.closeTimer); this.hoveredGroup = group.id; void this.refreshDetails() }
     leaveGroup(group: CustomMetricGroup) {
         this.closeTimer = setTimeout(() => {
-            if (this.hoveredGroup === group.id) { this.hoveredGroup = null; this.hoveredMetric = null; this.cdr.markForCheck() }
+            if (this.hoveredGroup === group.id) { this.closeHover(); this.cdr.markForCheck() }
         }, group.mode === 'static' ? 0 : 100)
     }
     blurGroup(group: CustomMetricGroup, event: FocusEvent) {
         if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node)) this.leaveGroup(group)
     }
     @HostListener('document:keydown.escape') closeHover() {
+        this.expandedTarget = ''
         clearTimeout(this.closeTimer)
         this.hoveredMetric = null
         this.hoveredGroup = null
+        this.checkedHoverGroup = null
+        this.invalidateHover()
     }
+    private invalidateHover() { this.hoverTarget = ''; this.hoverGeneration++ }
     @HostListener('document:visibilitychange') onVisibilityChange() {
         if (!this.isHostVisible()) { this.closeHover(); this.cdr.markForCheck() }
     }
@@ -449,24 +505,51 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
 
     private async refreshDetails() {
-        if (this.detailRequest || !this.session || this.session.open === false || !this.isHostVisible()) return
+        if (this.destroyed || !this.session || this.session.open === false || !this.isHostVisible() || !this.service.isPaneVisible(this.session)) return
         const group = this.visibleGroups.find(item => item.id === this.hoveredGroup)
         const all = [...this.visibleMetrics, ...this.visibleGroups.reduce((items, item) => items.concat(this.allMetrics(item)), [] as CustomMetric[])]
-        const requested = group && (group.mode !== 'static' || group.layout === 'vertical') ? this.allMetrics(group) : all.filter(metric => metric.id === (this.hoveredMetric || this.autoDetailMetric))
+        const groupHover = group && (group.mode !== 'static' || group.layout === 'vertical')
+        const hovered = !!(groupHover || this.hoveredMetric)
+        const requested = groupHover ? this.allMetrics(group) : all.filter(metric => metric.id === (this.hoveredMetric || (!this.hoveredGroup && this.autoDetailMetric)))
+        // A recovered/disappearing child changes the visible rows, not the user's
+        // hover entry. Do not repeatedly force every failed sibling on that change.
+        const target = hovered ? JSON.stringify([group?.id, groupHover ? null : this.hoveredMetric]) : ''
+        const force = !!target && target !== this.hoverTarget
+        if (target !== this.hoverTarget) { this.hoverTarget = target; this.hoverGeneration++ }
+        const groupEntry = !!group && this.checkedHoverGroup !== group.id
+        if (groupEntry) this.checkedHoverGroup = group.id
+        const hiddenChecks = groupEntry ? [group.main, ...group.children].filter(metric => metric && metric.enabled !== false &&
+            metric.visibleWhenUnavailable === false && !metricIsVisible(metric, this.stats?.custom || [])) : []
+        const samples = [...new Map([...requested, ...hiddenChecks].map(metric => [metric.id, metric])).values()]
         const metrics = requested.filter(metric => metric.detailCommand?.trim())
-        if (!metrics.length) return
-        this.detailRequest = true
-        this.lastDetailsAt = Date.now()
+        if (!samples.length || (!hovered && !hiddenChecks.length && !metrics.length)) return
         const generation = this.generation
+        const hoverGeneration = this.hoverGeneration
+        const session = this.session
+        const requestKey = JSON.stringify([generation, hoverGeneration, samples.map(metric => metric.id)])
+        if (this.detailRequests.has(requestKey) || (!force && !hiddenChecks.length && Date.now() - this.lastDetailsAt < 1000)) return
+        this.detailRequests.add(requestKey)
+        this.lastDetailsAt = Date.now()
+        const current = () => !this.destroyed && generation === this.generation && hoverGeneration === this.hoverGeneration &&
+            session === this.session && session.open !== false && this.isHostVisible() && this.service.isPaneVisible(session)
         try {
-            const details = await this.service.fetchDetails(this.session, metrics)
-            if (!this.destroyed && generation === this.generation && this.isHostVisible()) {
+            // Only the pointed-at label (or expanded group) gets a faster cadence.
+            // The service publishes primary readings to both panel implementations.
+            if (hovered || hiddenChecks.length) await this.service.fetchHoveredStats(session, samples, force || hiddenChecks.length > 0)
+            if (!current() || !metrics.length) return
+            const details = await this.service.fetchDetails(session, metrics, hovered ? { force, maxAgeMs: 1000, skipPending: true } : undefined)
+            if (current()) {
                 this.details = { ...this.details, ...details }
                 this.cdr.markForCheck()
             }
         } catch {
-            // A failed detail request must not replace or hide the primary value.
-        } finally { this.detailRequest = false }
+            if (current()) {
+                // Keep previous details during transient errors, but finish a
+                // first-load placeholder instead of leaving it spinning forever.
+                for (const metric of metrics) if (!(metric.id in this.details)) this.details[metric.id] = 'Err: Connection'
+                this.cdr.markForCheck()
+            }
+        } finally { this.detailRequests.delete(requestKey) }
     }
     ngOnDestroy() { this.destroyed = true; this.generation++; clearInterval(this.timer); clearTimeout(this.closeTimer); this.portal?.remove() }
 }

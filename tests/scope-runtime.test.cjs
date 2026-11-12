@@ -877,3 +877,35 @@ test('pane mode preferences reject invalid values and ignore closed or destroyed
     assert.equal(env.service.getPaneGroupMode(leaf.session), undefined)
     assert.equal(saves, 1)
 })
+
+
+test('icon corners default right and persist per saved pane independently of metric visibility', async () => {
+    const shared = savedSSH('corner-user')
+    const saved = savedPaneLayout('corners-layout', [shared, shared])
+    const first = setup()
+    first.config.store.profiles = [shared, saved]
+    const { children: leaves } = await openSavedPaneLayout(first, saved)
+    assert.equal(first.service.getPaneIconCorner(leaves[0].session), 'bottom-right')
+    assert.equal(first.service.getPaneAlignment(leaves[0].session), 'top')
+    first.service.setPaneAlignment(leaves[0].session, 'center')
+    first.service.setPaneAlignment(leaves[0].session, 'invalid')
+    assert.equal(first.service.getPaneAlignment(leaves[0].session), 'center')
+    assert.equal(first.service.getPaneAlignment(leaves[1].session), 'top')
+    first.service.setPaneIconCorner(leaves[0].session, 'top-left')
+    first.service.setPaneIconCorner(leaves[1].session, 'bottom-left')
+    first.service.setPaneIconCorner(leaves[0].session, 'invalid')
+    assert.equal(first.service.getPaneIconCorner(leaves[0].session), 'top-left')
+    assert.equal(first.service.isPaneVisible(leaves[0].session), true)
+    const prefs = JSON.parse(JSON.stringify(first.config.store.plugin.serverStats))
+    first.service.ngOnDestroy()
+    const second = setup()
+    second.config.store.profiles = [shared, saved]
+    second.config.store.plugin = { serverStats: prefs }
+    const { children: restored } = await openSavedPaneLayout(second, saved)
+    assert.equal(second.service.getPaneIconCorner(restored[0].session), 'top-left')
+    assert.equal(second.service.getPaneAlignment(restored[0].session), 'center')
+    assert.equal(second.service.getPaneAlignment(restored[1].session), 'top')
+    assert.equal(second.service.getPaneIconCorner(restored[1].session), 'bottom-left')
+    assert.equal(second.service.isPaneVisible(restored[0].session), true)
+    second.service.ngOnDestroy()
+})

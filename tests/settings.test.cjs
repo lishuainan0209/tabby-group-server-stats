@@ -29,7 +29,7 @@ function loadPureSource(relative) {
 const mocks = {
   '@angular/core': {
     Component: metadata => { componentMetadata = metadata; return klass => klass; },
-    Injectable: noopDecorator, HostListener: noopDecorator,
+    Injectable: noopDecorator, HostListener: noopDecorator, ViewChild: noopDecorator,
   },
   '@angular/platform-browser': {},
   'tabby-core': {},
@@ -39,6 +39,7 @@ const mocks = {
   '../preset-library': loadPureSource('src/preset-library.ts'),
   '../preset-github': loadPureSource('src/preset-github.ts'),
   '../metric-colors': loadPureSource('src/metric-colors.ts'),
+  '../disk-io': loadPureSource('src/disk-io.ts'),
   '../translations': loadPureSource('src/translations.ts'),
   '../display-scope': loadPureSource('src/display-scope.ts'),
   '../tutorial': { openTutorialPdf: async () => {} },
@@ -97,7 +98,7 @@ s.selectGroupMetric(-1);
 assert.equal(s.currentMetric.id, mainId);
 assert.equal(s.currentMetric.command, 'printf 20');
 assert.equal(s.isGroupValid(), true);
-s.saveGroup();
+s.saveGroup(true);
 assert.equal(config.store.plugin.serverStats.metricGroups.length, 1);
 const stored = config.store.plugin.serverStats.metricGroups[0];
 assert.equal(stored.main.id, mainId);
@@ -120,7 +121,7 @@ s.selectGroupMetric(1);
 s.removeChild(0);
 assert.equal(s.currentMetric.id, child1Id);
 assert.equal(s.editingChildIndex, 0);
-s.saveMetric();
+s.saveMetric(true);
 assert.equal(config.store.plugin.serverStats.metricGroups[0].children[0].id, child1Id);
 
 // Reordering singles while editing never updates the wrong metric.
@@ -129,7 +130,7 @@ s.editMetric(0);
 s.currentMetric.label = 'Updated old';
 s.onDragStart(0);
 s.onDrop(1);
-s.saveMetric();
+s.saveMetric(true);
 assert.equal(config.store.plugin.serverStats.customMetrics[1].id, 'old');
 assert.equal(config.store.plugin.serverStats.customMetrics[1].label, 'Updated old');
 assert.equal(config.store.plugin.serverStats.customMetrics[0].label, 'Other');
@@ -226,7 +227,7 @@ test('the first memory override survives a host save/reload and can be restored 
   fixture.editor.editBuiltin('ram');
   fixture.editor.currentMetric.command = 'printf 43';
   fixture.editor.currentMetric.detailCommand = 'printf available';
-  fixture.editor.saveMetric();
+  fixture.editor.saveMetric(true);
   assert.equal(fixture.raw.plugin.serverStats.defaultMetricOverrides.ram.command, 'printf 43');
   const restored = hostSettingsFixture(fixture.snapshot);
   assert.equal(restored.saves, 0, 'Recreating the proxy must not repeat migration');
@@ -237,7 +238,7 @@ test('the first memory override survives a host save/reload and can be restored 
   assert.equal(restored.config.store.plugin.serverStats.defaultMetricOverrides.ram, undefined);
   restored.editor.editBuiltin('ram');
   restored.editor.currentMetric.command = 'printf 44';
-  restored.editor.saveMetric();
+  restored.editor.saveMetric(true);
   assert.equal(restored.snapshot.plugin.serverStats.defaultMetricOverrides.ram.command, 'printf 44');
 });
 
@@ -347,7 +348,7 @@ test('a layout-wide scope respects per-pane exclusions after save and reopen', (
   assert(!editor.isScopeSelected(children[0].id));
   assert(editor.isScopeIndeterminate('layout-a'));
   assert(!editor.isScopeSelected('layout-a'));
-  editor.saveMetric();
+  editor.saveMetric(true);
   editor.editMetric(0);
   assert(!editor.isScopeSelected(children[0].id));
   assert(editor.isScopeSelected(children[1].id));
@@ -425,12 +426,63 @@ test('editing preserves explicit modes and legacy missing check modes retain exi
   assert.equal(editor.currentMetric.type, 'progress');
   assert.equal(editor.currentMetric.checkMode, 'exitCode');
   assert.equal(metric.checkMode, undefined, 'Opening the draft must not rewrite saved config');
-  editor.saveMetric();
+  editor.saveMetric(true);
   assert.equal(config.store.plugin.serverStats.customMetrics[0].checkMode, 'exitCode');
   Object.assign(config.store.plugin.serverStats.customMetrics[0], { checkMode: 'output', checkExpected: 'exists' });
   editor.editMetric(0);
   assert.equal(editor.currentMetric.checkMode, 'output');
   assert.equal(editor.currentMetric.checkExpected, 'exists');
+});
+
+test('Ctrl+S saves the group, collapses only the active member and keeps navigation open', () => {
+  const { config, editor } = scopeFixture();
+  editor.newGroup();
+  Object.assign(editor.currentMetric, { label: 'Main', command: 'printf main' });
+  const main = editor.currentMetric;
+  editor.addChild();
+  Object.assign(editor.currentMetric, { label: 'Child', command: 'printf child' });
+  const child = editor.currentMetric;
+  let prevented = false;
+  editor.onEditorKeydown({ ctrlKey: true, key: 's', preventDefault() { prevented = true; }, stopPropagation() {} });
+  assert(prevented);
+  assert.equal(config.store.plugin.serverStats.metricGroups[0].children[0].command, 'printf child');
+  assert(editor.expandedMembers.has(main.id));
+  assert(!editor.expandedMembers.has(child.id));
+  assert(editor.editorOpen);
+  editor.navigateMember(0);
+  child.command = 'printf updated';
+  editor.activateMetric(main);
+  editor.onEditorKeydown({ ctrlKey: true, key: 'S', preventDefault() {}, stopPropagation() {} });
+  assert(!editor.expandedMembers.has(main.id));
+  assert(editor.expandedMembers.has(child.id));
+  assert.equal(config.store.plugin.serverStats.metricGroups.length, 1, 'Repeated saves do not duplicate new groups');
+  assert.equal(config.store.plugin.serverStats.metricGroups[0].children[0].command, 'printf updated');
+  editor.toggleGroupMetric(0);
+  assert.equal(editor.currentMetric.id, child.id, 'Collapsing a heading also makes that member the shortcut target');
+});
+
+test('navigator closing supports saving, discarding and keeping invalid drafts open', () => {
+  const { config, editor } = scopeFixture();
+  editor.newSingle();
+  editor.requestEditorClose();
+  assert(editor.closePrompt);
+  editor.finishEditorClose(true);
+  assert(editor.editorOpen, 'Invalid drafts cannot be silently discarded by Save and close');
+  Object.assign(editor.currentMetric, { label: 'Single', command: 'printf 1' });
+  editor.finishEditorClose(true);
+  assert(!editor.editorOpen);
+  editor.editMetric(0);
+  editor.currentMetric.command = 'printf lost';
+  editor.requestEditorClose();
+  editor.finishEditorClose(false);
+  assert(!editor.editorOpen);
+  assert.equal(config.store.plugin.serverStats.customMetrics[0].command, 'printf 1');
+  editor.editMetric(0);
+  editor.saveMetric();
+  assert(editor.editorOpen);
+  assert(!editor.singleExpanded);
+  editor.navigateMember();
+  assert(editor.singleExpanded);
 });
 
 test('member accordion collapse and switching preserve drafts, scope and selected metric identity', () => {
@@ -445,14 +497,15 @@ test('member accordion collapse and switching preserve drafts, scope and selecte
   editor.toggleGroupMetric(0);
   assert.equal(editor.expandedMemberId, null);
   assert.equal(editor.currentMetric.id, childId);
-  editor.toggleGroupMetric(-1);
+  assert(editor.expandedMembers.has(mainId), 'Opening a child does not close the main');
+  editor.selectGroupMetric(-1);
   assert.equal(editor.expandedMemberId, mainId);
   assert.equal(editor.currentMetric.command, 'printf main');
   editor.toggleGroupMetric(0);
   assert.equal(editor.expandedMemberId, childId);
   assert.equal(editor.currentMetric.detailCommand, 'printf details');
   assert.equal(editor.isScopeSelected('ssh:p1'), true);
-  editor.saveGroup();
+  editor.saveGroup(true);
   editor.editGroup(0);
   assert.equal(editor.currentGroup.children[0].id, childId);
   assert.equal(editor.currentGroup.children[0].detailCommand, 'printf details');
@@ -480,12 +533,12 @@ test('reordering a collapsed child keeps its draft identity and the editor colla
   assert.equal(editor.expandedMemberId, editor.currentGroup.main.id);
 });
 
-test('group pencil editing starts collapsed and repeat clicks collapse members without discarding drafts', () => {
+test('group pencil editing starts collapsed and repeat clicks preserve open members and drafts', () => {
   const { config, editor } = scopeFixture();
   editor.newGroup();
   Object.assign(editor.currentMetric, { label: 'Main', command: 'printf main' });
   editor.currentGroup.label = 'Stored';
-  editor.saveGroup();
+  editor.saveGroup(true);
   editor.editGroup(0);
   assert.equal(editor.expandedMemberId, null);
   editor.toggleGroupMetric(-1);
@@ -494,7 +547,7 @@ test('group pencil editing starts collapsed and repeat clicks collapse members w
   editor.currentMetric.command = 'printf edited';
   editor.iconPickerOpen = true;
   editor.editGroup(0);
-  assert.equal(editor.expandedMemberId, null);
+  assert.equal(editor.expandedMemberId, editor.currentGroup.main.id);
   assert.equal(editor.iconPickerOpen, false);
   assert.equal(config.store.plugin.serverStats.metricGroups[0].label, 'Stored');
   assert.equal(editor.currentGroup.label, 'Draft');
@@ -577,7 +630,8 @@ test('child deletion requires a named confirmation, cancellation preserves its d
       editor.removeChild(1);
       assert.equal(messages.length, 1);
       assert.match(messages[0], language === 'en' ? /Delete this child metric\?/ : /删除此子标签/);
-      assert.ok(messages[0].endsWith('\n\nData disk draft'));
+      assert.ok(messages[0].endsWith(' / Data disk draft'));
+      assert.ok(messages[0].includes(editor.currentGroup.label));
     });
     assert.equal(editor.currentMetric, selected);
     assert.equal(editor.expandedMemberId, 'child-0-1');
@@ -592,7 +646,7 @@ test('child deletion requires a named confirmation, cancellation preserves its d
     assert.equal(editor.currentMetric.id, 'main-0', 'Deleting the active child returns to its main metric');
     assert.equal(config.store.plugin.serverStats.metricGroups[0].children.length, 2);
     assert.equal(saveCalls, 0, 'Confirming child removal edits only the pending group draft');
-    editor.saveGroup();
+    editor.saveGroup(true);
     assert.equal(config.store.plugin.serverStats.metricGroups[0].children.length, 1);
     assert.equal(config.store.plugin.serverStats.metricGroups[1].children.length, 2);
     assert.equal(saveCalls, 1);
@@ -676,7 +730,7 @@ test('new single form starts hidden and closes after cancel/save or switching to
   editor.newSingle();
   assert.notEqual(editor.currentMetric.label, 'Discard');
   Object.assign(editor.currentMetric, { label: 'Added', command: 'printf 1' });
-  editor.saveMetric();
+  editor.saveMetric(true);
   assert.equal(editor.newSingleOpen, false);
   assert.equal(config.store.plugin.serverStats.customMetrics.length, 2);
   assert.equal(config.store.plugin.serverStats.customMetrics[1].type, 'text');
@@ -744,7 +798,7 @@ test('enable toggles preserve command/rules and group members remain drafts unti
   Object.assign(editor.currentMetric, { label: 'Main', command: 'printf 1' });
   editor.addChild();
   Object.assign(editor.currentMetric, { label: 'Child', command: 'printf 2' });
-  editor.saveGroup();
+  editor.saveGroup(true);
   editor.toggleGroupEnabled(0);
   const group = config.store.plugin.serverStats.metricGroups[0];
   assert.equal(group.enabled, false);
@@ -752,9 +806,55 @@ test('enable toggles preserve command/rules and group members remain drafts unti
   editor.editGroup(0);
   editor.toggleMemberEnabled(editor.currentGroup.children[0]);
   assert.notEqual(group.children[0].enabled, false);
-  editor.saveGroup();
+  editor.saveGroup(true);
   assert.equal(config.store.plugin.serverStats.metricGroups[0].children[0].enabled, false);
   assert.equal(config.store.plugin.serverStats.metricGroups[0].enabled, false);
+});
+
+test('saving a disk I/O label preserves its value protocol and percentage color rules', () => {
+  const { config, editor } = scopeFixture();
+  const metric = config.store.plugin.serverStats.customMetrics[0];
+  Object.assign(metric, { valueFormat: 'disk-io-rate', suffix: 'MB/s', command: 'printf TABBY-IO:3.00:96.00',
+    colorRules: [{ operator: '>=', value: '95', color: '#ff0000' }, { operator: '>=', value: '80', color: '#ffa500' }] });
+  editor.editMetric(0);
+  assert.equal(editor.currentMetric.valueFormat, 'disk-io-rate');
+  editor.currentMetric.label = 'Read/write';
+  editor.currentMetric.colorRules[1].value = '75';
+  assert.equal(metric.colorRules[1].value, '80', 'Rule editing stays in the draft');
+  editor.saveMetric(true);
+  const stored = config.store.plugin.serverStats.customMetrics[0];
+  assert.equal(stored.valueFormat, 'disk-io-rate');
+  assert.equal(stored.suffix, 'MB/s');
+  assert.equal(stored.command, 'printf TABBY-IO:3.00:96.00');
+  assert.equal(stored.colorRules[1].value, '75');
+  editor.editMetric(0);
+  assert.equal(editor.currentMetric.valueFormat, 'disk-io-rate');
+  assert.equal(editor.currentMetric.colorRules[1].value, '75');
+});
+
+test('group editing and child reordering retain disk I/O protocol metadata on the right members', () => {
+  const { config, editor } = scopeFixture();
+  editor.newGroup();
+  Object.assign(editor.currentMetric, { label: 'Total I/O', valueFormat: 'disk-io-rate', suffix: 'MB/s', command: 'printf TABBY-IO:50:80' });
+  const mainId = editor.currentMetric.id;
+  editor.addChild();
+  Object.assign(editor.currentMetric, { label: '/data', valueFormat: 'disk-io-rate', suffix: 'MB/s', command: 'printf TABBY-IO:50:80' });
+  const ioId = editor.currentMetric.id;
+  editor.addChild();
+  Object.assign(editor.currentMetric, { label: 'Ordinary', command: 'printf 50' });
+  const ordinaryId = editor.currentMetric.id;
+  editor.moveChild(1, -1);
+  editor.saveGroup(true);
+  const stored = config.store.plugin.serverStats.metricGroups[0];
+  assert.equal(stored.main.id, mainId);
+  assert.equal(stored.main.valueFormat, 'disk-io-rate');
+  assert.equal(stored.children[0].id, ordinaryId);
+  assert.equal(stored.children[0].valueFormat, undefined);
+  assert.equal(stored.children[1].id, ioId);
+  assert.equal(stored.children[1].valueFormat, 'disk-io-rate');
+  editor.editGroup(0);
+  editor.selectGroupMetric(1);
+  assert.equal(editor.currentMetric.valueFormat, 'disk-io-rate');
 });
 
 test('hiding a failed child disables carousel participation without changing its check', () => {
@@ -785,14 +885,14 @@ test('built-in editing is a draft and restoring one item preserves other overrid
   editor.editBuiltin('ram');
   assert.equal(editor.currentMetric.command, original);
   editor.currentMetric.command = 'printf 8';
-  editor.saveMetric();
+  editor.saveMetric(true);
   assert.equal(conf.defaultMetricOverrides.ram.command, 'printf 8');
   assert.equal(conf.defaultMetrics.ram, false);
   assert.equal(conf.customMetrics.length, 1);
   editor.editBuiltin('load');
   editor.selectGroupMetric(-1);
   editor.currentMetric.command = 'printf 9';
-  editor.saveMetric();
+  editor.saveMetric(true);
   editor.restoreBuiltin('ram');
   assert.equal(conf.defaultMetricOverrides.ram, undefined);
   assert.equal(conf.defaultMetricOverrides.load.main.command, 'printf 9');
@@ -807,7 +907,7 @@ test('built-in network group saves overrides independently of custom groups', ()
   editor.selectGroupMetric(0);
   editor.currentMetric.command = 'printf 12';
   editor.currentMetric.color = '#ff1122';
-  editor.saveGroup();
+  editor.saveGroup(true);
   const conf = config.store.plugin.serverStats;
   assert.equal(conf.defaultMetricOverrides.net.children[0].command, 'printf 12');
   assert.equal(conf.defaultMetricOverrides.net.children[0].color, '#ff1122');
@@ -940,7 +1040,7 @@ test('bilingual preset metadata survives editing and export while user renames r
   assert.equal(editor.metricGroups[0].label, 'GPU memory');
   editor.editGroup(0);
   editor.currentMetric.command = 'printf 20';
-  editor.saveGroup();
+  editor.saveGroup(true);
   const exported = JSON.parse(editor.currentPresetLibrary()).find(entry => entry.kind === 'group');
   assert.deepEqual(exported.labels, preset.labels);
   assert.deepEqual(exported.descriptions, preset.descriptions);
@@ -956,7 +1056,7 @@ test('bilingual preset metadata survives editing and export while user renames r
   assert.equal(editor.metricGroups[0].label, 'GPU 显存');
   editor.editGroup(0);
   editor.currentGroup.label = 'My custom GPU';
-  editor.saveGroup();
+  editor.saveGroup(true);
   const renamed = JSON.parse(editor.currentPresetLibrary()).find(entry => entry.label === 'My custom GPU');
   assert.equal(renamed.labels, undefined);
   config.store.plugin.serverStats.metricGroups = [];
@@ -986,7 +1086,7 @@ test('scope: multi-selection is a draft, persists by ID, and all/selected toggle
   editor.setScopeMode('selected');
   assert.equal(editor.isScopeSelected('ssh:p1'), true);
   assert.equal(editor.isScopeSelected('layout:mixed'), true);
-  editor.saveMetric();
+  editor.saveMetric(true);
   const scope = config.store.plugin.serverStats.customMetrics[0].displayScope;
   assert.equal(scope.mode, 'selected');
   assert.equal(scope.profileIds.join(','), 'ssh:p1,layout:mixed');
@@ -1010,7 +1110,7 @@ test('scope: group scope stays shared when switching member editors and survives
   assert.equal(editor.currentMetric.displayScope, undefined);
   editor.selectGroupMetric(-1);
   assert.equal(editor.isScopeSelected('ssh:p2'), true);
-  editor.saveGroup();
+  editor.saveGroup(true);
   const group = config.store.plugin.serverStats.metricGroups[0];
   assert.equal(group.displayScope.profileIds.join(','), 'ssh:p1,ssh:p2');
   assert.equal(group.main.displayScope, undefined);
@@ -1028,7 +1128,7 @@ test('scope: removing the last target preserves selected-empty rather than becom
   editor.setScopeMode('selected');
   editor.toggleScopeProfile('ssh:p1', true);
   editor.removeScopeProfile('ssh:p1');
-  editor.saveMetric();
+  editor.saveMetric(true);
   assert.equal(config.store.plugin.serverStats.customMetrics[0].displayScope.mode, 'selected');
   assert.equal(config.store.plugin.serverStats.customMetrics[0].displayScope.profileIds.length, 0);
   editor.editMetric(0);
@@ -1039,7 +1139,7 @@ test('scope: deleted target names are retained and a new same-name ID never beco
   const { config, editor } = scopeFixture();
   editor.editMetric(0);
   editor.toggleScopeProfile('ssh:p1', true);
-  editor.saveMetric();
+  editor.saveMetric(true);
   config.store.profiles = [{ id: 'ssh:replacement', name: 'P1', type: 'ssh' }];
   editor.editMetric(0);
   assert.equal(editor.hasMissingScopeProfiles, true);
@@ -1047,7 +1147,7 @@ test('scope: deleted target names are retained and a new same-name ID never beco
   assert.equal(editor.scopeSelectedProfiles[0].name, 'P1');
   assert.equal(editor.scopeSelectedProfiles[0].missing, true);
   assert.equal(editor.isScopeSelected('ssh:replacement'), false);
-  editor.saveMetric();
+  editor.saveMetric(true);
   const scope = config.store.plugin.serverStats.customMetrics[0].displayScope;
   assert.equal(scope.mode, 'selected');
   assert.equal(scope.profileIds.join(','), 'ssh:p1');
@@ -1058,7 +1158,7 @@ test('scope: rename follows stable ID and searching is independent of saved sele
   const { config, editor } = scopeFixture();
   editor.editMetric(0);
   editor.toggleScopeProfile('ssh:p2', true);
-  editor.saveMetric();
+  editor.saveMetric(true);
   config.store.profiles[1].name = 'Production';
   editor.editMetric(0);
   assert.equal(editor.scopeSelectedProfiles[0].name, 'Production');
@@ -1068,7 +1168,7 @@ test('scope: rename follows stable ID and searching is independent of saved sele
   editor.scopeSearch = 'nothing';
   assert.equal(editor.scopeChoices.length, 0);
   assert.equal(editor.scopeSelectedProfiles.length, 1);
-  editor.saveMetric();
+  editor.saveMetric(true);
   assert.equal(config.store.plugin.serverStats.customMetrics[0].displayScope.profileNames['ssh:p2'], 'Production');
 });
 
@@ -1122,7 +1222,7 @@ test('child duplication is an isolated draft until saving its group', () => {
   Object.assign(editor.currentGroup.main, { label: 'Total', command: 'printf 1' });
   editor.addChild();
   Object.assign(editor.currentMetric, { label: '/data', command: 'printf 2', checkCommand: 'mountpoint -q /data', detailCommand: 'printf 2/3', colorRules: [{ operator: '<', value: '20', color: '#ff0000' }] });
-  editor.saveGroup();
+  editor.saveGroup(true);
   editor.editGroup(0);
   editor.copyChild(0);
   assert.equal(config.store.plugin.serverStats.metricGroups[0].children.length, 1);
@@ -1131,7 +1231,7 @@ test('child duplication is an isolated draft until saving its group', () => {
   assert.notEqual(editor.currentMetric.id, editor.currentGroup.children[0].id);
   editor.currentMetric.colorRules[0].value = '40';
   assert.equal(editor.currentGroup.children[0].colorRules[0].value, '20');
-  editor.saveGroup();
+  editor.saveGroup(true);
   assert.equal(config.store.plugin.serverStats.metricGroups[0].children.length, 2);
 });
 

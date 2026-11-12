@@ -4,6 +4,9 @@ import { CustomMetric, CustomMetricGroup, MetricStatus, allMetrics, metricTimeou
 import { filterScopedMetrics, ScopeContext } from '../display-scope'
 import { MetricScopeService, PaneGroupMode } from './metric-scope.service'
 import { getBuiltinDefinitions, migrateLegacyBuiltinConfig } from '../builtin-metrics'
+import { parseDiskIoValue } from '../disk-io-value'
+import { collectionConfigSignature } from '../collection-config'
+import { migrateDiskIoChecks } from '../disk-io'
 import { exec } from 'child_process'
 import { Subject } from 'rxjs'
 import * as fs from 'fs'
@@ -36,6 +39,7 @@ interface MetricState {
     lastAttempt: number
     lastSuccess: number
     value: string
+    colorValue?: number
     isFetching: boolean
     status: MetricStatus
     detail: string
@@ -45,6 +49,7 @@ interface MetricState {
 interface SessionCache {
     scopeSignature: string
     metricStates: Map<string, MetricState>
+    availability: Map<string, boolean>
 }
 
 // Limit bursts of shell processes when a large group becomes due together.
@@ -60,12 +65,17 @@ export class StatsService {
     private sessionKeys = new WeakMap<object, string>();
     private nextSessionId = 0;
     private revision = 0;
+    private availability = new WeakMap<object, { scopeSignature: string; values: Map<string, boolean> }>();
     public statsUpdated$ = new Subject<{ serverKey: string; stats: any }>();
 
     constructor(private config: ConfigService, private scopes: MetricScopeService = null) {
         this.updateDebugState();
+        let collectionSignature = collectionConfigSignature(this.config.store);
         this.config.changed$.subscribe(() => {
             this.updateDebugState();
+            const nextSignature = collectionConfigSignature(this.config.store);
+            if (nextSignature === collectionSignature) return;
+            collectionSignature = nextSignature;
             this.revision++;
             this.serverCaches.clear();
             this.fetchTasks.clear();
@@ -73,7 +83,10 @@ export class StatsService {
         });
         this.config.ready$.subscribe(() => {
             const conf = this.config?.store?.plugin?.serverStats;
-            if (conf && migrateLegacyBuiltinConfig(conf)) this.config.save();
+            if (conf) {
+                const legacyChanged = migrateLegacyBuiltinConfig(conf);
+                if (migrateDiskIoChecks(conf) || legacyChanged) this.config.save();
+            }
             this.updateDebugState();
         });
     }
@@ -113,6 +126,11 @@ export class StatsService {
         this.scopes?.setPaneGroupMode?.(session, mode);
     }
 
+    public getPaneIconCorner(session: any): string { return this.scopes?.getPaneIconCorner?.(session) || 'bottom-right'; }
+    public getPaneAlignment(session: any): string { return this.scopes?.getPaneAlignment?.(session) || 'top'; }
+    public setPaneAlignment(session: any, alignment: string): void { this.scopes?.setPaneAlignment?.(session, alignment); }
+    public setPaneIconCorner(session: any, corner: string): void { this.scopes?.setPaneIconCorner?.(session, corner); }
+
     /** Disabled/out-of-scope commands never run. Unavailable items still refresh to detect recovery. */
     public getVisibleConfig(session: any): { customMetrics: CustomMetric[]; metricGroups: CustomMetricGroup[] } {
         const conf = this.config?.store?.plugin?.serverStats || {};
@@ -149,9 +167,18 @@ export class StatsService {
             cache = undefined;
         }
         if (!cache) {
+            const visibilityScope = JSON.stringify([...new Set(this.scopeContext(session).profileIds)].sort());
+            let previous = this.availability.get(session);
+            if (!previous || previous.scopeSignature !== visibilityScope) {
+                previous = { scopeSignature: visibilityScope, values: new Map() };
+                this.availability.set(session, previous);
+            }
+            const ids = new Set(allMetrics(this.getVisibleConfig(session)).map(metric => metric.id));
+            for (const id of previous.values.keys()) if (!ids.has(id)) previous.values.delete(id);
             cache = {
                 scopeSignature,
-                metricStates: new Map<string, MetricState>()
+                metricStates: new Map<string, MetricState>(),
+                availability: previous.values,
             };
             this.serverCaches.set(key, cache);
         }
@@ -173,7 +200,10 @@ export class StatsService {
             netRx: numeric('builtin-net-rx') * 1024, netTx: numeric('builtin-net-tx') * 1024,
             custom: metrics.map(metric => {
                 const state = cache.metricStates.get(metric.id);
-                return { id: metric.id, value: state?.value ?? '-', status: state?.status ?? 'pending' };
+                return { id: metric.id, value: state?.value ?? '-', status: state?.status ?? 'pending',
+                    ...(metric.visibleWhenUnavailable === false || metric.showWhenUnavailable === false ?
+                        { available: cache.availability.get(metric.id) ?? false } : {}),
+                    ...(state?.colorValue !== undefined ? { colorValue: state.colorValue } : {}) };
             })
         };
     }
@@ -253,20 +283,31 @@ export class StatsService {
         }
     }
 
-    private async collectStats(session: any): Promise<any | null> {
+    /** Refresh only the hovered labels, without queuing behind unrelated value batches. */
+    async fetchHoveredStats(session: any, metrics: CustomMetric[], force = false): Promise<any | null> {
+        if (!this.isPlatformSupport(session) || !this.isPaneVisible(session)) return null;
+        return this.collectStats(session, new Set(metrics.map(metric => metric.id)), force);
+    }
+
+    private async collectStats(session: any, hoveredIds?: Set<string>, force = false): Promise<any | null> {
         const cache = this.getSessionCache(session);
         const revision = this.revision;
         const now = Date.now();
         const conf = this.config?.store?.plugin?.serverStats || {};
         const defaultInterval = Number.isFinite(conf.defaultInterval) && conf.defaultInterval > 0 ? conf.defaultInterval : 10;
         const due = allMetrics(this.getVisibleConfig(session)).filter(metric => {
+            if (hoveredIds && !hoveredIds.has(metric.id)) return false;
             const state = this.getState(cache, metric);
             const interval = Number.isFinite(metric.interval) && metric.interval! > 0 ? metric.interval! : defaultInterval;
             // Absent optional objects (for example unused GPU slots) still recover,
             // but need not launch a failing probe every normal refresh cycle.
-            const retryInterval = state.status === 'unavailable' && metric.visibleWhenUnavailable === false ? Math.max(60, interval) : interval;
+            const hiddenUnavailable = metric.visibleWhenUnavailable === false && cache.availability.get(metric.id) !== true;
+            // Entry may retry a hidden object once. Continued hover only speeds
+            // up visible readings; background polling retains its normal backoff.
+            if (hoveredIds && hiddenUnavailable && !force) return false;
+            const retryInterval = hiddenUnavailable ? Math.max(60, interval) : hoveredIds ? Math.min(1, interval) : interval;
             return !state.isFetching && !this.detailTasks.has(`${this.getServerKey(session)}:${metric.id}`) &&
-                (state.lastAttempt === 0 || now - state.lastAttempt >= Math.max(1, retryInterval) * 1000);
+                (state.lastAttempt === 0 || force || now - state.lastAttempt >= Math.max(1, retryInterval) * 1000);
         });
         if (!due.length) return this.snapshot(cache, session);
         logDebug(`[collect] ${this.getServerKey(session)}, metrics=${due.length}`);
@@ -289,9 +330,18 @@ export class StatsService {
                 // while an unrelated slower sibling keeps the batch channel open.
                 state.isFetching = false;
                 state.status = result.status;
+                // Only a completed protocol frame decides availability. Pending
+                // work and transport failures retain the previous decision.
+                cache.availability.set(metric.id, result.status !== 'unavailable');
                 state.value = result.status === 'unavailable' ? (metric.unavailableText ?? 'Unavailable') : result.value;
-                logDebug(`[metric] ${metric.id}: ${result.status}`);
-                if (result.status === 'ok') state.lastSuccess = Date.now();
+                state.colorValue = undefined;
+                if (metric.valueFormat === 'disk-io-rate' && result.status === 'ok') {
+                    const parsed = parseDiskIoValue(result.value);
+                    if (parsed) { state.value = parsed.value; state.colorValue = parsed.colorValue; }
+                    else { state.status = 'error'; state.value = 'Err: Invalid I/O result'; }
+                }
+                logDebug(`[metric] ${metric.id}: ${state.status}`);
+                if (state.status === 'ok') state.lastSuccess = Date.now();
                 else { state.detail = ''; state.detailAt = 0; }
                 changed = true;
             }
@@ -307,6 +357,7 @@ export class StatsService {
                     if (!consumed.has(token)) {
                         const state = this.getState(cache, metric);
                         state.status = 'error'; state.value = 'Err: No result'; state.detail = ''; state.detailAt = 0;
+                        state.colorValue = undefined;
                     }
                 });
             }
@@ -318,12 +369,17 @@ export class StatsService {
                         const state = this.getState(cache, metric);
                         state.status = 'error';
                         state.value = this.executionErrorValue(error);
+                        state.colorValue = undefined;
                         state.detail = ''; state.detailAt = 0;
                     }
                 });
             }
         } finally {
-            due.forEach(metric => { this.getState(cache, metric).isFetching = false; });
+            // Streamed metrics may already belong to a newer hover request. Only
+            // unfinished metrics still own their locks when this batch closes.
+            tokens.forEach((metric, token) => {
+                if (!consumed.has(token)) this.getState(cache, metric).isFetching = false;
+            });
             this.publish(session, cache, revision);
         }
         return this.isCurrent(session, cache, revision) ? this.snapshot(cache, session) : null;
@@ -345,9 +401,9 @@ export class StatsService {
         return { script: parts.join('\n'), timeout: Math.max(15, seconds) * 1000 };
     }
 
-    /** Hover details share the metric's refresh interval and deduplicate in-flight requests. */
-    async fetchDetails(session: any, metrics: CustomMetric[]): Promise<Record<string, string>> {
-        if (!this.isPlatformSupport(session)) return {};
+    /** Details normally share the metric interval; active hover can request a shorter cache age. */
+    async fetchDetails(session: any, metrics: CustomMetric[], options: { force?: boolean; maxAgeMs?: number; skipPending?: boolean } = {}): Promise<Record<string, string>> {
+        if (!this.isPlatformSupport(session) || !this.isPaneVisible(session)) return {};
         const key = this.getServerKey(session);
         const revision = this.revision;
         const cache = this.getSessionCache(session);
@@ -361,8 +417,8 @@ export class StatsService {
             const state = cache.metricStates.get(metric.id);
             return !state || state.isFetching || state.status === 'pending';
         });
-        if (active && waitingForRequestedMetric) await active;
-        if (!this.isCurrent(session, cache, revision)) return {};
+        if (!options.skipPending && active && waitingForRequestedMetric) await active;
+        if (!this.isCurrent(session, cache, revision) || !this.isPaneVisible(session)) return {};
         const results: Record<string, string> = {};
         const requested = [...new Map(metrics.map(metric => [metric.id, metric])).values()];
         const fresh: CustomMetric[] = [];
@@ -370,12 +426,16 @@ export class StatsService {
         for (const input of requested) {
             const metric = current.get(input.id);
             if (!metric?.detailCommand?.trim()) continue;
+            const existing = cache.metricStates.get(metric.id);
+            if (existing?.isFetching || (options.skipPending && (!existing || existing.status === 'pending'))) continue;
             const state = this.getState(cache, metric);
             if (state.status === 'unavailable' || state.status === 'error') { results[metric.id] = ''; continue; }
             const configuredDefault = this.config?.store?.plugin?.serverStats?.defaultInterval;
             const defaultInterval = Number.isFinite(configuredDefault) && configuredDefault > 0 ? configuredDefault : 10;
             const interval = Number.isFinite(metric.interval) && metric.interval! > 0 ? metric.interval! : defaultInterval;
-            if (state.detailAt && Date.now() - state.detailAt < Math.max(1, interval) * 1000) { results[metric.id] = state.detail; continue; }
+            const normalAgeMs = Math.max(1, interval) * 1000;
+            const maxAgeMs = Number.isFinite(options.maxAgeMs) && options.maxAgeMs! >= 0 ? Math.min(normalAgeMs, options.maxAgeMs!) : normalAgeMs;
+            if (!options.force && state.detailAt && Date.now() - state.detailAt < maxAgeMs) { results[metric.id] = state.detail; continue; }
             const taskKey = `${key}:${metric.id}`;
             const task = this.detailTasks.get(taskKey);
             if (task) pending.set(metric.id, task);
@@ -408,7 +468,9 @@ export class StatsService {
                 if (!metric || Object.prototype.hasOwnProperty.call(results, metric.id)) continue;
                 const state = this.getState(cache, metric);
                 if (result.status === 'unavailable') {
+                    cache.availability.set(metric.id, false);
                     state.status = 'unavailable'; state.value = metric.unavailableText ?? 'Unavailable';
+                    state.colorValue = undefined;
                     state.detail = ''; state.detailAt = 0;
                     this.publish(session, cache, revision);
                 } else {

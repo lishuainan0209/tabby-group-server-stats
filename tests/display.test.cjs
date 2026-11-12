@@ -124,7 +124,12 @@ test('global unavailable visibility affects singles, static rows and popup rows 
     assert.equal(api.metricIsVisible(hidden, results), false)
     assert.equal(api.metricIsVisible({ ...hidden, showWhenUnavailable: true }, results), false)
     assert.equal(api.metricIsVisible(hidden, [{ id: hidden.id, status: 'error', value: 'Err: Timeout' }]), true)
-    assert.equal(api.metricIsVisible(hidden, [{ id: hidden.id, status: 'pending', value: '-' }]), true)
+    assert.equal(api.metricIsVisible(hidden, [{ id: hidden.id, status: 'pending', value: '-' }]), false)
+    assert.equal(api.metricIsVisible(hidden, []), false)
+    for (const available of [true, false]) {
+        assert.equal(api.metricIsVisible(hidden, [{ id: hidden.id, status: 'pending', value: '-', available }]), available)
+        assert.equal(api.metricIsVisible(hidden, [{ id: hidden.id, status: 'error', value: 'Err: Connection', available }]), available)
+    }
     for (const mode of ['overview', 'static', 'carousel']) {
         const value = { main: hidden, children: [metrics[0], hidden, metrics[2]], mode }
         assert.equal(api.visibleGroupMetrics(value, results).map(m => m.id).join(','), 'a,c')
@@ -136,6 +141,12 @@ test('carousel-only visibility remains independent of popup/static visibility', 
     const value = { main: metrics[0], children: [child] }
     assert.equal(api.visibleGroupMetrics(value, results).map(m => m.id).join(','), 'a,b')
     assert.equal(api.carouselChildren(value, results).length, 0)
+    for (const available of [true, false]) {
+        const pending = [{ id: child.id, value: '-', status: 'pending', available }]
+        assert.equal(api.metricIsVisible(child, pending), true)
+        assert.equal(api.carouselChildren(value, pending).length, available ? 1 : 0)
+    }
+    assert.equal(api.carouselChildren(value, []).length, 0)
 })
 test('disabled main, child and group never display or occupy carousel turns', () => {
     const value = { main: { ...metrics[0], enabled: false }, children: [{ ...metrics[1], enabled: false }, metrics[2], metrics[3]] }

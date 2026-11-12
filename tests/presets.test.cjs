@@ -265,8 +265,8 @@ test('portable profile bindings resolve locally and never become global when mis
 test('shared library removes local binding IDs and keeps the offline single/group inventory', () => {
     const presets = getBundledPresets()
     assert.equal(presets.filter(p => p.kind === 'metric').length, 13)
-    assert.equal(presets.filter(p => p.kind === 'group').length, 21)
-    assert.equal(new Set(presets.map(p => p.id)).size, 34)
+    assert.equal(presets.filter(p => p.kind === 'group').length, 24)
+    assert.equal(new Set(presets.map(p => p.id)).size, 37)
     const host = presets.find(p => p.label === 'P1磁盘')
     const container = presets.find(p => p.label === 'P1容器磁盘')
     assert.deepEqual(host.profileNames, ['P1(ai)'])
@@ -280,7 +280,7 @@ test('shared library removes local binding IDs and keeps the offline single/grou
     const profiles = [{ id: 'host', name: 'P1(ai)' }, { id: 'container', name: 'P1(s_lsn)' }]
     assert.deepEqual(instantiatePreset(host, profiles).metricGroups[0].displayScope.profileIds, ['host'])
     assert.deepEqual(instantiatePreset(container, profiles).metricGroups[0].displayScope.profileIds, ['container'])
-    assert.deepEqual(presets.find(p => p.label === 'P3磁盘').group.children.map(m => m.label), ['系统盘', '/data', '/data2'])
+    assert.deepEqual(presets.find(p => p.label === 'P3磁盘').group.children.map(m => m.label), ['系统盘', '/data', '/data2', '/data3', '/data4'])
     const source = createGpuGroupPreset()
     source.group.displayScope = { mode: 'selected', profileIds: ['private-local-id'], profileNames: { 'private-local-id': 'My profile' } }
     source.group.children[0].displayScope = { mode: 'selected', profileIds: ['private-child-id'] }
@@ -289,6 +289,64 @@ test('shared library removes local binding IDs and keeps the offline single/grou
     assert.deepEqual(JSON.parse(shared)[0].profileNames, ['My profile'])
     assert.equal(normalizePresetLibrary([{ command: 'printf 1', label: 'Legacy' }])[0].metric.type, 'text')
     assert.throws(() => normalizePresetLibrary({ invalid: true }))
+})
+
+test('expanded disk capacity presets include optional mounts without changing existing failure notices', () => {
+    const presets = getBundledPresets()
+    const definitions = [
+        ...['P0磁盘', 'P2磁盘'].map(name => [name,
+            ['/data', '/data2', '/data3', '/data4'],
+            ['/data2', '/data3', '/data4']]),
+        ['P3磁盘', ['/data', '/data2', '/data3', '/data4'], ['/data3', '/data4']],
+        ['P4磁盘', ['/data', ...Array.from({ length: 11 }, (_, index) => `/data${index + 2}`)], Array.from({ length: 11 }, (_, index) => `/data${index + 2}`)],
+        ['NAS磁盘', ['/volume1', '/volume2', '/volume3', '/volume4'], ['/volume1', '/volume2', '/volume3', '/volume4']],
+    ]
+    for (const [name, paths, optional] of definitions) {
+        const free = presets.find(preset => preset.id === `disks-${name}`)
+        const used = presets.find(preset => preset.id === `disks-${name}-used`)
+        assert.deepEqual(used, JSON.parse(JSON.stringify(createDiskUsagePreset(free))))
+        for (const preset of [free, used]) {
+            assert.deepEqual(preset.group.children.map(metric => metric.label), ['系统盘', ...paths])
+            assert.equal(preset.group.main.visibleWhenUnavailable, true)
+            assert.equal(preset.group.displayScope.mode, 'selected')
+            for (const child of preset.group.children) {
+                assert.equal(child.visibleWhenUnavailable, !optional.includes(child.label), `${preset.id}: ${child.label}`)
+                assert.equal(child.showWhenUnavailable, !optional.includes(child.label), `${preset.id}: ${child.label}`)
+                if (optional.includes(child.label)) {
+                    assert.notEqual(run(child.checkCommand, 'mountpoint() { return 1; }').status, 0)
+                    assert.equal(run(child.checkCommand, 'mountpoint() { return 0; }').status, 0)
+                }
+            }
+            for (const mount of paths) {
+                assert(preset.group.main.command.includes(`'${mount}'`))
+                assert(preset.group.main.detailCommand.includes(`'${mount}'`))
+            }
+        }
+    }
+    const nas = presets.find(preset => preset.id === 'disks-NAS磁盘')
+    assert.deepEqual(nas.profileNames, ['NAS'])
+    assert.equal(nas.audience, undefined)
+    assert.doesNotMatch(nas.description, /实验室自用/)
+    assert.deepEqual(instantiatePreset(nas, [{ id: 'personal-nas', name: 'NAS' }]).metricGroups[0].displayScope.profileIds, ['personal-nas'])
+    assert.deepEqual(instantiatePreset(nas, []).metricGroups[0].displayScope.profileIds, [])
+})
+
+test('a newly mounted optional disk joins both capacity totals and disappears cleanly when absent', () => {
+    const presets = getBundledPresets()
+    const fake = `mountpoint() { [ "$3" = /data3 ] && [ "$EXTRA_ONLINE" = 1 ]; }
+stat() { case "$4" in /) echo 1;; /data3) echo 2;; *) return 1;; esac; }
+df() { printf 'Filesystem 1024-blocks Used Available Capacity Mounted\\n'; case "$3" in
+    /) printf '/dev/root 104857600 52428800 52428800 50%% /\\n';;
+    /data3) printf '/dev/extra 209715200 41943040 157286400 22%% /data3\\n';;
+    *) return 1;; esac; }`
+    const free = presets.find(preset => preset.id === 'disks-P3磁盘').group.main
+    const used = presets.find(preset => preset.id === 'disks-P3磁盘-used').group.main
+    assert.equal(run(free.command, fake).stdout.trim(), '50')
+    assert.equal(run(free.detailCommand, fake).stdout.trim(), '50.0/100.0 GB')
+    assert.equal(run(free.command, fake, { EXTRA_ONLINE: '1' }).stdout.trim(), '200')
+    assert.equal(run(free.detailCommand, fake, { EXTRA_ONLINE: '1' }).stdout.trim(), '200.0/300.0 GB')
+    assert.equal(run(used.command, fake, { EXTRA_ONLINE: '1' }).stdout.trim(), '30')
+    assert.equal(run(used.detailCommand, fake, { EXTRA_ONLINE: '1' }).stdout.trim(), '90.0/300.0 GB')
 })
 
 test('preset origin prevents repeated installation after rename, disable and rule or scope edits', () => {

@@ -1,4 +1,4 @@
-import { Component, Injectable, HostListener } from '@angular/core'
+import { Component, Injectable, HostListener, ViewChild, ElementRef, AfterViewInit, AfterViewChecked, OnDestroy } from '@angular/core'
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser'
 import { ConfigService, PlatformService, TranslateService } from 'tabby-core'
 import { SettingsTabProvider } from 'tabby-settings'
@@ -6,17 +6,18 @@ import { BuiltinMetricKey, getBuiltinDefinition, normalizeBuiltinOrder, migrateL
 import { MetricPreset, getBundledPresets, normalizePresetLibrary, instantiatePreset, exportPresetLibrary, findInstalledPreset } from '../preset-library'
 import { DEFAULT_GITHUB_PRESETS_URL, fetchGitHubPresets, PresetGitHubError } from '../preset-github'
 import { METRIC_COLORS } from '../metric-colors'
+import { migrateDiskIoChecks } from '../disk-io'
 import { TRANSLATIONS } from '../translations'
 import { getLayoutPaneTargets, layoutPaneTargetName } from '../display-scope'
 import { openTutorialPdf } from '../tutorial'
-import { 
+import {
     CustomMetric,
     CustomMetricGroup,
     DisplayScope,
-    ColorCondition, 
-    formatFontAwesomeIcon, 
-    getSvgPresetPath, 
-    isUrlOrDataUri, 
+    ColorCondition,
+    formatFontAwesomeIcon,
+    getSvgPresetPath,
+    isUrlOrDataUri,
     isFaIcon,
     POPULAR_ICON_PRESETS
 } from '../config'
@@ -55,13 +56,13 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                 <div class="description" translate>Background color and opacity</div>
             </div>
             <div class="d-flex align-items-center">
-                <input type="color" class="form-control form-control-color me-3" 
+                <input type="color" class="form-control form-control-color me-3"
                     style="width: 60px;"
-                    [ngModel]="hexColor" 
+                    [ngModel]="hexColor"
                     (ngModelChange)="setHexColor($event)">
                 <span class="text-muted me-2" translate>Opacity</span>
                 <input type="range" class="form-range me-2" style="width: 100px" min="0" max="1" step="0.01"
-                    [ngModel]="opacity" 
+                    [ngModel]="opacity"
                     (ngModelChange)="setOpacity($event)">
             </div>
         </div>
@@ -113,7 +114,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                         <button type="button" class="btn btn-outline-secondary builtin-reset" (click)="restoreBuiltin(key)" [disabled]="!hasBuiltinOverride(key)" translate>Restore defaults</button>
                     </div>
                 </div>
-                <p class="text-muted builtin-network-help mt-2 mb-0" *ngIf="key === 'net'" translate>Download and upload are current rates. Hover shows separate received and sent totals since interface creation or counter reset, not since SSH login. Default-route interfaces are preferred; without a route, eligible non-loopback interfaces are used.</p>
+                <p class="text-muted builtin-network-help mt-2 mb-0" *ngIf="key === 'net'" translate>Download and upload are current rates. Click to show separate received and sent totals since interface creation or counter reset, not since SSH login. Default-route interfaces are preferred; without a route, eligible non-loopback interfaces are used.</p>
                 <div class="inline-item-editor" *ngIf="editingBuiltinKey === key"><ng-container *ngTemplateOutlet="itemEditor"></ng-container></div>
             </div>
             <div class="form-check form-switch mt-2">
@@ -173,7 +174,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
         </div>
 
         <div class="list-group mb-3">
-            <div class="list-group-item user-select-none custom-metric-item p-3 mb-2" 
+            <div class="list-group-item user-select-none custom-metric-item p-3 mb-2"
                  *ngFor="let metric of customMetrics; let i = index"
                  [class.metric-disabled]="metric.enabled === false"
                  [draggable]="currentMetric.id !== metric.id || editingIndex === -1"
@@ -182,7 +183,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                  (drop)="onDrop(i)"
                  [class.opacity-50]="draggedIndex === i && !isDragging"
                  style="cursor: grab; overflow: hidden;">
-                
+
                 <div class="d-flex align-items-start justify-content-between gap-3 w-100">
                     <!-- Drag handle -->
                     <div class="pt-1 flex-shrink-0">
@@ -193,7 +194,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                     <div class="flex-grow-1" style="min-width: 0; overflow: hidden;">
                         <!-- Header row: Icon, Label, and Badges -->
                         <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
-                            <span class="d-inline-flex align-items-center justify-content-center text-primary flex-shrink-0" *ngIf="metric.icon" style="width: 20px; height: 20px;">
+                            <span class="d-inline-flex align-items-center justify-content-center flex-shrink-0" [style.color]="metric.color || '#00ff00'" *ngIf="metric.icon" style="width: 20px; height: 20px;">
                                 <svg *ngIf="getSvgPath(metric.icon)" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                                     <path [attr.d]="getSvgPath(metric.icon)"></path>
                                 </svg>
@@ -223,7 +224,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                         </div>
 
                         <!-- Command display: elegant monospace code snippet with line-clamp, text-break, and copy tooltip -->
-                        <div class="command-box font-monospace text-muted p-2 rounded" 
+                        <div class="command-box font-monospace text-muted p-2 rounded"
                              style="font-size: 11px; background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.08); word-break: break-all; max-height: 48px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.4;"
                              [title]="metric.command">
                             {{ metric.command }}
@@ -242,10 +243,10 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                     <ng-container *ngTemplateOutlet="itemEditor"></ng-container>
                 </div>
                 <div class="card-delete-actions">
-                    <button type="button" class="btn btn-outline-danger btn-sm metric-delete" (click)="removeMetric(i)"><i class="fas fa-trash" aria-hidden="true"></i> <span translate>Delete Metric</span></button>
+                    <button type="button" class="btn btn-outline-danger btn-sm metric-delete" (click)="removeMetric(i)"><i class="fas fa-trash" aria-hidden="true"></i> <span translate>Delete Metric</span> · {{ metric.label || metric.icon || ('Unnamed Metric' | translate) }}</button>
                 </div>
             </div>
-            
+
             <div class="list-group-item text-center text-muted p-4" *ngIf="customMetrics.length === 0" translate>
                 No custom metrics defined.
             </div>
@@ -284,7 +285,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                             <button type="button" class="btn btn-outline-secondary group-edit" (click)="editGroup(g)" [title]="'Edit' | translate" [attr.aria-label]="'Edit' | translate" [attr.aria-controls]="'group-editor-' + group.id"><i class="fas fa-pen" aria-hidden="true"></i></button>
                         </div>
                     </div>
-                    <div class="group-card-preview" *ngIf="editingGroupId !== group.id">
+                    <div class="group-card-preview">
                         <div class="group-main-summary">
                             <span class="member-kind" translate>Main Metric</span>
                             <button type="button" class="member-summary-chip main-summary-chip" (click)="editGroupMember(g, -1)" [title]="'Edit' | translate">
@@ -307,7 +308,7 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                         <ng-container *ngTemplateOutlet="itemEditor"></ng-container>
                     </div>
                     <div class="card-delete-actions">
-                        <button type="button" class="btn btn-outline-danger btn-sm group-delete" (click)="removeGroup(g)"><i class="fas fa-trash" aria-hidden="true"></i> <span translate>Delete Group</span></button>
+                        <button type="button" class="btn btn-outline-danger btn-sm group-delete" (click)="removeGroup(g)"><i class="fas fa-trash" aria-hidden="true"></i> <span translate>Delete Group</span> · {{ group.label || ('Metric Group' | translate) }} / {{ 'Main Metric' | translate }}: {{ group.main.label || group.main.icon || ('Unnamed Metric' | translate) }}</button>
                     </div>
                 </div>
                 <div class="list-group-item text-muted p-3" *ngIf="metricGroups.length === 0" translate>No metric groups defined.</div>
@@ -317,12 +318,47 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
             </div>
         </section>
 
+        <aside #editorNavigator class="editor-navigator" *ngIf="editorOpen" aria-label="Metric editor navigation" (keydown)="onEditorKeydown($event)">
+            <div class="navigator-header">
+                <button type="button" class="navigator-drag" (pointerdown)="startNavigatorDrag($event)" (pointermove)="moveNavigator($event)" (pointerup)="endNavigatorDrag($event)" (pointercancel)="endNavigatorDrag($event)" [title]="'Drag to move' | translate">
+                    <span aria-hidden="true">⠿</span><strong class="navigator-title">{{ editorName }}</strong>
+                </button>
+                <button type="button" class="navigator-reset" (click)="resetNavigatorPosition()" [title]="'Return to right side' | translate" [attr.aria-label]="'Return to right side' | translate">↗</button>
+            </div>
+            <small translate>Click a label to locate its editor</small>
+            <nav class="navigator-members">
+                <button type="button" class="navigator-main" (click)="navigateMember(-1)" [class.active]="!currentGroup || currentMetric.id === currentGroup.main.id">
+                    <ng-container *ngTemplateOutlet="metricIcon; context: { $implicit: currentGroup ? currentGroup.main : currentMetric }"></ng-container>
+                    <span><small>{{ (currentGroup ? 'Main Metric' : 'Metric') | translate }}</small>{{ (currentGroup ? currentGroup.main.label : currentMetric.label) || ('Unnamed Metric' | translate) }}</span>
+                </button>
+                <button type="button" *ngFor="let child of currentGroup?.children; let c = index" class="navigator-child" (click)="navigateMember(c)" [class.active]="currentMetric.id === child.id" [attr.aria-expanded]="expandedMembers.has(child.id)">
+                    <ng-container *ngTemplateOutlet="metricIcon; context: { $implicit: child }"></ng-container>
+                    <span><small>{{ 'Child Metric' | translate }} {{c + 1}}</small>{{ child.label || child.icon || ('Unnamed Metric' | translate) }}</span>
+                </button>
+            </nav>
+            <div class="navigator-actions">
+                <button type="button" class="btn btn-primary navigator-save" (click)="saveMetric()" [disabled]="!editorValid">{{ 'Save' | translate }} <kbd>Ctrl+S</kbd></button>
+                <button type="button" class="btn btn-outline-secondary navigator-close" (click)="requestEditorClose()" translate>Close</button>
+            </div>
+            <span class="save-notice" role="status" *ngIf="saveNotice">{{saveNotice}}</span>
+            <div class="navigator-close-prompt" *ngIf="closePrompt" role="alertdialog" [attr.aria-label]="'Save changes before closing?' | translate">
+                <p translate>Save changes before closing?</p>
+                <button type="button" class="btn btn-primary save-close" (click)="finishEditorClose(true)" [disabled]="!editorValid" translate>Save and close</button>
+                <button type="button" class="btn btn-outline-danger discard-close" (click)="finishEditorClose(false)" translate>Discard and close</button>
+                <button type="button" class="btn btn-outline-secondary continue-editing" (click)="closePrompt = false" translate>Continue editing</button>
+            </div>
+        </aside>
+
         <ng-template #metricIcon let-metric>
+          <span class="configured-icon" [style.color]="metric.color || '#00ff00'">
             <svg *ngIf="getSvgPath(metric.icon)" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path [attr.d]="getSvgPath(metric.icon)"></path></svg>
-            <img *ngIf="isUrl(metric.icon)" [src]="getSafeIconUrl(metric.icon)" width="18" height="18" alt="" />
+            <span class="uploaded-icon" *ngIf="metric.icon?.startsWith('data:image/')" [style.mask-image]="iconMask(metric.icon)" [style.-webkit-mask-image]="iconMask(metric.icon)"></span>
+            <img *ngIf="isUrl(metric.icon) && !metric.icon?.startsWith('data:image/')" [src]="getSafeIconUrl(metric.icon)" width="18" height="18" alt="" />
             <i *ngIf="isFa(metric.icon)" [class]="getIconClass(metric.icon)" aria-hidden="true"></i>
+          </span>
         </ng-template>
         <ng-template #itemEditor>
+            <div class="editor-start" id="stats-editor-start"></div>
             <div class="scope-editor border rounded p-3 mb-3">
                 <label class="form-label fw-bold" for="stats-scope-mode" translate>Display Scope</label>
                 <select id="stats-scope-mode" class="form-select form-select-sm" [ngModel]="scopeMode" (ngModelChange)="setScopeMode($event)">
@@ -392,27 +428,27 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                 </div>
                 <div class="group-mode-help text-muted mb-3">{{ groupModeHelp(currentGroup.mode) | translate }}</div>
                 <div class="group-members mb-3">
-                    <section class="group-member group-member-main" [class.member-open]="expandedMemberId === currentGroup.main.id" [class.metric-disabled]="currentGroup.main.enabled === false">
+                    <section class="group-member group-member-main" [class.member-open]="expandedMembers.has(currentGroup.main.id)" [class.metric-disabled]="currentGroup.main.enabled === false">
                       <div class="member-header">
-                        <button type="button" class="member-toggle" (click)="toggleGroupMetric(-1)" [attr.aria-expanded]="expandedMemberId === currentGroup.main.id" [attr.aria-controls]="'member-editor-' + currentGroup.main.id">
+                        <button type="button" class="member-toggle" (click)="toggleGroupMetric(-1)" [attr.aria-expanded]="expandedMembers.has(currentGroup.main.id)" [attr.aria-controls]="'member-editor-' + currentGroup.main.id">
                             <span class="member-icon" [style.color]="currentGroup.main.color || '#00ff00'"><ng-container *ngTemplateOutlet="metricIcon; context: { $implicit: currentGroup.main }"></ng-container></span>
                             <span class="member-kind" translate>Main Metric</span>
                             <strong>{{ currentGroup.main.label || currentGroup.main.icon || ('Unnamed Metric' | translate) }}</strong>
-                            <i class="fas member-chevron" [class.fa-chevron-down]="expandedMemberId !== currentGroup.main.id" [class.fa-chevron-up]="expandedMemberId === currentGroup.main.id" aria-hidden="true"></i>
+                            <i class="fas member-chevron" [class.fa-chevron-down]="!expandedMembers.has(currentGroup.main.id)" [class.fa-chevron-up]="expandedMembers.has(currentGroup.main.id)" aria-hidden="true"></i>
                         </button>
                         <button type="button" class="btn btn-outline-secondary btn-sm member-enabled" (click)="toggleMemberEnabled(currentGroup.main)" [attr.aria-pressed]="currentGroup.main.enabled !== false">{{ (currentGroup.main.enabled === false ? 'Disabled' : 'Enabled') | translate }}</button>
                       </div>
-                        <div class="member-editor" *ngIf="expandedMemberId === currentGroup.main.id" [id]="'member-editor-' + currentGroup.main.id">
-                            <ng-container *ngTemplateOutlet="metricFields"></ng-container>
+                        <div class="member-editor" [attr.data-member-id]="currentGroup.main.id" *ngIf="expandedMembers.has(currentGroup.main.id)" [id]="'member-editor-' + currentGroup.main.id">
+                            <ng-container *ngTemplateOutlet="metricFields; context: { $implicit: currentGroup.main }"></ng-container>
                         </div>
                     </section>
-                    <section class="group-member group-member-child" *ngFor="let child of currentGroup.children; let c = index" [class.member-open]="expandedMemberId === child.id" [class.metric-disabled]="child.enabled === false">
+                    <section class="group-member group-member-child" *ngFor="let child of currentGroup.children; let c = index" [class.member-open]="expandedMembers.has(child.id)" [class.metric-disabled]="child.enabled === false">
                         <div class="member-header">
-                            <button type="button" class="member-toggle" (click)="toggleGroupMetric(c)" [attr.aria-expanded]="expandedMemberId === child.id" [attr.aria-controls]="'member-editor-' + child.id">
+                            <button type="button" class="member-toggle" (click)="toggleGroupMetric(c)" [attr.aria-expanded]="expandedMembers.has(child.id)" [attr.aria-controls]="'member-editor-' + child.id">
                                 <span class="member-icon" [style.color]="child.color || '#00ff00'"><ng-container *ngTemplateOutlet="metricIcon; context: { $implicit: child }"></ng-container></span>
                                 <span class="member-kind">{{ 'Child Metric' | translate }} {{ c + 1 }}</span>
                                 <strong>{{ child.label || child.icon || ('Unnamed Metric' | translate) }}</strong>
-                                <i class="fas member-chevron" [class.fa-chevron-down]="expandedMemberId !== child.id" [class.fa-chevron-up]="expandedMemberId === child.id" aria-hidden="true"></i>
+                                <i class="fas member-chevron" [class.fa-chevron-down]="!expandedMembers.has(child.id)" [class.fa-chevron-up]="expandedMembers.has(child.id)" aria-hidden="true"></i>
                             </button>
                             <div class="btn-group btn-group-sm member-actions">
                                 <button type="button" class="btn btn-outline-secondary child-copy" (click)="copyChild(c)" [title]="'Duplicate Child' | translate" [attr.aria-label]="'Duplicate Child' | translate"><i class="fas fa-copy" aria-hidden="true"></i></button>
@@ -421,77 +457,78 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                                 <button class="btn btn-outline-secondary" [disabled]="c === currentGroup.children.length - 1" (click)="moveChild(c, 1)" [title]="'Move down' | translate" [attr.aria-label]="'Move down' | translate">↓</button>
                             </div>
                         </div>
-                        <div class="member-editor" *ngIf="expandedMemberId === child.id" [id]="'member-editor-' + child.id">
-                            <ng-container *ngTemplateOutlet="metricFields"></ng-container>
+                        <div class="member-editor" [attr.data-member-id]="child.id" *ngIf="expandedMembers.has(child.id)" [id]="'member-editor-' + child.id">
+                            <ng-container *ngTemplateOutlet="metricFields; context: { $implicit: child }"></ng-container>
                         </div>
                         <div class="card-delete-actions member-delete-actions">
-                            <button type="button" class="btn btn-outline-danger btn-sm child-delete" (click)="removeChild(c)"><i class="fas fa-trash" aria-hidden="true"></i> <span translate>Remove Child</span></button>
+                            <button type="button" class="btn btn-outline-danger btn-sm child-delete" (click)="removeChild(c)"><i class="fas fa-trash" aria-hidden="true"></i> <span translate>Remove Child</span> · {{ currentGroup.label || ('Metric Group' | translate) }} / {{ child.label || child.icon || ('Unnamed Metric' | translate) }}</button>
                         </div>
                     </section>
                     <button class="btn btn-outline-primary add-child-btn" (click)="addChild()"><i class="fas fa-plus" aria-hidden="true"></i> <span translate>Add Child</span></button>
                     <div class="form-text mt-2" translate>Edits to all members are saved together with the group.</div>
                 </div>
             </ng-container>
-            <ng-container *ngIf="!currentGroup">
+            <ng-container *ngIf="!currentGroup && singleExpanded">
                 <h5 class="mb-3">{{ metricEditorTitle | translate }}</h5>
-                <ng-container *ngTemplateOutlet="metricFields"></ng-container>
+                <ng-container *ngTemplateOutlet="metricFields; context: { $implicit: currentMetric }"></ng-container>
             </ng-container>
             <div class="editor-actions text-end">
                 <div class="text-warning text-start mb-2" *ngIf="currentGroup && !isGroupValid()" translate>Every member needs a label or icon and a metric command. Intervals and timeouts must be positive; exit codes must be whole numbers from 0 to 255.</div>
-                <button class="btn btn-secondary me-2" (click)="cancelEdit()" translate>Cancel</button>
+                <button class="btn btn-secondary me-2" (click)="requestEditorClose()" translate>Close</button>
                 <button class="btn btn-primary text-white" (click)="saveMetric()" [disabled]="currentGroup ? !isGroupValid() : !isMetricValid(currentMetric)">
                     <i class="fas" [class.fa-plus]="editingIndex === -1 && !currentGroup && !editingBuiltinKey" [class.fa-save]="editingIndex !== -1 || currentGroup || editingBuiltinKey"></i>
                     {{ (currentGroup ? 'Save Group' : (editingBuiltinKey || editingIndex !== -1 ? 'Save' : 'Add')) | translate }}
                 </button>
             </div>
         </ng-template>
-        <ng-template #metricFields>
-            <div class="row g-3 metric-fields">
+        <ng-template #metricFields let-metric>
+            <div class="row g-3 metric-fields" (focusin)="activateMetric(metric)" (pointerdown)="activateMetric(metric)">
                 <div class="col-md-4">
                     <label class="form-label" translate>Label</label>
-                    <input type="text" class="form-control form-control-sm" [(ngModel)]="currentMetric.label" placeholder="{{ 'e.g. PostgreSQL (optional if icon set)' | translate }}">
+                    <input type="text" class="form-control form-control-sm" [(ngModel)]="metric.label" placeholder="{{ 'e.g. PostgreSQL (optional if icon set)' | translate }}">
                 </div>
                 <div class="col-md-8">
                     <label class="form-label" translate>Icon (FontAwesome or custom SVG)</label>
                     <div class="icon-input-wrap position-relative">
                         <div class="input-group input-group-sm">
-                            <span class="input-group-text" *ngIf="currentMetric.icon" style="padding: 0 8px; width: 34px; justify-content: center;">
-                                <svg *ngIf="getSvgPath(currentMetric.icon)" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-                                    <path [attr.d]="getSvgPath(currentMetric.icon)"></path>
+                            <span class="input-group-text" [style.color]="metric.color || '#00ff00'" *ngIf="metric.icon" style="padding: 0 8px; width: 34px; justify-content: center;">
+                                <svg *ngIf="getSvgPath(metric.icon)" viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path [attr.d]="getSvgPath(metric.icon)"></path>
                                 </svg>
-                                <img *ngIf="isUrl(currentMetric.icon)" [src]="getSafeIconUrl(currentMetric.icon)" width="16" height="16" style="object-fit: contain;" />
-                                <i *ngIf="isFa(currentMetric.icon)" [class]="getIconClass(currentMetric.icon)"></i>
+                                <span class="uploaded-icon" *ngIf="metric.icon?.startsWith('data:image/')" [style.mask-image]="iconMask(metric.icon)" [style.-webkit-mask-image]="iconMask(metric.icon)"></span>
+                                <img *ngIf="isUrl(metric.icon) && !metric.icon?.startsWith('data:image/')" [src]="getSafeIconUrl(metric.icon)" width="16" height="16" style="object-fit: contain;" />
+                                <i *ngIf="isFa(metric.icon)" [class]="getIconClass(metric.icon)"></i>
                             </span>
-                            <input type="text" 
-                                   class="form-control" 
-                                   [(ngModel)]="currentMetric.icon" 
+                            <input type="text"
+                                   class="form-control"
+                                   [(ngModel)]="metric.icon"
                                    placeholder="{{ 'fa-database, server, redis...' | translate }}">
-                            <button type="button" 
+                            <button type="button"
                                     class="btn btn-outline-secondary icon-picker-toggle"
                                     (click)="toggleIconPicker($event)"
                                     title="{{ 'Choose preset icon' | translate }}">
                                 <i class="fas fa-ellipsis-v"></i>
                             </button>
-                            <input type="file" 
-                                   #svgFileInput 
-                                   accept=".svg,image/svg+xml" 
-                                   (change)="onSvgFileSelected($event)" 
+                            <input type="file"
+                                   #svgFileInput
+                                   accept=".svg,image/svg+xml"
+                                   (change)="onSvgFileSelected($event)"
                                    style="display: none;">
-                            <button type="button" 
-                                    class="btn btn-outline-secondary" 
-                                    (click)="svgFileInput.click()" 
+                            <button type="button"
+                                    class="btn btn-outline-secondary"
+                                    (click)="svgFileInput.click()"
                                     title="{{ 'Upload Custom SVG' | translate }}">
                                 <i class="fas fa-file-upload me-1"></i> <span translate>SVG</span>
                             </button>
-                            <button type="button" 
-                                    class="btn btn-outline-danger" 
-                                    *ngIf="currentMetric.icon" 
-                                    (click)="clearIcon()" 
+                            <button type="button"
+                                    class="btn btn-outline-danger"
+                                    *ngIf="metric.icon"
+                                    (click)="clearIcon()"
                                     title="{{ 'Remove Icon' | translate }}">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
-                        <div class="icon-picker-panel" *ngIf="iconPickerOpen" (click)="$event.stopPropagation()">
+                        <div class="icon-picker-panel" *ngIf="iconPickerOpen && currentMetric === metric" (click)="$event.stopPropagation()">
                             <div class="icon-picker-title" translate>Preset Icons</div>
                             <div class="icon-picker-filters">
                                 <input type="search" class="form-control form-control-sm icon-search" [(ngModel)]="iconSearch" [placeholder]="'Search icons by name or purpose' | translate" [attr.aria-label]="'Search icons by name or purpose' | translate">
@@ -502,12 +539,12 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                             </div>
                             <div class="icon-picker-grid">
                                 <button type="button"
-                                        class="icon-picker-item"
+                                        class="icon-picker-item" [style.color]="metric.color || '#00ff00'"
                                         *ngFor="let preset of filteredIconPresets; trackBy: trackIconPreset"
-                                        [class.active]="currentMetric.icon === preset.name"
+                                        [class.active]="metric.icon === preset.name"
                                         [title]="(preset.label | translate) + ' (' + preset.name + ')'"
                                         [attr.aria-label]="preset.label | translate"
-                                        [attr.aria-pressed]="currentMetric.icon === preset.name"
+                                        [attr.aria-pressed]="metric.icon === preset.name"
                                         (click)="selectPresetIcon(preset.name)">
                                     <svg *ngIf="getSvgPath(preset.name)" viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true">
                                         <path [attr.d]="getSvgPath(preset.name)"></path>
@@ -526,60 +563,60 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
 
                 <div class="col-md-3">
                     <label class="form-label" translate>Type</label>
-                    <select class="form-select form-select-sm" [(ngModel)]="currentMetric.type">
+                    <select class="form-select form-select-sm" [(ngModel)]="metric.type">
                         <option value="text" translate>Text Value</option>
                         <option value="progress" translate>Progress Bar</option>
                     </select>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" translate>Default Color</label>
-                    <input type="color" class="form-control form-control-color form-control-sm w-100" [(ngModel)]="currentMetric.color">
+                    <input type="color" class="form-control form-control-color form-control-sm w-100" [(ngModel)]="metric.color">
                 </div>
-                <div class="col-md-3" *ngIf="currentMetric.type === 'progress'">
+                <div class="col-md-3" *ngIf="metric.type === 'progress'">
                     <label class="form-label" translate>Max Value</label>
-                    <input type="number" class="form-control form-control-sm" [(ngModel)]="currentMetric.maxValue" placeholder="100">
+                    <input type="number" class="form-control form-control-sm" [(ngModel)]="metric.maxValue" placeholder="100">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" translate>Suffix</label>
-                    <input type="text" class="form-control form-control-sm" [(ngModel)]="currentMetric.suffix" [placeholder]="currentMetric.type === 'progress' ? ('e.g. GB (or % if empty)' | translate) : ('e.g. °C, ms' | translate)">
+                    <input type="text" class="form-control form-control-sm" [(ngModel)]="metric.suffix" [placeholder]="metric.type === 'progress' ? ('e.g. GB (or % if empty)' | translate) : ('e.g. °C, ms' | translate)">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" translate>Interval (sec)</label>
-                    <input type="number" min="1" class="form-control form-control-sm" [(ngModel)]="currentMetric.interval" placeholder="{{ defaultInterval }}s">
+                    <input type="number" min="1" class="form-control form-control-sm" [(ngModel)]="metric.interval" placeholder="{{ defaultInterval }}s">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" translate>Timeout (sec)</label>
-                    <input type="number" min="1" class="form-control form-control-sm" [(ngModel)]="currentMetric.timeout" placeholder="15s">
+                    <input type="number" min="1" class="form-control form-control-sm" [(ngModel)]="metric.timeout" placeholder="15s">
                 </div>
                 <div class="col-12 check-command">
                     <label class="form-label" translate>Object Check Command (optional)</label>
-                    <textarea class="form-control form-control-sm font-monospace" rows="2" [(ngModel)]="currentMetric.checkCommand" [placeholder]="currentMetric.checkMode === 'output' ? 'mountpoint -q /data2 &amp;&amp; echo exists' : 'mountpoint -q /data2'"></textarea>
+                    <textarea class="form-control form-control-sm font-monospace" rows="2" [(ngModel)]="metric.checkCommand" [placeholder]="metric.checkMode === 'output' ? 'mountpoint -q /data2 &amp;&amp; echo exists' : 'mountpoint -q /data2'"></textarea>
                     <div class="form-text" translate>Leave empty to run the metric directly. A failed check prevents both metric and detail commands from running.</div>
                 </div>
-                <ng-container *ngIf="currentMetric.checkCommand && currentMetric.checkCommand.trim()">
+                <ng-container *ngIf="metric.checkCommand && metric.checkCommand.trim()">
                     <div class="col-md-4">
                         <label class="form-label" translate>Compare</label>
-                        <select class="form-select form-select-sm" [(ngModel)]="currentMetric.checkMode">
+                        <select class="form-select form-select-sm" [(ngModel)]="metric.checkMode">
                             <option value="output" translate>Output Text</option>
                             <option value="exitCode" translate>Exit Code</option>
                         </select>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label" translate>Expected Value</label>
-                        <input class="form-control form-control-sm" [(ngModel)]="currentMetric.checkExpected" [placeholder]="currentMetric.checkMode === 'output' ? 'exists' : '0'">
+                        <input class="form-control form-control-sm" [(ngModel)]="metric.checkExpected" [placeholder]="metric.checkMode === 'output' ? 'exists' : '0'">
                     </div>
                     <div class="col-md-4">
                         <label class="form-label" translate>Check Failure Text</label>
-                        <input class="form-control form-control-sm" [(ngModel)]="currentMetric.unavailableText" [placeholder]="'Unavailable' | translate">
+                        <input class="form-control form-control-sm" [(ngModel)]="metric.unavailableText" [placeholder]="'Unavailable' | translate">
                     </div>
                     <div class="col-12 form-text" translate>Output text is compared exactly after trimming surrounding whitespace. Exit code 0 usually means success.</div>
                 </ng-container>
                 <div class="col-12 metric-command">
                     <label class="form-label" translate>Command (Shell)</label>
                     <div class="input-group input-group-sm">
-                        <textarea class="form-control font-monospace" 
-                                  rows="2" 
-                                  [(ngModel)]="currentMetric.command" 
+                        <textarea class="form-control font-monospace"
+                                  rows="2"
+                                  [(ngModel)]="metric.command"
                                   placeholder="e.g. mongosh ... or redis-cli info | grep used_memory_human"></textarea>
                     </div>
                     <div class="form-text text-muted" style="font-size: 11px;" translate>
@@ -588,23 +625,23 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                 </div>
 
                 <div class="col-12 detail-command">
-                    <label class="form-label" translate>Hover Detail Command (optional)</label>
-                    <textarea class="form-control form-control-sm font-monospace" rows="2" [(ngModel)]="currentMetric.detailCommand"></textarea>
-                    <div class="form-text" translate>Hover shows this command output. Single labels use a popup; groups follow their display mode. Leave empty for no extra information.</div>
+                    <label class="form-label" translate>Detail Command (optional)</label>
+                    <textarea class="form-control form-control-sm font-monospace" rows="2" [(ngModel)]="metric.detailCommand"></textarea>
+                    <div class="form-text" translate>Click to expand details; click again or move away to close. Single labels use a popup; groups follow their display mode. Leave empty for no extra information.</div>
                 </div>
                 <div class="col-12 unavailable-visibility">
                     <label class="form-check">
-                        <input class="form-check-input visible-unavailable" type="checkbox" [ngModel]="currentMetric.visibleWhenUnavailable !== false" (ngModelChange)="setUnavailableVisibility($event)">
+                        <input class="form-check-input visible-unavailable" type="checkbox" [ngModel]="metric.visibleWhenUnavailable !== false" (ngModelChange)="setUnavailableVisibility($event)">
                         <span class="form-check-label" translate>Show this label when its check fails</span>
                     </label>
                     <div class="form-text" translate>Enabled by default. Turning this off hides the label in every display mode and also removes it from the carousel.</div>
                 </div>
-                <div class="col-12" *ngIf="currentGroup && editingChildIndex >= 0">
+                <div class="col-12" *ngIf="currentGroup && metric.id !== currentGroup.main.id">
                     <label class="form-check">
-                        <input class="form-check-input carousel-unavailable" type="checkbox" [(ngModel)]="currentMetric.showWhenUnavailable" [disabled]="currentMetric.visibleWhenUnavailable === false">
+                        <input class="form-check-input carousel-unavailable" type="checkbox" [(ngModel)]="metric.showWhenUnavailable" [disabled]="metric.visibleWhenUnavailable === false">
                         <span class="form-check-label" translate>Keep in carousel when its check fails</span>
                     </label>
-                    <div class="form-text" translate>When the failed label remains visible, this option controls whether it participates in the carousel. Static and hover views retain it.</div>
+                    <div class="form-text" translate>When the failed label remains visible, this option controls whether it participates in the carousel. Static and expanded views retain it.</div>
                 </div>
 
                 <!-- 条件颜色规则区域 -->
@@ -618,12 +655,15 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
                     <div class="text-muted mb-2" style="font-size: 12px;" translate>
                         Color rules are checked from top to bottom. The first matching rule determines the color.
                     </div>
+                    <div *ngIf="metric.valueFormat === 'disk-io-rate'" class="form-text io-color-help mb-2" translate>
+                        I/O color rules use percent of reference bandwidth (80 orange, 95 red); the displayed value remains MB/s. This is a throughput reference, not disk health or utilization.
+                    </div>
 
-                    <div *ngIf="!currentMetric.colorRules || currentMetric.colorRules.length === 0" class="text-muted fst-italic p-2 border rounded text-center" style="font-size: 12px;">
+                    <div *ngIf="!metric.colorRules || metric.colorRules.length === 0" class="text-muted fst-italic p-2 border rounded text-center" style="font-size: 12px;">
                         <span translate>No conditional rules defined. Default color will always be used.</span>
                     </div>
 
-                    <div class="border rounded p-2 mb-2 bg-light bg-opacity-10" *ngFor="let rule of currentMetric.colorRules; let rIndex = index">
+                    <div class="border rounded p-2 mb-2 bg-light bg-opacity-10" *ngFor="let rule of metric.colorRules; let rIndex = index">
                         <div class="row g-2 align-items-center">
                             <div class="col-md-4">
                                 <select class="form-select form-select-sm" [(ngModel)]="rule.operator">
@@ -658,6 +698,35 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
         </ng-template>
     `,
     styles: [`
+        :host { display: block; width: 100%; min-width: 0; box-sizing: border-box; }
+        .editor-navigator { position: fixed; width: clamp(220px, 20vw, 300px); max-width: calc(100vw - 16px); max-height: min(720px, calc(100vh - 64px)); display: flex; flex-direction: column; gap: 10px; padding: 12px; border: 2px solid var(--stats-card-border); border-radius: 10px; background: var(--stats-card-bg); color: var(--stats-field-fg); z-index: 1050; box-sizing: border-box; overflow: hidden; box-shadow: 0 8px 28px #0006; }
+        .navigator-header { display: flex; gap: 6px; flex: 0 0 auto; align-items: center; }
+        .navigator-drag, .navigator-reset { border: 0; background: transparent; color: inherit; padding: 4px; }
+        .navigator-drag { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; text-align: left; cursor: grab; touch-action: none; user-select: none; }
+        .navigator-drag:active { cursor: grabbing; }
+        .navigator-reset { cursor: pointer; font-size: 18px; }
+        .navigator-title { overflow-wrap: anywhere; }
+        .navigator-members { display: flex; flex: 1 1 auto; flex-direction: column; gap: 6px; overflow: auto; min-height: 0; }
+        .navigator-members button { flex: 0 0 auto; }
+        .navigator-actions, .navigator-close-prompt, .save-notice, .editor-navigator > small { flex-shrink: 0; }
+        .navigator-members button { display: flex; align-items: center; gap: 10px; text-align: left; border: 1px solid var(--stats-field-border); border-radius: 5px; padding: 8px; background: var(--stats-field-bg); color: inherit; }
+        .navigator-members button.active { border-color: var(--stats-focus); }
+        .navigator-members button > span { min-width: 0; overflow-wrap: anywhere; }
+        .navigator-members small { display: block; color: var(--stats-field-muted); font-size: 11px; }
+        .navigator-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .editor-navigator .btn { border: 1px solid var(--stats-field-border); padding: 6px 9px; border-radius: 5px; font-size: 12px; background: var(--stats-field-bg); color: inherit; cursor: pointer; }
+        .editor-navigator .btn-primary { background: #246dc6; border-color: #579eff; color: white; }
+        .editor-navigator .btn:disabled { opacity: .55; cursor: default; }
+        .navigator-close-prompt { border-top: 1px solid var(--stats-field-border); padding-top: 10px; }
+        .navigator-close-prompt button { margin-bottom: 6px; width: 100%; white-space: normal; }
+        .save-notice { color: var(--stats-field-muted); font-size: 12px; }
+        .group-member, .editor-start { scroll-margin-top: 24px; }
+        .configured-icon { display: inline-flex; align-items: center; flex: 0 0 auto; }
+        .uploaded-icon { display: inline-block; width: 18px; height: 18px; background: currentColor; mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
+        .card-delete-actions .btn { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+        @media (max-width: 760px) {
+            .group-card-header, .member-header { flex-wrap: wrap; }
+        }
         :host {
             --stats-field-bg: #242e3c;
             --stats-field-border: #596a82;
@@ -796,8 +865,9 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
         .group-member { border: 2px solid var(--stats-card-border); border-radius: 8px; background: var(--stats-card-bg); }
         .group-member-child { margin-left: 26px; width: calc(100% - 26px); }
         .group-member.member-open { border-color: var(--stats-focus); }
-        .member-header { display: flex; align-items: center; gap: 8px; padding-right: 10px; }
-        .member-toggle { min-width: 0; flex: 1; display: flex; align-items: center; gap: 10px; width: 100%; border: 0; border-radius: 8px; padding: 14px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+        .member-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-right: 10px; }
+        .member-toggle { min-width: min(240px, 100%); flex: 1 1 240px; display: flex; align-items: center; gap: 10px; width: 100%; border: 0; border-radius: 8px; padding: 14px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+        .member-toggle .member-kind { white-space: nowrap; }
         .member-toggle strong { min-width: 0; overflow-wrap: anywhere; }
         .member-open > .member-toggle, .member-open > .member-header { background: rgba(49,118,216,.12); }
         .member-chevron { margin-left: auto; flex-shrink: 0; font-size: 12px; color: #929ba7; }
@@ -884,7 +954,76 @@ type PresetItem = (CustomMetric | CustomMetricGroup) & { presetMetadata?: Import
         :host-context(.theme-dark) .separator { background: rgba(255,255,255,0.1); }
     `]
 })
-export class ServerStatsSettingsComponent {
+export class ServerStatsSettingsComponent implements AfterViewInit, AfterViewChecked, OnDestroy {
+    @ViewChild('editorNavigator') navigatorRef?: ElementRef<HTMLElement>;
+    private navigatorPortal: HTMLElement | null = null;
+    private navigatorPosition: { left: number; top: number } | null = null;
+    private navigatorDrag: { pointerId: number; x: number; y: number; handle: HTMLElement } | null = null;
+    private settingsBody: HTMLElement | null = null;
+    private bodyStyles: { name: string; value: string; priority: string }[] = [];
+
+    ngAfterViewInit() {
+        // Tabby caps every settings provider at 600px. Widen only this provider's
+        // container, then restore it when navigating to another settings page.
+        this.settingsBody = this.element?.nativeElement.closest('settings-tab-body') || null;
+        if (this.settingsBody) {
+            this.bodyStyles = ['min-width', 'max-width', 'width'].map(name => ({ name, value: this.settingsBody!.style.getPropertyValue(name), priority: this.settingsBody!.style.getPropertyPriority(name) }));
+            this.settingsBody.style.minWidth = '640px';
+            this.settingsBody.style.maxWidth = '1440px';
+            this.settingsBody.style.width = '100%';
+        }
+    }
+
+    ngAfterViewChecked() {
+        const panel = this.navigatorRef?.nativeElement || null;
+        if (this.navigatorPortal && this.navigatorPortal !== panel) this.navigatorPortal.remove();
+        if (!panel) { this.navigatorPortal = null; this.navigatorDrag = null; return; }
+        if (panel.parentElement !== document.body) {
+            const theme = getComputedStyle(this.element.nativeElement);
+            for (const name of ['--stats-field-bg', '--stats-field-border', '--stats-field-fg', '--stats-field-muted', '--stats-focus', '--stats-card-border', '--stats-card-bg']) panel.style.setProperty(name, theme.getPropertyValue(name));
+            panel.style.fontFamily = theme.fontFamily;
+            document.body.appendChild(panel);
+        }
+        this.navigatorPortal = panel;
+        this.positionNavigator();
+    }
+
+    @HostListener('window:resize')
+    positionNavigator() {
+        const panel = this.navigatorPortal;
+        if (!panel) return;
+        const { width, height } = panel.getBoundingClientRect();
+        const desired = this.navigatorPosition || { left: window.innerWidth - width - 16, top: (window.innerHeight - height) / 2 };
+        const left = Math.max(8, Math.min(desired.left, window.innerWidth - width - 8));
+        const top = Math.max(8, Math.min(desired.top, window.innerHeight - height - 8));
+        panel.style.left = `${left}px`; panel.style.top = `${top}px`;
+        if (this.navigatorPosition) this.navigatorPosition = { left, top };
+    }
+
+    startNavigatorDrag(event: PointerEvent) {
+        if (event.button !== 0 || !this.navigatorPortal) return;
+        const bounds = this.navigatorPortal.getBoundingClientRect();
+        const handle = event.currentTarget as HTMLElement;
+        this.navigatorDrag = { pointerId: event.pointerId, x: event.clientX - bounds.left, y: event.clientY - bounds.top, handle };
+        this.navigatorPosition = { left: bounds.left, top: bounds.top };
+        handle.setPointerCapture(event.pointerId);
+        event.preventDefault(); event.stopPropagation();
+    }
+    moveNavigator(event: PointerEvent) {
+        if (!this.navigatorDrag || event.pointerId !== this.navigatorDrag.pointerId) return;
+        this.navigatorPosition = { left: event.clientX - this.navigatorDrag.x, top: event.clientY - this.navigatorDrag.y };
+        this.positionNavigator(); event.preventDefault(); event.stopPropagation();
+    }
+    endNavigatorDrag(event: PointerEvent) {
+        if (this.navigatorDrag?.pointerId !== event.pointerId) return;
+        if (this.navigatorDrag.handle.hasPointerCapture(event.pointerId)) this.navigatorDrag.handle.releasePointerCapture(event.pointerId);
+        this.navigatorDrag = null;
+    }
+    resetNavigatorPosition() { this.navigatorPosition = null; this.positionNavigator(); }
+    ngOnDestroy() {
+        this.navigatorPortal?.remove(); this.navigatorPortal = null; this.navigatorDrag = null;
+        for (const item of this.bodyStyles) this.settingsBody?.style.setProperty(item.name, item.value, item.priority);
+    }
     defaultMetric: Partial<CustomMetric> = {
         type: 'text',
         color: '#00ff00',
@@ -921,7 +1060,51 @@ export class ServerStatsSettingsComponent {
     currentGroup: CustomMetricGroup | null = null;
     editingGroupId: string | null = null;
     editingChildIndex = -1;
-    expandedMemberId: string | null = null;
+    expandedMembers = new Set<string>();
+    // Retain the selected-member API; expansion is independent for each member.
+    get expandedMemberId(): string | null { return this.expandedMembers.has(this.currentMetric.id) ? this.currentMetric.id : null; }
+    set expandedMemberId(id: string | null) { if (id) this.expandedMembers.add(id); else this.expandedMembers.clear(); }
+    singleExpanded = true;
+    closePrompt = false;
+    saveNotice = '';
+    get editorOpen(): boolean { return !!(this.currentGroup || this.editingBuiltinKey || this.editingIndex >= 0 || this.newSingleOpen); }
+    get editorName(): string { return this.currentGroup?.label || this.currentGroup?.main.label || this.currentMetric.label || this.uiText('Unnamed Metric'); }
+    get editorValid(): boolean { return this.currentGroup ? this.isGroupValid() : this.isMetricValid(this.currentMetric); }
+    activateMetric(metric: Partial<CustomMetric>) {
+        if (this.currentMetric !== metric) this.iconPickerOpen = false;
+        this.currentMetric = metric;
+        this.editingChildIndex = this.currentGroup?.children.findIndex(child => child.id === metric.id) ?? -1;
+    }
+    requestEditorClose() { this.closePrompt = true; }
+    finishEditorClose(save: boolean) { if (save && !this.editorValid) return; if (save) this.saveMetric(true); else this.cancelEdit(); }
+    navigateMember(index = -1) {
+        if (this.currentGroup) this.selectGroupMetric(index);
+        else this.singleExpanded = true;
+        this.scrollToEditor(this.currentGroup ? 'member-editor-' + this.currentMetric.id : 'stats-editor-start');
+    }
+    private scrollToEditor(id: string) {
+        // Wait for Angular to insert the fields, then place their heading near
+        // the top of the actual scroll container instead of its bottom edge.
+        if (typeof document === 'undefined') return;
+        setTimeout(() => {
+            const editor = document.getElementById(id);
+            (editor?.closest('.group-member') || editor)?.scrollIntoView({ block: 'start', behavior: 'auto' });
+        });
+    }
+    @HostListener('keydown', ['$event'])
+    onEditorKeydown(event: KeyboardEvent) {
+        if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's' || !this.editorOpen) return;
+        event.preventDefault(); event.stopPropagation();
+        if (this.editorValid) this.saveMetric();
+        else this.saveNotice = this.uiText('Complete the required fields before saving.');
+    }
+    private afterSave(close = false) {
+        if (close) { this.cancelEdit(); return; }
+        this.expandedMembers.delete(this.currentMetric.id);
+        this.singleExpanded = false;
+        this.closePrompt = false;
+        this.saveNotice = this.uiText('Saved');
+    }
     draggedIndex: number | null = null;
     isDragging = false;
     iconPickerOpen = false;
@@ -930,7 +1113,7 @@ export class ServerStatsSettingsComponent {
     iconCategory = 'all';
     scopeSearch = '';
     collapsedScopeLayouts = new Set<string>();
-    
+
     // 预设相关
     presets: MetricPreset[] = getBundledPresets();
     loadingPresets = false;
@@ -942,9 +1125,12 @@ export class ServerStatsSettingsComponent {
     constructor(
         private platform: PlatformService,
         public config: ConfigService,
-        private sanitizer: DomSanitizer
+        private sanitizer: DomSanitizer,
+        private element: ElementRef<HTMLElement> = null
     ) {
-        if (migrateLegacyBuiltinConfig(this.config.store.plugin.serverStats)) this.config.save();
+        const conf = this.config.store.plugin.serverStats;
+        const legacyChanged = migrateLegacyBuiltinConfig(conf);
+        if (migrateDiskIoChecks(conf) || legacyChanged) this.config.save();
     }
 
     get scopeOwner(): { displayScope?: DisplayScope } {
@@ -1147,6 +1333,7 @@ export class ServerStatsSettingsComponent {
     isUrl(icon?: string): boolean {
         return isUrlOrDataUri(icon);
     }
+    iconMask(icon: string): string { return `url(${JSON.stringify(icon)})`; }
 
     isFa(icon?: string): boolean {
         return isFaIcon(icon);
@@ -1168,11 +1355,12 @@ export class ServerStatsSettingsComponent {
     onSvgFileSelected(event: any) {
         const file = event.target?.files?.[0];
         if (!file) return;
+        const targetMetric = this.currentMetric;
         const reader = new FileReader();
         reader.onload = (e: any) => {
             const result = e.target?.result as string;
             if (result) {
-                this.currentMetric.icon = result;
+                targetMetric.icon = result;
                 this.iconPickerOpen = false;
             }
         };
@@ -1326,9 +1514,9 @@ export class ServerStatsSettingsComponent {
     }
 
     groupModeHelp(mode: string): string {
-        if (mode === 'carousel') return 'Rotate child metrics. Hover to pause and show the main metric and all children with details.';
-        if (mode === 'static') return 'Show the main metric and all children. Horizontal hover expands one member; vertical hover expands all members.';
-        return 'Show the main metric. Hover to show the main metric and all children with details.';
+        if (mode === 'carousel') return 'Rotate child metrics. Hover pauses rotation; click to expand all members with details.';
+        if (mode === 'static') return 'Show all members. Click expands one horizontal member or the whole vertical group; click again or move away to close.';
+        return 'Show the main metric. Click to expand all members with details; click again or move away to close.';
     }
 
     private newId(prefix: string): string {
@@ -1369,7 +1557,6 @@ export class ServerStatsSettingsComponent {
         const group = this.metricGroups[index];
         if (!group) return;
         if (this.editingGroupId === group.id && this.currentGroup) {
-            this.expandedMemberId = null;
             this.iconPickerOpen = false;
             return;
         }
@@ -1388,15 +1575,16 @@ export class ServerStatsSettingsComponent {
         const group = this.metricGroups[groupIndex];
         if (!group || memberIndex < -1 || memberIndex >= group.children.length) return;
         this.editGroup(groupIndex);
-        this.selectGroupMetric(memberIndex);
+        this.navigateMember(memberIndex);
     }
 
     toggleGroupMetric(index: number) {
         if (!this.currentGroup) return;
         const metric = index < 0 ? this.currentGroup.main : this.currentGroup.children[index];
         if (!metric) return;
-        if (this.expandedMemberId === metric.id) {
-            this.expandedMemberId = null;
+        this.activateMetric(metric);
+        if (this.expandedMembers.has(metric.id)) {
+            this.expandedMembers.delete(metric.id);
             this.iconPickerOpen = false;
         } else this.selectGroupMetric(index);
     }
@@ -1417,7 +1605,7 @@ export class ServerStatsSettingsComponent {
         this.save();
     }
 
-    toggleMemberEnabled(metric: CustomMetric) { metric.enabled = metric.enabled === false; }
+    toggleMemberEnabled(metric: CustomMetric) { this.activateMetric(metric); metric.enabled = metric.enabled === false; }
 
     setUnavailableVisibility(visible: boolean) {
         this.currentMetric.visibleWhenUnavailable = visible;
@@ -1428,8 +1616,7 @@ export class ServerStatsSettingsComponent {
         if (!this.currentGroup) return;
         const metric = index < 0 ? this.currentGroup.main : this.currentGroup.children[index];
         if (!metric) return;
-        this.editingChildIndex = index;
-        this.currentMetric = metric;
+        this.activateMetric(metric);
         this.expandedMemberId = metric.id;
         this.iconPickerOpen = false;
     }
@@ -1437,17 +1624,16 @@ export class ServerStatsSettingsComponent {
     addChild() {
         if (!this.currentGroup) return;
         this.currentGroup.children.push(this.draftMetric());
-        this.selectGroupMetric(this.currentGroup.children.length - 1);
+        this.navigateMember(this.currentGroup.children.length - 1);
     }
 
     removeChild(index: number) {
         const child = this.currentGroup?.children[index];
-        if (!child || !confirm(this.uiText('Delete this child metric?') + '\n\n' + (child.label || child.icon || this.uiText('Unnamed Metric')))) return;
+        if (!child || !confirm(this.uiText('Delete this child metric?') + '\n\n' + (this.currentGroup.label || this.uiText('Metric Group')) + ' / ' + (child.label || child.icon || this.uiText('Unnamed Metric')))) return;
         const selectedId = this.currentMetric.id;
-        const wasCollapsed = this.expandedMemberId === null;
+        this.expandedMembers.delete(child.id);
         this.currentGroup.children.splice(index, 1);
-        this.selectGroupMetric(this.currentGroup.children.findIndex(m => m.id === selectedId));
-        if (wasCollapsed) this.expandedMemberId = null;
+        this.activateMetric(this.currentGroup.children.find(m => m.id === selectedId) || this.currentGroup.main);
     }
 
     moveChild(index: number, direction: number) {
@@ -1456,11 +1642,9 @@ export class ServerStatsSettingsComponent {
         const target = index + direction;
         if (target < 0 || target >= children.length) return;
         const selectedId = this.currentMetric.id;
-        const wasCollapsed = this.expandedMemberId === null;
         const item = children.splice(index, 1)[0];
         children.splice(target, 0, item);
-        this.selectGroupMetric(children.findIndex(m => m.id === selectedId));
-        if (wasCollapsed) this.expandedMemberId = null;
+        this.activateMetric(children.find(m => m.id === selectedId) || this.currentGroup.main);
     }
 
     moveGroup(index: number, direction: number) {
@@ -1522,8 +1706,8 @@ export class ServerStatsSettingsComponent {
         };
     }
 
-    saveGroup() {
-        if (this.editingBuiltinKey) { this.saveBuiltin(); return; }
+    saveGroup(close = false) {
+        if (this.editingBuiltinKey) { this.saveBuiltin(close); return; }
         if (!this.currentGroup || !this.isGroupValid()) return;
         const group: CustomMetricGroup = {
             ...this.currentGroup,
@@ -1538,8 +1722,9 @@ export class ServerStatsSettingsComponent {
         if (index < 0) groups.push(group);
         else groups[index] = group;
         this.config.store.plugin.serverStats.metricGroups = groups;
+        this.editingGroupId = group.id;
         this.save();
-        this.cancelEdit();
+        this.afterSave(close);
     }
 
     get defaultMetricsConfig() {
@@ -1548,7 +1733,7 @@ export class ServerStatsSettingsComponent {
         }
         return this.config.store.plugin.serverStats.defaultMetrics;
     }
-    
+
     builtinMain(key: BuiltinMetricKey): CustomMetric {
         const definition = getBuiltinDefinition(key, this.config.store.plugin.serverStats);
         return key === 'net' || key === 'load' ? (definition as CustomMetricGroup).main : definition as CustomMetric;
@@ -1593,7 +1778,7 @@ export class ServerStatsSettingsComponent {
         this.save();
     }
 
-    private saveBuiltin() {
+    private saveBuiltin(close = false) {
         const key = this.editingBuiltinKey;
         if (!key || ((key === 'net' || key === 'load') ? !this.isGroupValid() : !this.isMetricValid(this.currentMetric))) return;
         const conf = this.config.store.plugin.serverStats;
@@ -1607,7 +1792,7 @@ export class ServerStatsSettingsComponent {
             children: this.currentGroup.children.map(child => this.serializeMetric(child, true))
         } : this.serializeMetric(this.currentMetric);
         this.save();
-        this.cancelEdit();
+        this.afterSave(close);
     }
 
     presetText(preset: MetricPreset, field: 'label' | 'description'): string {
@@ -1661,6 +1846,7 @@ export class ServerStatsSettingsComponent {
         const file = event.target?.files?.[0];
         if (!file) return;
         this.fetchError = false;
+        const targetMetric = this.currentMetric;
         const reader = new FileReader();
         reader.onload = () => {
             try { this.loadPresetLibrary(JSON.parse(String(reader.result || ''))); }
@@ -1748,6 +1934,7 @@ export class ServerStatsSettingsComponent {
     }
 
     cancelEdit() {
+        this.closePrompt = false; this.saveNotice = ''; this.singleExpanded = true;
         this.editingBuiltinKey = null;
         this.scopeSearch = '';
         this.iconSearch = '';
@@ -1762,9 +1949,9 @@ export class ServerStatsSettingsComponent {
         this.currentMetric = { ...this.defaultMetric, colorRules: [] };
     }
 
-    saveMetric() {
-        if (this.editingBuiltinKey) { this.saveBuiltin(); return; }
-        if (this.currentGroup) { this.saveGroup(); return; }
+    saveMetric(close = false) {
+        if (this.editingBuiltinKey) { this.saveBuiltin(close); return; }
+        if (this.currentGroup) { this.saveGroup(close); return; }
         if (!this.isMetricValid(this.currentMetric)) return;
 
         if (!this.config.store.plugin.serverStats.customMetrics) {
@@ -1779,11 +1966,12 @@ export class ServerStatsSettingsComponent {
             const index = this.customMetrics.findIndex(m => m.id === metricToSave.id);
             if (index < 0) return;
             this.config.store.plugin.serverStats.customMetrics[index] = metricToSave;
-            this.editingIndex = -1;
         }
-
+        this.editingIndex = this.customMetrics.findIndex(metric => metric.id === metricToSave.id);
+        this.currentMetric = this.draftMetric(metricToSave);
+        this.newSingleOpen = false;
         this.save();
-        this.cancelEdit();
+        this.afterSave(close);
     }
 
     removeMetric(index: number) {
@@ -1812,7 +2000,7 @@ export class ServerStatsSettingsComponent {
         this.save();
         this.draggedIndex = null;
     }
-    
+
     get hexColor(): string {
         const bg = this.config.store.plugin.serverStats.style.background;
         if (!bg) return '#141414';
@@ -1874,7 +2062,7 @@ export class ServerStatsSettingsTabProvider extends SettingsTabProvider {
     }
 
     id = 'server-stats';
-    icon = 'fas fa-server'; 
+    icon = 'fas fa-server';
     title = this.translate.instant('Bottom Status Bar');
 
     setTitle(title: string) {

@@ -346,6 +346,301 @@ test('hover refresh respects metric interval, configured default, fallback ten s
         assert.equal(calls, 2);
     }
 });
+test('hover refreshes only requested labels immediately and every second without changing normal polling', async () => {
+    const hovered = metric({ interval: 60, command: 'printf HOVERED' });
+    const other = metric({ id: 'other', interval: 60, command: 'printf OTHER' });
+    const { instance, session } = service([hovered, other]);
+    const scripts = [], events = [];
+    instance.statsUpdated$.subscribe(event => events.push(event.stats));
+    instance.execute = async (_session, script) => { scripts.push(script); return echoPackets(script); };
+    await instance.fetchStats(session);
+    const beforeHover = events.length;
+    await instance.fetchHoveredStats(session, [hovered, hovered], true);
+    assert.equal(scripts.length, 2);
+    assert.match(scripts[1], /printf HOVERED/);
+    assert.doesNotMatch(scripts[1], /printf OTHER|RESULT:m_1:/);
+    assert(events.length > beforeHover, 'Targeted values update the normal snapshot stream');
+    await instance.fetchHoveredStats(session, [hovered]);
+    assert.equal(scripts.length, 2, 'Repeated timer ticks reuse the one-second value cache');
+    const state = instance.getSessionCache(session).metricStates.get(hovered.id);
+    state.lastAttempt = Date.now() - 1100;
+    await instance.fetchHoveredStats(session, [hovered]);
+    assert.equal(scripts.length, 3);
+    state.lastAttempt = Date.now() - 1100;
+    await instance.fetchStats(session);
+    assert.equal(scripts.length, 3, 'Normal polling still uses the saved 60-second interval');
+    assert.equal(hovered.interval, 60);
+});
+
+test('hover groups resolve current commands and ignore disabled, unrelated and out-of-scope members', async () => {
+    const main = metric({ id: 'main', command: 'printf CURRENT_MAIN' });
+    const child = metric({ id: 'child', command: 'printf CURRENT_CHILD' });
+    const disabled = metric({ id: 'disabled', enabled: false, command: 'printf DISABLED' });
+    const foreign = metric({ id: 'foreign', displayScope: { mode: 'selected', profileIds: ['p2'] }, command: 'printf FOREIGN' });
+    const unrelated = metric({ id: 'unrelated', command: 'printf UNRELATED' });
+    const { instance, session } = service([foreign, unrelated], [{ id: 'group', main, children: [child, disabled] }], { profiles: [{ id: 'p1' }, { id: 'p2' }] });
+    session.profile = { id: 'p1' };
+    const scripts = [];
+    instance.execute = async (_session, script) => { scripts.push(script); return echoPackets(script); };
+    const result = await instance.fetchHoveredStats(session, [{ ...main, command: 'printf STALE' }, child, child, disabled, foreign], true);
+    assert.equal(scripts.length, 1);
+    assert.match(scripts[0], /printf CURRENT_MAIN/);
+    assert.match(scripts[0], /printf CURRENT_CHILD/);
+    assert.doesNotMatch(scripts[0], /printf STALE|printf DISABLED|printf FOREIGN|printf UNRELATED/);
+    assert.deepEqual(result.custom.filter(item => item.status === 'ok').map(item => item.id), ['main', 'child']);
+    assert.equal(result.custom.find(item => item.id === unrelated.id).status, 'pending');
+});
+
+test('group entry rechecks hidden failures once without running value or detail commands', async () => {
+    const input = metric({ interval: 10, visibleWhenUnavailable: false, checkCommand: 'exit 1',
+        command: 'printf BAD_VALUE >&2', detailCommand: 'printf BAD_DETAIL >&2' });
+    const { instance, session } = service([input]);
+    let calls = 0;
+    instance.execute = async (_session, script) => {
+        calls++;
+        const result = spawnSync(shell, ['-s'], { input: script, encoding: 'utf8', timeout: 7000,
+            env: { ...process.env, PATH: shellTools + process.env.PATH } });
+        assert.equal(result.status, 0, result.stderr);
+        assert.doesNotMatch(result.stderr, /BAD_VALUE|BAD_DETAIL/);
+        return result.stdout;
+    };
+    await instance.fetchStats(session);
+    assert.equal((await instance.fetchHoveredStats(session, [input], true)).custom[0].status, 'unavailable');
+    assert.equal(calls, 2, 'Entering retries immediately, even inside the normal backoff period');
+    assert.deepEqual(await instance.fetchDetails(session, [input], { force: true, skipPending: true }), { disk: '' });
+    assert.equal(calls, 2, 'Failed prerequisites prevent detail commands');
+    const state = instance.getSessionCache(session).metricStates.get(input.id);
+    state.lastAttempt = Date.now() - 11000;
+    await instance.fetchHoveredStats(session, [input]);
+    await instance.fetchStats(session);
+    assert.equal(calls, 2, 'Continuing hover and early background polls retain the failure');
+    state.lastAttempt = Date.now() - 61000;
+    await instance.fetchHoveredStats(session, [input]);
+    assert.equal(calls, 2, 'Continued hover never refreshes hidden failures, even after one minute');
+    await instance.fetchStats(session);
+    assert.equal(calls, 3, 'Ordinary polling retains its low-frequency recovery retry');
+});
+
+test('a hidden object recovered on entry participates in fast visible refreshes', async () => {
+    const input = metric({ interval: 60, visibleWhenUnavailable: false, detailCommand: 'printf details' });
+    const { instance, session } = service([input]);
+    let calls = 0;
+    instance.execute = async () => { calls++; return packet(calls === 1 ? 'unavailable' : 'ok', '42'); };
+    await instance.fetchStats(session);
+    await instance.fetchHoveredStats(session, [input], true);
+    assert.equal(instance.getCachedStats(session).custom[0].status, 'ok');
+    assert.equal(calls, 2);
+    const state = instance.getSessionCache(session).metricStates.get(input.id);
+    state.lastAttempt = Date.now() - 1100;
+    await instance.fetchHoveredStats(session, [input]);
+    assert.equal(calls, 3);
+});
+
+test('hover starts beside a slow batch and old completion cannot unlock a newer value request', async () => {
+    const fast = metric({ detailCommand: 'printf details' });
+    const slow = metric({ id: 'slow', command: 'printf SLOW' });
+    const { instance, session } = service([fast, slow]);
+    const requests = [];
+    instance.execute = (_session, script, _timeout, onChunk) => new Promise(resolve => requests.push({ script, onChunk, resolve }));
+    const regular = instance.fetchStats(session);
+    requests[0].onChunk(packet('ok', 'old'));
+    const hover = instance.fetchHoveredStats(session, [fast], true);
+    assert.equal(requests.length, 2, 'A completed label does not wait for its slow sibling');
+    assert.doesNotMatch(requests[1].script, /printf SLOW/);
+    await instance.fetchHoveredStats(session, [fast], true);
+    assert.equal(requests.length, 2, 'Repeated entry reuses the in-flight value request');
+    assert.deepEqual(await instance.fetchDetails(session, [fast], { force: true, skipPending: true }), {});
+    requests[0].resolve(packet('ok', 'slow', 'm_1'));
+    await regular;
+    await instance.fetchHoveredStats(session, [fast], true);
+    assert.equal(requests.length, 2, 'Old batch completion must not clear the new request lock');
+    requests[1].resolve(packet('ok', 'fresh'));
+    assert.equal((await hover).custom[0].value, 'fresh');
+});
+
+test('active hover details bypass cache on entry, refresh every second and deduplicate in-flight work', async () => {
+    const input = metric({ interval: 60, detailCommand: 'printf details' });
+    const { instance, session } = service([input]);
+    let calls = 0;
+    instance.execute = async (_session, script) => {
+        calls++;
+        return packet('ok', String(calls), script.includes('RESULT:detail:') ? 'detail' : 'm_0');
+    };
+    await instance.fetchStats(session);
+    await instance.fetchDetails(session, [input]);
+    assert.deepEqual(await instance.fetchDetails(session, [input], { force: true, maxAgeMs: 1000, skipPending: true }), { disk: '3' });
+    assert.deepEqual(await instance.fetchDetails(session, [input], { maxAgeMs: 1000, skipPending: true }), { disk: '3' });
+    assert.equal(calls, 3);
+    instance.getSessionCache(session).metricStates.get(input.id).detailAt = Date.now() - 1100;
+    assert.deepEqual(await instance.fetchDetails(session, [input], { maxAgeMs: 1000, skipPending: true }), { disk: '4' });
+    let release;
+    instance.execute = () => { calls++; return new Promise(resolve => { release = resolve; }); };
+    const first = instance.fetchDetails(session, [input], { force: true, skipPending: true });
+    const duplicate = instance.fetchDetails(session, [input], { force: true, skipPending: true });
+    await instance.fetchHoveredStats(session, [input], true);
+    assert.equal(calls, 5, 'Forced value and detail requests never duplicate an in-flight detail');
+    release(packet('ok', 'new details', 'detail'));
+    assert.deepEqual(await first, { disk: 'new details' });
+    assert.deepEqual(await duplicate, { disk: 'new details' });
+});
+
+test('hover details skip pending group members without waiting for the normal collection', async () => {
+    const fast = metric({ detailCommand: 'printf FAST_DETAIL' });
+    const slow = metric({ id: 'slow', detailCommand: 'printf SLOW_DETAIL' });
+    const missing = metric({ id: 'missing', detailCommand: 'printf MISSING_DETAIL' });
+    const { instance, session } = service([fast, slow, missing]);
+    let finish;
+    const scripts = [];
+    instance.execute = async (_session, script, _timeout, onChunk) => {
+        scripts.push(script);
+        if (script.includes('RESULT:detail:')) return packet('ok', 'fast details', 'detail');
+        onChunk(packet('ok', 'fast'));
+        return new Promise(resolve => { finish = resolve; });
+    };
+    const regular = instance.fetchStats(session);
+    instance.getSessionCache(session).metricStates.delete(missing.id);
+    const details = await instance.fetchDetails(session, [fast, slow, missing], { force: true, maxAgeMs: 1000, skipPending: true });
+    assert.deepEqual(details, { disk: 'fast details' });
+    assert.equal(scripts.length, 2);
+    assert.doesNotMatch(scripts[1], /printf SLOW_DETAIL|printf MISSING_DETAIL/);
+    finish(packet('ok', 'slow', 'm_1') + packet('ok', 'missing', 'm_2'));
+    await regular;
+});
+
+test('invisible panes start no hover requests, including details waiting for a normal value', async () => {
+    const input = metric({ detailCommand: 'printf details' });
+    let visible = false, calls = 0, finish;
+    const { instance, session } = service([input], [], { scopes: { isPaneVisible: () => visible, contextForSession: () => ({ profileIds: [] }) } });
+    instance.execute = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+    assert.equal(await instance.fetchHoveredStats(session, [input], true), null);
+    assert.deepEqual(await instance.fetchDetails(session, [input], { force: true, skipPending: true }), {});
+    assert.equal(calls, 0);
+    visible = true;
+    const regular = instance.fetchStats(session);
+    const detail = instance.fetchDetails(session, [input]);
+    visible = false;
+    finish(packet('ok', '42'));
+    await regular;
+    assert.deepEqual(await detail, {});
+    assert.equal(calls, 1);
+});
+
+test('late targeted hover values are discarded after configuration changes or closed sessions', async () => {
+    for (const reason of ['config', 'close']) {
+        const input = metric();
+        const { instance, session, config } = service([input]);
+        let finish, emitted = 0;
+        instance.statsUpdated$.subscribe(() => emitted++);
+        instance.execute = () => new Promise(resolve => { finish = resolve; });
+        const task = instance.fetchHoveredStats(session, [input], true);
+        if (reason === 'config') { input.command = 'printf new'; config.changed$.next(); } else session.open = false;
+        finish(packet('ok', 'late'));
+        assert.equal(await task, null);
+        assert.equal(emitted, 0);
+    }
+});
+
+test('opt-in disk I/O values keep displayed throughput separate from reference-bandwidth color percentage', async () => {
+    const input = metric({ valueFormat: 'disk-io-rate' });
+    const { instance, session } = service([input]);
+    const events = [];
+    instance.statsUpdated$.subscribe(event => events.push(event.stats.custom[0]));
+    instance.execute = async () => packet('ok', 'TABBY-IO:125.50:80.25');
+    const expected = { id: 'disk', value: '125.50', status: 'ok', colorValue: 80.25 };
+    assert.deepEqual((await instance.fetchStats(session)).custom[0], expected);
+    assert.deepEqual(instance.getCachedStats(session).custom[0], expected);
+    assert.deepEqual(events[0], expected);
+    instance.execute = async () => packet('ok', 'TABBY-IO:190.00:112.50');
+    assert.equal((await instance.fetchHoveredStats(session, [input], true)).custom[0].colorValue, 112.5,
+        'Reference percentage is not clamped to 100 in the sampling data');
+    instance.execute = async () => packet('ok', 'TABBY-IO:0.00:0.00');
+    assert.deepEqual((await instance.fetchHoveredStats(session, [input], true)).custom[0],
+        { id: 'disk', value: '0.00', status: 'ok', colorValue: 0 });
+});
+
+test('ordinary values and lookalike user text are never decoded as disk I/O without explicit opt-in', async () => {
+    const input = metric();
+    const { instance, session } = service([input]);
+    for (const value of ['125.50', 'TABBY-IO:125.50:80.25', 'TABBY-IO:broken']) {
+        instance.execute = async () => packet('ok', value);
+        assert.deepEqual((await instance.fetchHoveredStats(session, [input], true)).custom[0],
+            { id: 'disk', value, status: 'ok' });
+    }
+});
+
+test('disk I/O protocol rejects malformed, negative and non-finite numbers without keeping old color metadata', async () => {
+    const input = metric({ valueFormat: 'disk-io-rate' });
+    const { instance, session } = service([input]);
+    for (const value of ['12.50', 'TABBY-IO:12.50', 'TABBY-IO::80', 'TABBY-IO:1:',
+        'TABBY-IO:-1:80', 'TABBY-IO:1:-80', 'TABBY-IO:NaN:80', 'TABBY-IO:1:NaN',
+        'TABBY-IO:Infinity:80', 'TABBY-IO:1:Infinity', `TABBY-IO:${'9'.repeat(400)}:80`,
+        `TABBY-IO:1:${'9'.repeat(400)}`, 'TABBY-IO:1:80:extra', 'TABBY-IO:1 :80', 'prefix TABBY-IO:1:80']) {
+        instance.execute = async () => packet('ok', 'TABBY-IO:12.50:80');
+        await instance.fetchHoveredStats(session, [input], true);
+        const state = instance.getSessionCache(session).metricStates.get(input.id);
+        state.detail = 'old details'; state.detailAt = Date.now();
+        instance.execute = async () => packet('ok', value);
+        assert.deepEqual((await instance.fetchHoveredStats(session, [input], true)).custom[0],
+            { id: 'disk', value: 'Err: Invalid I/O result', status: 'error' }, value);
+        assert.equal(state.detail, '', value);
+        assert.equal(state.detailAt, 0, value);
+        assert.equal(state.colorValue, undefined, value);
+    }
+});
+
+test('disk I/O value failures, incomplete batches and transport errors discard old color percentages', async () => {
+    for (const reason of ['unavailable', 'error', 'empty', 'transport']) {
+        const input = metric({ valueFormat: 'disk-io-rate' });
+        const { instance, session } = service([input]);
+        instance.execute = async () => packet('ok', 'TABBY-IO:150:95');
+        await instance.fetchStats(session);
+        instance.execute = async () => {
+            if (reason === 'transport') throw Error('Stats: Timeout');
+            return reason === 'empty' ? 'TABBY-STATS-END\n' : packet(reason, 'Err: Exit 1');
+        };
+        const item = (await instance.fetchHoveredStats(session, [input], true)).custom[0];
+        assert.equal(item.status, reason === 'unavailable' ? 'unavailable' : 'error');
+        assert.equal(Object.hasOwn(item, 'colorValue'), false, reason);
+        assert.equal(instance.getSessionCache(session).metricStates.get(input.id).colorValue, undefined, reason);
+    }
+});
+
+test('disk I/O detail failures preserve the primary percentage but failed prerequisite checks invalidate it', async () => {
+    const input = metric({ valueFormat: 'disk-io-rate', detailCommand: 'printf details' });
+    const { instance, session } = service([input]);
+    instance.execute = async () => packet('ok', 'TABBY-IO:150:95');
+    await instance.fetchStats(session);
+    instance.execute = async () => { throw Error('Stats: Timeout'); };
+    assert.deepEqual(await instance.fetchDetails(session, [input]), { disk: 'Err: Timeout' });
+    assert.equal(instance.getCachedStats(session).custom[0].colorValue, 95);
+    instance.execute = async () => packet('unavailable', '', 'detail');
+    await instance.fetchDetails(session, [input], { force: true });
+    assert.deepEqual(instance.getCachedStats(session).custom[0], { id: 'disk', value: 'Unavailable', status: 'unavailable' });
+});
+
+test('disk I/O color metadata resets on ordinary success, configuration changes and scope changes', async () => {
+    const input = metric({ valueFormat: 'disk-io-rate' });
+    const scopes = { contextForSession: session => ({ profileIds: [session.layout] }) };
+    const { instance, session, config } = service([input], [], { scopes });
+    session.layout = 'layout-A';
+    instance.execute = async () => packet('ok', 'TABBY-IO:150:95');
+    await instance.fetchStats(session);
+    assert.equal(instance.getCachedStats(session).custom[0].colorValue, 95);
+    delete input.valueFormat;
+    instance.execute = async () => packet('ok', '150');
+    assert.deepEqual((await instance.fetchHoveredStats(session, [input], true)).custom[0],
+        { id: 'disk', value: '150', status: 'ok' });
+    input.valueFormat = 'disk-io-rate';
+    instance.execute = async () => packet('ok', 'TABBY-IO:150:95');
+    await instance.fetchHoveredStats(session, [input], true);
+    input.command = 'printf updated';
+    config.changed$.next();
+    assert.equal(instance.getCachedStats(session), null);
+    await instance.fetchHoveredStats(session, [input], true);
+    session.layout = 'layout-B';
+    assert.equal(instance.getCachedStats(session), null);
+});
+
 test('config changes and closed sessions discard late results and emissions', async () => {
     for (const reason of ['config', 'close']) {
         const { instance, session, config } = service();
@@ -353,7 +648,7 @@ test('config changes and closed sessions discard late results and emissions', as
         instance.statsUpdated$.subscribe(() => emitted++);
         instance.execute = () => new Promise(resolve => { release = resolve; });
         const task = instance.fetchStats(session);
-        if (reason === 'config') config.changed$.next(); else session.open = false;
+        if (reason === 'config') { config.store.plugin.serverStats.defaultInterval = 20; config.changed$.next(); } else session.open = false;
         release(packet('ok', '99'));
         assert.equal(await task, null);
         assert.equal(emitted, 0);
@@ -413,6 +708,79 @@ test('saved deletion and added bindings remove stale data and refresh newly asso
     assert.equal(calls, 3, 'Deleting the last label must not execute its old command');
 });
 
+test('presentation saves preserve every session cache, pending task and hidden retry timer', async () => {
+    const input = metric({ visibleWhenUnavailable: false, interval: 3600 });
+    const { instance, config, session } = service([input]);
+    const sibling = { open: true };
+    instance.execute = async () => packet('unavailable');
+    await instance.fetchStats(session);
+    const hiddenCache = instance.getSessionCache(session);
+    const lastAttempt = hiddenCache.metricStates.get(input.id).lastAttempt;
+    let release, calls = 0;
+    instance.execute = () => { calls++; return new Promise(resolve => { release = resolve; }); };
+    const pending = instance.fetchStats(sibling);
+    config.store.plugin.serverStats.paneIconCorners = { first: 'top-left' };
+    config.store.plugin.serverStats.paneAlignments = { first: 'center' };
+    config.store.plugin.serverStats.paneGroupModes = { first: 'static' };
+    config.store.plugin.serverStats.style = { size: 120 };
+    config.changed$.next();
+    assert.equal(instance.getSessionCache(session), hiddenCache);
+    assert.equal(hiddenCache.metricStates.get(input.id).lastAttempt, lastAttempt);
+    assert.equal((await instance.fetchStats(session)).custom[0].available, false);
+    const duplicate = instance.fetchStats(sibling);
+    assert.equal(calls, 1, 'The sibling must reuse its in-flight request');
+    release(packet('ok', '42'));
+    assert.equal((await pending).custom[0].available, true);
+    assert.equal((await duplicate).custom[0].value, '42');
+});
+
+test('optional labels retain check decisions through regular and config refreshes until a complete new result', async () => {
+    for (const initial of [undefined, 'ok', 'unavailable']) {
+        const input = metric({ visibleWhenUnavailable: false, checkCommand: 'test -d /optional' });
+        const { instance, config, session } = service([input]);
+        if (initial) {
+            instance.execute = async () => packet(initial, '42');
+            await instance.fetchStats(session);
+        }
+        const expected = initial === 'ok';
+        let release;
+        instance.execute = () => new Promise(resolve => { release = resolve; });
+        let pending = instance.fetchHoveredStats(session, [input], true);
+        assert.equal(instance.getCachedStats(session).custom[0].available, expected);
+        release(packet(initial || 'unavailable', '42'));
+        await pending;
+        config.store.plugin.serverStats.defaultInterval = 30;
+        config.changed$.next();
+        pending = instance.fetchStats(session);
+        const refreshing = instance.getCachedStats(session).custom[0];
+        assert.equal(refreshing.status, 'pending');
+        assert.equal(refreshing.available, expected);
+        release(packet(expected ? 'unavailable' : 'ok', '99'));
+        assert.equal((await pending).custom[0].available, !expected, 'New result decides the new visibility');
+        instance.execute = async () => { throw Error('Timeout'); };
+        assert.equal((await instance.fetchHoveredStats(session, [input], true)).custom[0].available, !expected,
+            'A transport error must not turn a hidden label into a visible one');
+    }
+});
+
+test('detail prerequisite failures hide optional labels and adding a label preserves existing decisions', async () => {
+    const input = metric({ visibleWhenUnavailable: false, detailCommand: 'printf detail' });
+    const { instance, config, session } = service([input]);
+    instance.execute = async () => packet('ok', '42');
+    await instance.fetchStats(session);
+    config.store.plugin.serverStats.customMetrics.push(metric({ id: 'new', visibleWhenUnavailable: false }));
+    config.changed$.next();
+    let release;
+    instance.execute = () => new Promise(resolve => { release = resolve; });
+    const pending = instance.fetchStats(session);
+    assert.deepEqual(instance.getCachedStats(session).custom.map(row => row.available), [true, false]);
+    release(packet('ok', '42') + packet('unavailable', '', 'm_1'));
+    await pending;
+    instance.execute = async () => packet('unavailable', '', 'detail');
+    await instance.fetchDetails(session, [input], { force: true });
+    assert.equal(instance.getCachedStats(session).custom[0].available, false);
+});
+
 test('same saved profile uses independent session caches', () => {
     const { instance } = service();
     assert.notEqual(instance.getServerKey({ profile: { id: 'same' } }), instance.getServerKey({ profile: { id: 'same' } }));
@@ -441,6 +809,7 @@ test('late hover result cannot repopulate cache after a configuration change', a
     let release;
     instance.execute = () => new Promise(resolve => { release = resolve; });
     const task = instance.fetchDetails(session, [input]);
+    input.detailCommand = 'printf new';
     config.changed$.next();
     release(packet('ok', 'old', 'detail'));
     assert.deepEqual(await task, {});

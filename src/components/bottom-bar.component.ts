@@ -6,12 +6,15 @@ import { StatsService } from '../services/stats.service'
 import { CustomMetric, CustomMetricGroup } from '../config'
 import { BuiltinMetricKey } from '../builtin-metrics'
 import { PaneGroupMode } from '../services/metric-scope.service'
+import { collectionConfigSignature } from '../collection-config'
+import { metricIsAvailable } from '../metric-display'
 
 @Component({
     selector: 'server-stats-bottom-bar',
     template: `
       <ng-container *ngIf="visible">
         <button #paneToggle type="button" class="pane-status-toggle" [class.is-collapsed]="!paneVisible"
+            [attr.data-corner]="iconCorner"
             data-testid="pane-status-toggle" (click)="togglePaneMenu($event)" (keydown)="onToggleKeydown($event)"
             (mousemove)="$event.stopPropagation()"
             [attr.aria-expanded]="menuOpen" aria-haspopup="menu"
@@ -37,8 +40,20 @@ import { PaneGroupMode } from '../services/metric-scope.service'
                 <button type="button" class="pane-menu-static" role="menuitemradio" [attr.aria-checked]="paneGroupMode === 'static'"
                     (click)="setPaneGroupMode('static')"><span aria-hidden="true">{{paneGroupMode === 'static' ? '✓' : ''}}</span>{{'Static' | translate}}</button>
             </div>
+            <div class="pane-menu-separator" role="separator"></div>
+            <div role="group" [attr.aria-label]="'Icon position' | translate">
+                <button *ngFor="let corner of iconCorners" type="button" [attr.data-icon-corner]="corner.id"
+                    role="menuitemradio" [attr.aria-checked]="iconCorner === corner.id" (click)="setIconCorner(corner.id)">
+                    <span aria-hidden="true">{{iconCorner === corner.id ? '✓' : ''}}</span>{{corner.label | translate}}
+                </button>
+            </div>
+            <div class="pane-menu-separator" role="separator"></div>
+            <div role="group" [attr.aria-label]="'Label alignment' | translate">
+                <button type="button" data-alignment="top" role="menuitemradio" [attr.aria-checked]="paneAlignment === 'top'" (click)="setPaneAlignment('top')"><span aria-hidden="true">{{paneAlignment === 'top' ? '✓' : ''}}</span>{{'Align top' | translate}}</button>
+                <button type="button" data-alignment="center" role="menuitemradio" [attr.aria-checked]="paneAlignment === 'center'" (click)="setPaneAlignment('center')"><span aria-hidden="true">{{paneAlignment === 'center' ? '✓' : ''}}</span>{{'Align center' | translate}}</button>
+            </div>
         </div>
-        <div class="stats-container" 
+        <div class="stats-container" [attr.data-corner]="iconCorner"
              *ngIf="paneVisible"
              [style.background]="styleConfig.background">
             <div class="stat-section" *ngIf="loading">
@@ -46,19 +61,20 @@ import { PaneGroupMode } from '../services/metric-scope.service'
             </div>
             
             <server-stats-metric-strip *ngIf="!loading" [metrics]="customMetrics" [groups]="metricGroups"
+                [class.center-aligned]="paneAlignment === 'center'"
                 [builtinOrder]="builtinOrder"
                 [stats]="currentStats" [session]="displaySession"></server-stats-metric-strip>
         </div>
       </ng-container>
     `,
     styles: [`
-        :host { display: block; width: 100%; position: relative; box-sizing: border-box; }
+        :host { display: block; width: 100%; position: static; box-sizing: border-box; }
         .stats-container {
             position: relative;
             width: 100%;
             box-sizing: border-box;
             backdrop-filter: blur(8px);
-            padding: 1px 12px 1px 29px;
+            padding: 1px 12px;
             display: flex;
             flex-wrap: wrap;
             gap: 4px 10px;
@@ -71,16 +87,21 @@ import { PaneGroupMode } from '../services/metric-scope.service'
             min-height: 22px;
         }
         .stat-section { display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto; height: 20px; }
+        .stats-container[data-corner="bottom-left"] { padding-left: 29px; }
+        .stats-container[data-corner="bottom-right"] { padding-right: 29px; }
         .loading-text { color: rgba(255,255,255,0.6); font-size: 10px; font-style: italic; }
         .pane-status-toggle {
-            position: absolute; left: 4px; bottom: 1px; z-index: 5;
+            position: absolute; right: 4px; bottom: 2px; z-index: 5;
             display: inline-flex; align-items: center; justify-content: center;
             width: 20px; height: 20px; padding: 2px; margin: 0;
             border: 1px solid rgba(130,170,210,0.6); border-radius: 3px;
             color: #8fcaff; background: rgba(20,24,30,0.92); cursor: pointer;
         }
         .pane-status-toggle svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round; }
-        .pane-status-toggle.is-collapsed { color: #b8c4d0; bottom: 2px; }
+        .pane-status-toggle.is-collapsed { color: #b8c4d0; }
+        .pane-status-toggle[data-corner="bottom-left"] { left: 4px; right: auto; }
+        .pane-status-toggle[data-corner="top-left"] { left: 4px; right: auto; top: 4px; bottom: auto; }
+        .pane-status-toggle[data-corner="top-right"] { top: 4px; bottom: auto; }
         .pane-status-toggle:hover { color: #fff; border-color: #8fcaff; }
         .pane-status-toggle:focus-visible { outline: 2px solid #8fcaff; outline-offset: 1px; }
         .pane-status-menu {
@@ -103,6 +124,12 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
     menuOpen = false
     menuPosition = { left: 4, top: 4 }
     paneGroupMode: PaneGroupMode | undefined
+    iconCorner = 'bottom-right'
+    paneAlignment = 'top'
+    readonly iconCorners = [
+        { id: 'top-left', label: 'Top left' }, { id: 'top-right', label: 'Top right' },
+        { id: 'bottom-left', label: 'Bottom left' }, { id: 'bottom-right', label: 'Bottom right' },
+    ]
     @ViewChild('paneToggle') private paneToggle?: ElementRef<HTMLButtonElement>
     @ViewChild('paneMenu') private paneMenu?: ElementRef<HTMLElement>
     loading = true
@@ -119,6 +146,8 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
     displaySession: any = null
     private destroyed = false
     private viewRevision = 0
+    private collectionSignature = ''
+    private displayEnabled = false
     public useExternalController = false
     public externalSessionResolver: (() => any) | null = null
 
@@ -162,6 +191,8 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         this.builtinOrder = conf.builtinOrder || [];
         this.customMetrics = visible.customMetrics || [];
         this.paneGroupMode = session ? this.statsService.getPaneGroupMode?.(session) : undefined;
+        this.iconCorner = session ? this.statsService.getPaneIconCorner?.(session) || 'bottom-right' : 'bottom-right';
+        this.paneAlignment = session ? this.statsService.getPaneAlignment?.(session) || 'top' : 'top';
         // A pane preference is a presentation override, never a change to shared definitions.
         this.metricGroups = this.paneGroupMode ? (visible.metricGroups || []).map(group => ({
             ...group, mode: this.paneGroupMode!, layout: group.layout || 'vertical',
@@ -231,8 +262,26 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         if (!toggle || !menu) return;
         this.menuPosition = {
             left: Math.max(8, Math.min(toggle.left, window.innerWidth - menu.width - 8)),
-            top: Math.max(8, Math.min(toggle.top - menu.height - 4, window.innerHeight - menu.height - 8)),
+            top: Math.max(8, Math.min(this.iconCorner.startsWith('top-') ? toggle.bottom + 4 : toggle.top - menu.height - 4, window.innerHeight - menu.height - 8)),
         };
+    }
+
+    setIconCorner(corner: string) {
+        const session = this.resolveSession();
+        if (!this.canDisplay(session) || !this.iconCorners.some(item => item.id === corner)) return;
+        this.statsService.setPaneIconCorner(session, corner);
+        this.iconCorner = corner;
+        this.closePaneMenu(true);
+        this.cdr.detectChanges();
+    }
+
+    setPaneAlignment(alignment: string) {
+        const session = this.resolveSession();
+        if (!this.canDisplay(session) || !['top', 'center'].includes(alignment)) return;
+        this.statsService.setPaneAlignment(session, alignment);
+        this.paneAlignment = alignment;
+        this.closePaneMenu(true);
+        this.cdr.detectChanges();
     }
 
     private menuButtons(): HTMLButtonElement[] {
@@ -352,10 +401,11 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
             setTimeout(() => this.checkAndFetch(), 100);
         }));
         this.configSubscriptions.push(this.config.changed$.subscribe(() => {
-            this.loadConfig(true);
+            const previousRevision = this.viewRevision;
+            this.loadConfig();
             // Per-pane controllers schedule their own refresh; standalone bars
             // must also refresh on save instead of waiting for the next timer.
-            if (!this.useExternalController) void this.checkAndFetch();
+            if (!this.useExternalController && previousRevision !== this.viewRevision) void this.checkAndFetch();
         }));
 
         this.configSubscriptions.push(this.statsService.statsUpdated$.subscribe(event => {
@@ -394,8 +444,12 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
 
     loadConfig(invalidateReadings = false) {
         if (this.destroyed) return;
-        this.viewRevision++;
         const conf = this.config?.store?.plugin?.serverStats || {};
+        const signature = collectionConfigSignature(this.config.store);
+        invalidateReadings = invalidateReadings || (!!this.collectionSignature && signature !== this.collectionSignature);
+        this.collectionSignature = signature;
+        if (invalidateReadings || this.displayEnabled !== !!conf.enabled) this.viewRevision++;
+        this.displayEnabled = !!conf.enabled;
         if (conf.style) {
             this.styleConfig = { ...this.styleConfig, ...conf.style };
         }
@@ -404,10 +458,15 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
         this.synchronizeSession(session);
         this.visible = this.canDisplay(session);
         if (invalidateReadings) {
-            // Stable metric IDs may now refer to different commands or targets.
-            // Never show a previous value under a newly saved label or binding.
-            this.currentStats = { cpu: 0, mem: 0, disk: 0, netRx: 0, netTx: 0, custom: [] };
-            this.loading = this.visible && this.paneVisible;
+            // Changed commands need fresh values, but existing optional labels
+            // keep their last visibility decision until the new check completes.
+            const previous = this.currentStats.custom || [];
+            const optional = [...this.customMetrics, ...this.metricGroups.flatMap(group => [group.main, ...group.children])]
+                .filter(metric => metric && (metric.visibleWhenUnavailable === false || metric.showWhenUnavailable === false));
+            this.currentStats = { cpu: 0, mem: 0, disk: 0, netRx: 0, netTx: 0, custom: optional.map(metric => ({
+                id: metric.id, value: '-', status: 'pending', available: metricIsAvailable(previous.find(result => result.id === metric.id)),
+            })) };
+            this.loading = this.visible && this.paneVisible && !previous.length;
         }
         if (!this.visible) {
             this.visible = false;

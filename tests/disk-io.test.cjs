@@ -8,7 +8,7 @@ const ts = require('typescript')
 require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
 }).outputText, filename)
-const { createDiskIoCommand, createDiskIoCheckCommand } = require('../src/disk-io.ts')
+const { createDiskIoCommand, createDiskIoCheckCommand, compactDiskIoCheck, migrateDiskIoChecks } = require('../src/disk-io.ts')
 const { createDiskIoGroupPreset, getBundledPresets, instantiatePreset } = require('../src/preset-library.ts')
 const gitExecPath = process.platform === 'win32' ? spawnSync('git', ['--exec-path'], { encoding: 'utf8' }).stdout?.trim() : ''
 const gitShell = gitExecPath ? path.resolve(gitExecPath, '../../..', 'bin/sh.exe') : ''
@@ -37,7 +37,9 @@ sleep() { cp "$IO_TEST_NEXT_DISKS" "$IO_TEST_DISKS"; cp "$IO_TEST_NEXT_UPTIME" "
 `
     const source = command.replaceAll('/proc/diskstats', '"$IO_TEST_DISKS"').replaceAll('/proc/uptime', '"$IO_TEST_UPTIME"')
     try {
-        const result = spawnSync(shell, ['-s'], { input: mock + '\n' + source + '\n', encoding: 'utf8', timeout: 5000,
+        // Expanded-mount fixtures spawn many mocked findmnt/awk processes on
+        // Windows; allow process-start overhead when the full suite runs in parallel.
+        const result = spawnSync(shell, ['-s'], { input: mock + '\n' + source + '\n', encoding: 'utf8', timeout: 15000,
             env: { ...process.env, PATH: shellTools + process.env.PATH, ...env } })
         if (result.error) throw result.error
         return result
@@ -47,12 +49,124 @@ sleep() { cp "$IO_TEST_NEXT_DISKS" "$IO_TEST_DISKS"; cp "$IO_TEST_NEXT_UPTIME" "
     }
 }
 
+function assertNormalized(result, expectedRaw, expectedPercent) {
+    assert.equal(result.status, 0, result.stderr)
+    const [tag, raw, percent] = result.stdout.trim().split(':')
+    assert.equal(tag, 'TABBY-IO')
+    assert.equal(raw, expectedRaw)
+    assert.match(percent, /^\d+\.\d+$/)
+    assert(Math.abs(Number(percent) - expectedPercent) < 1e-7, `${percent} vs ${expectedPercent}`)
+    return Number(percent)
+}
+
+test('short disk checks preserve validation and migrate only exact generated scripts', () => {
+    const paths = ['/', '/data2'];
+    const legacy = createDiskIoCommand(paths).split('\nio_before=')[0] + '\ntabby_io_snapshot >/dev/null';
+    const compact = createDiskIoCheckCommand(paths);
+    assert(compact.length < legacy.length * .65);
+    assert.equal(compactDiskIoCheck(legacy), compact);
+    assert.equal(compactDiskIoCheck(legacy + '\n# custom'), legacy + '\n# custom');
+    assert.equal(compactDiskIoCheck('echo user-command'), 'echo user-command');
+    for (const options of [{}, { mounts: {} }, { before: [row().replace('2048', 'broken')] },
+        { mounts: { '/': '8:1', '/data2': '8:1' } }, { mounts: { '/data2': '8:2' }, before: [row('8:2')] }]) {
+        assert.equal(run(compact, options).status, run(legacy, options).status);
+    }
+    const conf = { customMetrics: [{ checkCommand: 'printf custom' }], metricGroups: [{ enabled: false,
+        main: { checkCommand: legacy }, children: [{ checkCommand: legacy }] }] };
+    assert(migrateDiskIoChecks(conf));
+    assert.equal(conf.customMetrics[0].checkCommand, 'printf custom');
+    assert.equal(conf.metricGroups[0].children[0].checkCommand, compact);
+    assert(!migrateDiskIoChecks(conf), 'Migration is idempotent');
+});
+
 test('disk I/O computes rate, request-weighted await and queue from actual elapsed time', () => {
     const options = { after: [row('8:1', [110, 4096, 1050, 220, 8192, 2200, 5500])] }
     const value = run(createDiskIoCommand(['/']), options)
     assert.equal(value.status, 0, value.stderr)
     assert.equal(value.stdout.trim(), '2.40')
     assert.equal(run(createDiskIoCommand(['/'], true), options).stdout.trim(), 'R 0.80 / W 1.60 MB/s | await 8.3 ms | queue 0.40')
+})
+
+test('reference-normalized I/O retains raw throughput and converts decimal manufacturer MB/s', () => {
+    const options = { after: [row('8:1', [110, 4096, 1050, 220, 8192, 2200, 5500])] }
+    const command = createDiskIoCommand(['/'], false, { '/': 100 })
+    const actual = run(command, options)
+    assertNormalized(actual, '2.40', 2.4 * 1.048576)
+    assertNormalized(run(command), '0.00', 0)
+    assert.equal(createDiskIoCommand(['/'], true, { '/': 100 }), createDiskIoCommand(['/'], true), 'Detail output and sampling remain unchanged')
+    assert.equal(run(createDiskIoCommand(['/']), options).stdout.trim(), '2.40', 'Existing presets keep the plain numeric protocol')
+})
+
+test('normalized totals deduplicate aliases using the smallest per-device reference', () => {
+    const options = { mounts: { '/': '253:0', '/alias': '253:0', '/data': '259:1' },
+        before: [row('253:0'), row('259:1')],
+        after: [row('253:0', [110, 4096, 1050, 220, 8192, 2200, 5500]), row('259:1', [110, 4096, 1050, 220, 8192, 2200, 5500])],
+    }
+    const references = { '/': 100, '/alias': 50, '/data': 200 }
+    for (const paths of [['/', '/alias', '/data'], ['/alias', '/data', '/']]) {
+        const result = run(createDiskIoCommand(paths, false, references), options)
+        assertNormalized(result, '4.80', 100 * 4.8 / (250 / 1.048576))
+    }
+})
+
+test('unmounted candidates and unsupported filesystems never dilute normalized I/O', () => {
+    const paths = ['/', ...Array.from({ length: 12 }, (_, i) => `/data${i + 1}`), '/overlay', '/nfs']
+    const references = Object.fromEntries(paths.map(mount => [mount, mount === '/' ? 100 : 10000]))
+    const result = run(createDiskIoCommand(paths, false, references), {
+        mounts: { '/': '8:1', '/overlay': '0:123', '/nfs': '0:88' },
+        after: [row('8:1', [110, 4096, 1050, 220, 8192, 2200, 5500])],
+    })
+    assertNormalized(result, '2.40', 2.4 * 1.048576)
+    const unsupported = run(createDiskIoCommand(['/overlay'], false, { '/overlay': 100 }), { mounts: { '/overlay': '0:123' } })
+    assert.notEqual(unsupported.status, 0)
+    assert.equal(unsupported.stdout, '')
+})
+
+test('normalized sampling rejects removed devices and path remapping even when the device set is unchanged', () => {
+    const command = createDiskIoCommand(['/', '/data'], false, { '/': 100, '/data': 200 })
+    for (const nextMounts of [{ '/': '8:2', '/data': '8:1' }, { '/': '8:1' }, { '/': '8:3', '/data': '8:2' }]) {
+        const result = run(command, { mounts: { '/': '8:1', '/data': '8:2' }, nextMounts,
+            before: [row('8:1'), row('8:2'), row('8:3')],
+        })
+        assert.notEqual(result.status, 0, JSON.stringify(nextMounts))
+        assert.equal(result.stdout, '')
+    }
+})
+
+test('reference maps require explicit positive finite numbers for every requested mount', () => {
+    for (const reference of [0, -1, NaN, Infinity, -Infinity, undefined, null, '100']) {
+        assert.throws(() => createDiskIoCommand(['/'], false, { '/': reference }), /positive finite/)
+    }
+    assert.throws(() => createDiskIoCommand(['/', '/missing'], false, { '/': 100 }), /positive finite/)
+    assert.throws(() => createDiskIoCommand(['/'], true, {}), /positive finite/)
+    assert.throws(() => createDiskIoCommand(['/', 'relative'], false, { '/': 100, relative: 100 }), /positive finite/)
+    assert.throws(() => createDiskIoCommand(['/'], false, Object.create({ '/': 100 })), /positive finite/)
+    const mount = `/data/a'$(printf INJECTED >&2); space`
+    const safe = run(createDiskIoCommand([mount], false, { [mount]: 100 }), { mounts: { [mount]: '8:1' } })
+    assertNormalized(safe, '0.00', 0)
+    assert.doesNotMatch(safe.stderr, /INJECTED/)
+})
+
+test('normalized percentages preserve values just below color thresholds independently of rounded MB/s', () => {
+    for (const [percent, threshold] of [[79.999, 80], [94.999, 95]]) {
+        const readSectors = Math.round(percent / 100 * 2048 * 100000)
+        const result = run(createDiskIoCommand(['/'], false, { '/': 1.048576 }), {
+            after: [row('8:1', [110, 2048 + readSectors, 1050, 200, 4096, 2000, 5500])],
+            start: '10', finish: '100010',
+        })
+        const actual = assertNormalized(result, (percent / 100).toFixed(2), percent)
+        assert(actual < threshold, `A true ${percent}% must stay below ${threshold}%`)
+    }
+    for (const reference of [215, 255, 7000]) for (const percent of [80, 95]) {
+        // A 32-second synthetic sample gives an integral sector count at either threshold.
+        const readSectors = reference * 625 * percent
+        const result = run(createDiskIoCommand(['/'], false, { '/': reference }), {
+            after: [row('8:1', [110, 2048 + readSectors, 1050, 200, 4096, 2000, 5500])],
+            start: '10', finish: '42',
+        })
+        const actual = assertNormalized(result, (reference / 1.048576 * percent / 100).toFixed(2), percent)
+        assert.equal(actual, percent, `${reference} MB/s reference reaches the exact ${percent}% boundary`)
+    }
 })
 
 test('totals deduplicate exact mounted block IDs, including bind mounts and LVM aliases', () => {
@@ -125,13 +239,86 @@ test('six lab I/O groups mirror current capacity mount bindings and stay safely 
             assert.equal(metric.type, 'text')
             assert.equal(metric.interval, 30)
             assert.equal(metric.timeout, 15)
-            assert.equal(metric.visibleWhenUnavailable, true)
+            const capacityMetric = metric === actual.group.main ? disk.group.main : disk.group.children.find(child => child.label === metric.label)
+            assert.equal(metric.visibleWhenUnavailable, capacityMetric.visibleWhenUnavailable)
+            assert.equal(metric.showWhenUnavailable, capacityMetric.showWhenUnavailable)
             assert.equal(metric.suffix, ' MB/s')
+            assert.equal(metric.valueFormat, 'disk-io-rate')
+            assert.deepEqual(metric.colorRules, [
+                { operator: '>=', value: '95', color: '#ff0000' },
+                { operator: '>=', value: '80', color: '#ffa500' },
+            ])
             assert.doesNotMatch(metric.command, /\b(?:iostat|fio|dd|sudo|mktemp|nvidia-smi)\b/)
         }
     }
     const p3 = bundled.find(entry => entry.id === 'disk-io-P3磁盘')
-    assert.deepEqual(p3.group.children.map(metric => metric.label), ['系统盘', '/data', '/data2'])
+    assert.deepEqual(p3.group.children.map(metric => metric.label), ['系统盘', '/data', '/data2', '/data3', '/data4'])
+})
+
+test('factory references follow confirmed P3 devices and documented SSD/HDD assumptions while preserving MB/s readings', () => {
+    const bundled = getBundledPresets()
+    assert.equal(bundled.length, 37)
+    const examples = [
+        ['P0磁盘', '/', 500], ['P0磁盘', '/data', 180], ['P0磁盘', '/data4', 180],
+        ['P3磁盘', '/', 7000], ['P3磁盘', '/data', 215], ['P3磁盘', '/data2', 255], ['P3磁盘', '/data3', 180],
+        ['P1容器磁盘', '/public', 7000], ['P2磁盘', '/data', 180], ['P4磁盘', '/data12', 180], ['NAS磁盘', '/volume4', 180],
+    ]
+    for (const [name, mount, reference] of examples) {
+        const preset = createDiskIoGroupPreset(bundled.find(entry => entry.id === `disks-${name}`))
+        const metric = preset.group.children.find(child => child.label === (mount === '/' ? '系统盘' : mount))
+        const sample = { mounts: { [mount]: '8:1' }, after: [row('8:1', [110, 4096, 1050, 220, 8192, 2200, 5500])] }
+        const result = run(metric.command, sample)
+        assert.equal(result.status, 0, `${name} ${mount}: ${result.stderr}`)
+        const [tag, raw, percent] = result.stdout.trim().split(':')
+        assert.equal(tag, 'TABBY-IO')
+        assert.equal(raw, '2.40', `${name} ${mount}: displayed throughput remains base-1024 MB/s`)
+        const expectedPercent = 100 * 2.4 / (reference / 1.048576)
+        assert(Math.abs(Number(percent) - expectedPercent) < 1e-7, `${name} ${mount}: ${percent} vs ${expectedPercent}`)
+        assert.equal(metric.suffix, ' MB/s')
+        assert.equal(metric.valueFormat, 'disk-io-rate')
+    }
+})
+
+test('factory totals include only mounted readable disks, with device-specific references and optional candidates excluded', () => {
+    const bundled = getBundledPresets()
+    for (const [name, paths, referenceTotal] of [
+        ['P3磁盘', ['/data', '/data2'], 215 + 255],
+        ['P4磁盘', ['/data'], 180],
+    ]) {
+        const preset = createDiskIoGroupPreset(bundled.find(entry => entry.id === `disks-${name}`))
+        const devices = paths.map((_, index) => `8:${index + 1}`)
+        const result = run(preset.group.main.command, {
+            mounts: Object.fromEntries(paths.map((mount, index) => [mount, devices[index]])),
+            before: devices.map(device => row(device)),
+            after: devices.map(device => row(device, [110, 4096, 1050, 220, 8192, 2200, 5500])),
+        })
+        assert.equal(result.status, 0, result.stderr)
+        const [tag, raw, percent] = result.stdout.trim().split(':')
+        assert.equal(tag, 'TABBY-IO')
+        assert.equal(raw, (2.4 * paths.length).toFixed(2))
+        assert(Math.abs(Number(percent) - 100 * 2.4 * paths.length / (referenceTotal / 1.048576)) < 1e-7)
+    }
+})
+
+test('NAS I/O keeps four optional volumes, exact personal binding and no laboratory notice', () => {
+    const bundled = getBundledPresets()
+    const capacity = bundled.find(entry => entry.id === 'disks-NAS磁盘')
+    const preset = bundled.find(entry => entry.id === 'disk-io-NAS磁盘')
+    assert.deepEqual(preset, JSON.parse(JSON.stringify(createDiskIoGroupPreset(capacity))))
+    assert.deepEqual(preset.group.children.map(metric => metric.label), ['系统盘', '/volume1', '/volume2', '/volume3', '/volume4'])
+    assert.deepEqual(preset.profileNames, ['NAS'])
+    assert.equal(preset.audience, undefined)
+    assert.doesNotMatch(preset.descriptions.zh, /实验室自用/)
+    assert.doesNotMatch(preset.descriptions.en, /laboratory only/)
+    assert.equal(preset.group.children[0].visibleWhenUnavailable, true)
+    for (const child of preset.group.children.slice(1)) {
+        assert.equal(child.visibleWhenUnavailable, false)
+        assert.equal(child.showWhenUnavailable, false)
+        assert.notEqual(run(child.checkCommand, { mounts: {} }).status, 0)
+        assert.equal(run(child.checkCommand, { mounts: { [child.label]: '8:1' } }).status, 0)
+    }
+    assert.deepEqual(instantiatePreset(preset, [{ id: 'personal-nas', name: 'NAS' }]).metricGroups[0].displayScope.profileIds, ['personal-nas'])
+    assert.deepEqual(instantiatePreset(preset, []).metricGroups[0].displayScope.profileIds, [])
 })
 
 test('capacity and GPU presets use reduced collection frequency', () => {

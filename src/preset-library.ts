@@ -215,11 +215,14 @@ function diskMetric(mountPath: string, system: boolean, index: number): CustomMe
         colorRules: capacityColorRules() }
 }
 
-export function createDiskGroupPreset(name: string, mountPaths: string[], profileNames: string[], template?: Partial<CustomMetricGroup>): MetricPreset {
+export function createDiskGroupPreset(name: string, mountPaths: string[], profileNames: string[], template?: Partial<CustomMetricGroup>, optionalMountPaths: string[] = []): MetricPreset {
     const labOnly = /^P[0-4](?:容器)?磁盘$/.test(name)
     const noticeZh = labOnly ? '作者实验室自用，其他人请勿下载使用。' : ''
     const noticeEn = labOnly ? "For the author's laboratory only. Other users: please do not download or use this preset. " : ''
     const paths = [...new Set(mountPaths.filter(path => typeof path === 'string' && path.startsWith('/') && path !== '/'))]
+    const optional = new Set(optionalMountPaths)
+    const missingZh = paths.some(path => optional.has(path)) ? '可选挂载未挂载时自动隐藏；原有挂载保留异常提示。' : '未挂载的磁盘保留提醒。'
+    const missingEn = paths.some(path => optional.has(path)) ? 'Missing optional mounts are hidden; existing mounts retain failure notices.' : 'Missing mounts remain visible.'
     const main: CustomMetric = { ...diskMetric('/', true, 0), id: 'disk-total', label: '磁盘余量', icon: 'stats-disk-space',
         // The aggregate validates every candidate itself; no valid rows is an
         // execution error, while a legitimately full readable filesystem is 0.
@@ -227,33 +230,56 @@ export function createDiskGroupPreset(name: string, mountPaths: string[], profil
         colorRules: capacityColorRules(true) }
     const group: CustomMetricGroup = { ...clone(template || {}), id: 'disk-group', label: name, mode: template?.mode || 'overview',
         layout: template?.layout || 'vertical', interval: template?.interval || 3,
-        main, children: [diskMetric('/', true, 0), ...paths.map((path, index) => diskMetric(path, false, index))],
+        main, children: [diskMetric('/', true, 0), ...paths.map((path, index) => ({ ...diskMetric(path, false, index),
+            visibleWhenUnavailable: !optional.has(path), showWhenUnavailable: !optional.has(path) }))],
         displayScope: { mode: 'selected', profileIds: [] } }
     return { id: `disks-${name}`, kind: 'group', label: name, group, source: localSource, audience: labOnly ? 'author-lab' : undefined,
-        description: noticeZh + '主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。',
-        descriptions: { en: noticeEn + 'Total free capacity across valid unique filesystems; children show the system disk first, then data mounts. Hover for free/total capacity; missing mounts remain visible.', zh: noticeZh + '主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量，未挂载的磁盘保留提醒。' },
+        description: noticeZh + '主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量。' + missingZh,
+        descriptions: { en: noticeEn + 'Total free capacity across valid unique filesystems; children show the system disk first, then data mounts. Hover for free/total capacity. ' + missingEn, zh: noticeZh + '主标签汇总有效文件系统的总余量；子标签依次为系统盘和数据盘。悬停显示剩余/总容量。' + missingZh },
         profileNames: [...new Set(profileNames.map(profile => profile.trim()).filter(Boolean))] }
 }
 
 /** Lab mounts are shared with capacity presets, but counters describe block devices. */
-export function createDiskIoGroupPreset(capacityPreset: MetricPreset): MetricPreset {
+export function createDiskIoGroupPreset(capacityPreset: MetricPreset, referenceByMount?: Record<string, number>): MetricPreset {
     if (!capacityPreset.group || !capacityPreset.id.startsWith('disks-')) throw new Error('A disk capacity group is required')
     const paths = ['/', ...capacityPreset.group.children.map(metric => metric.label || '').filter(label => label.startsWith('/') && label !== '/')]
+    // Decimal MB/s. Known models override conservative class assumptions; future
+    // and unverified mounts use a 4/8 TB HDD reference, not an invented disk model.
+    const references: Record<string, number> = Object.fromEntries(paths.map(mount => [mount, 180]))
+    if (capacityPreset.id === 'disks-P0磁盘') references['/'] = 500 // SSD-class logical volume; PERC hides its model.
+    if (capacityPreset.id === 'disks-P3磁盘') Object.assign(references, { '/': 7000, '/data': 215, '/data2': 255 })
+    if (capacityPreset.id === 'disks-P1容器磁盘') references['/public'] = 7000
+    Object.assign(references, referenceByMount || {})
     const label = capacityPreset.label.replace(/磁盘$/, '磁盘读写')
+    const optionalPaths = new Set(capacityPreset.group.children.filter(metric => metric.visibleWhenUnavailable === false).map(metric => metric.label))
     const metric = (mounts: string[], id: string, name: string, icon: string): CustomMetric => ({
         id, label: name, type: 'text', icon, color: METRIC_COLORS.green, suffix: ' MB/s',
         interval: 30, timeout: 15, checkMode: 'exitCode', checkExpected: '0',
-        checkCommand: createDiskIoCheckCommand(mounts), command: createDiskIoCommand(mounts), detailCommand: createDiskIoCommand(mounts, true),
-        unavailableText: '无块设备数据', visibleWhenUnavailable: true, showWhenUnavailable: true,
+        checkCommand: createDiskIoCheckCommand(mounts), command: createDiskIoCommand(mounts, false, references), detailCommand: createDiskIoCommand(mounts, true),
+        valueFormat: 'disk-io-rate',
+        colorRules: [{ operator: '>=', value: '95', color: METRIC_COLORS.red }, { operator: '>=', value: '80', color: METRIC_COLORS.orange }],
+        unavailableText: '无块设备数据',
+        visibleWhenUnavailable: mounts.length !== 1 || !optionalPaths.has(mounts[0]),
+        showWhenUnavailable: mounts.length !== 1 || !optionalPaths.has(mounts[0]),
     })
     const descriptions = {
         zh: '作者实验室自用，其他人请勿下载使用。每30秒只读采样1秒；主标签汇总可读取的去重块设备读写速率，子标签对应系统盘和数据盘。悬停查看读/写 MB/s、读写平均延迟 await（毫秒，含排队）和平均在途 I/O 请求数 queue（不是文件数）。统计的是挂载点背后的块设备，并非该目录的独占流量；别名/绑定挂载不重复累计。MB采用1024进制。Overlay、网络盘或缺失挂载无块设备数据时保留提示，不显示虚假的0；不支持的设备不计入汇总。不做压力测试、不写磁盘文件。',
         en: "For the author's laboratory only. Other users: please do not download or use this preset. Every 30s, sample kernel counters for 1s. The main label sums readable unique block-device read/write throughput; children follow system/data mounts. Hover for read/write MB/s, read/write await in ms (including queueing) and average outstanding I/O requests (queue, not file count). These are backing-device totals, not exclusive directory traffic; aliases/bind mounts are counted once. MB uses base 1024. Overlay/network filesystems or missing mounts without block counters remain visibly unavailable and are excluded from the total. No benchmark or filesystem writes.",
     }
+    if (capacityPreset.audience !== 'author-lab') {
+        descriptions.zh = descriptions.zh.replace('作者实验室自用，其他人请勿下载使用。', '')
+        descriptions.en = descriptions.en.replace("For the author's laboratory only. Other users: please do not download or use this preset. ", '')
+    }
+    if (optionalPaths.size) {
+        descriptions.zh += '可选挂载校验失败时自动隐藏。'
+        descriptions.en += ' Optional mounts are hidden when their prerequisite check fails.'
+    }
+    descriptions.zh += '颜色按读写总吞吐占参考带宽的比例：80%橙色、95%红色；显示值仍为MB/s。汇总参考只计本次可读取且去重的设备，不计未挂载预留盘。未知型号/预留盘采用180MB/s机械盘参考，具体型号及假设见README；这不是硬盘健康或繁忙率。'
+    descriptions.en += ' Colors use total throughput / reference bandwidth: orange at 80%, red at 95%; readings remain MB/s. Aggregate references include only currently readable unique devices, never absent future mounts. Unknown/future disks use a 180 MB/s HDD reference; see README for known-model overrides and assumptions. This is not disk health or utilization.'
     return {
         id: `disk-io-${capacityPreset.id.slice('disks-'.length)}`, kind: 'group', label,
         labels: { zh: label, en: label.replace('容器', ' container ').replace('磁盘读写', ' disk I/O') },
-        description: descriptions.zh, descriptions, source: localSource, audience: 'author-lab',
+        description: descriptions.zh, descriptions, source: localSource, audience: capacityPreset.audience,
         profileNames: [...(capacityPreset.profileNames || [])], excludedProfileNames: capacityPreset.excludedProfileNames?.slice(),
         group: {
             id: 'disk-io-group', label, mode: 'overview', layout: 'vertical', interval: 3,

@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import 'zone.js'
 import '@angular/compiler'
-import { Component, NgModule, ApplicationRef, Input, ViewChild, AfterViewInit, OnDestroy, HostListener, ElementRef } from '@angular/core'
+import { Component, NgModule, ApplicationRef, Input, ViewChild, AfterViewInit, OnDestroy, HostListener, ElementRef, NgZone } from '@angular/core'
 import { Subscription } from 'rxjs'
 import { CommonModule } from '@angular/common'
 import { FormsModule } from '@angular/forms'
@@ -16,6 +16,14 @@ import { filterScopedMetrics } from '../../src/display-scope'
 import { ServerStatsConfigProvider } from '../../src/config'
 
 const metric = (id: string, label: string): any => ({ id, label, command: 'printf 63', type: 'text', suffix: '%', detailCommand: 'printf details' })
+// Match Tabby's provider container, including the 600px cap that previously
+// crushed the editor when navigation padding was subtracted from its width.
+@Component({
+    selector: 'settings-tab-body',
+    template: '<ng-content></ng-content>',
+    styles: [':host { display: block; padding-bottom: 20px; max-width: 600px; }'],
+})
+class SettingsBodyFixture {}
 @Component({
     selector: 'visibility-pane',
     template: `<div class="visibility-terminal" tabindex="-1">same-user@same-server:~$</div><server-stats-bottom-bar></server-stats-bottom-bar>`,
@@ -60,9 +68,12 @@ class VisibilityPane implements AfterViewInit, OnDestroy {
           <server-stats-metric-strip [metrics]="visibleFor(pane).customMetrics" [groups]="visibleFor(pane).metricGroups" [stats]="scopeStats" [session]="pane.session"></server-stats-metric-strip>
         </div></div>
       </section>
-      <div class="settings" *ngIf="showSettings"><server-stats-settings></server-stats-settings></div>
+      <div class="settings" [class.host-settings]="hostedSettings" *ngIf="showSettings">
+        <nav class="host-sidebar" *ngIf="hostedSettings">设置<br>终端<br>插件<br>服务器状态</nav>
+        <div class="host-content"><settings-tab-body><server-stats-settings *ngIf="showSettingsContent"></server-stats-settings></settings-tab-body></div>
+      </div>
       <section class="visibility-demo" *ngIf="showVisibilityDemo"><visibility-pane *ngFor="let pane of visibilityPanes" [session]="pane"></visibility-pane></section>`,
-    styles: [`.terminal { height: 200px; margin-top: 20px; background: #101218; padding: 18px; color: #82dba0; font: 14px monospace; } .bar { padding: 8px 14px; background:#171a22; backdrop-filter:blur(8px); border-top: 1px solid #ffffff30; } h2 { font-size: 22px; } p { color: #98a4b5; } .scope-panes { display:flex; gap:12px; } .scope-pane { flex:1; min-width:0; padding:12px; background:#171c25; border:1px solid #ffffff25; border-radius:6px; } .scope-terminal { color:#82dba0; height:70px; font:12px monospace; } h4 { margin:0 0 18px; }`]
+    styles: [`.host-settings { display:flex; position:fixed; inset:34px 0 0; z-index:20; background:#11151c; } .host-sidebar { flex:0 0 222px; padding:20px; border-right:1px solid #ffffff30; line-height:3; } .host-settings .host-content { flex:1; min-width:0; overflow:auto; padding:20px 30px; transform:translateZ(0); } .terminal { height: 200px; margin-top: 20px; background: #101218; padding: 18px; color: #82dba0; font: 14px monospace; } .bar { padding: 8px 14px; background:#171a22; backdrop-filter:blur(8px); border-top: 1px solid #ffffff30; } h2 { font-size: 22px; } p { color: #98a4b5; } .scope-panes { display:flex; gap:12px; } .scope-pane { flex:1; min-width:0; padding:12px; background:#171c25; border:1px solid #ffffff25; border-radius:6px; } .scope-terminal { color:#82dba0; height:70px; font:12px monospace; } h4 { margin:0 0 18px; }`]
 })
 class Harness {
     metrics = [metric('solo', '系统盘')]
@@ -70,10 +81,17 @@ class Harness {
     stats: any = { custom: [{ id: 'solo', value: '42', status: 'ok' }, { id: 'main', value: '63', status: 'ok' }, { id: 'a', value: '52', status: 'ok' }, { id: 'b', value: '未挂载', status: 'unavailable' }, { id: 'c', value: '71', status: 'ok' }] }
     session = { open: true, id: 'demo' }
     detailCalls: string[][] = []
+    detailRequests: { ids: string[]; options?: any }[] = []
+    hoverCalls: { ids: string[]; force: boolean; at: number }[] = []
+    hoverBlockedIds: string[] = []
+    hoverResolvers: Record<string, () => void> = {}
     detailDelay = 0
+    detailThrows = false
     detailResults: Record<string, string> = {}
     previewChinese = false
     showSettings = false
+    hostedSettings = false
+    showSettingsContent = true
     showScopeDemo = false
     showVisibilityDemo = false
     focusFollowsMouse = false
@@ -101,11 +119,11 @@ class Harness {
 }
 @NgModule({
     imports: [BrowserModule, CommonModule, FormsModule],
-    declarations: [Harness, VisibilityPane, ServerStatsBottomBarComponent, MetricStripComponent, ServerStatsSettingsComponent, TranslatePipe, TranslateDirective],
+    declarations: [Harness, SettingsBodyFixture, VisibilityPane, ServerStatsBottomBarComponent, MetricStripComponent, ServerStatsSettingsComponent, TranslatePipe, TranslateDirective],
     providers: [AppService, ConfigService, PlatformService, StatsService], bootstrap: [Harness]
 })
 class HarnessModule {}
 platformBrowserDynamic().bootstrapModule(HarnessModule).then(ref => {
-    (window as any).tick = () => ref.injector.get(ApplicationRef).tick()
+    (window as any).tick = () => ref.injector.get(NgZone).run(() => ref.injector.get(ApplicationRef).tick())
     ;(window as any).ready = true
 })

@@ -44,6 +44,17 @@ async function main() {
         await page.goto(`http://127.0.0.1:${server.address().port}`)
         await page.waitForFunction(() => window.ready, null, { timeout: 15000 })
         const mutate = async fn => page.evaluate(`(${fn})(); window.tick()`)
+        if (process.argv.includes('--overlay-only')) {
+            await require('./browser/overlay-regression.cjs')(page, mutate)
+            assert.deepEqual(errors, [])
+            return
+        }
+        const closeEditor = async () => {
+            if (await page.locator('.editor-navigator').count()) {
+                await page.locator('.navigator-close').click()
+                await page.locator('.discard-close').click()
+            }
+        }
         const assertVisibleBorders = async (locator, label) => {
             const styles = await locator.evaluateAll(nodes => nodes.map(node => {
                 const css = getComputedStyle(node)
@@ -68,17 +79,35 @@ async function main() {
         assert(!/Not mounted\s*%/.test(await group.innerText()), 'Failure text must not gain a numeric suffix')
         assert(Math.abs((await group.boundingBox()).width - firstWidth) < 1, 'Carousel width stays fixed when a longer failure message rotates in')
         console.log('PASS default failed child is visible in actual carousel')
+        await group.hover()
+        assert.equal(await page.locator('.group-details').count(), 0, 'Hover accelerates collection without expanding details')
+        await group.click()
+        assert.equal(await page.locator('.group-details').count(), 1)
+        await group.click()
+        assert.equal(await page.locator('.group-details').count(), 0, 'Second click closes details')
+        await group.click()
+        await page.mouse.move(1040, 650)
+        await page.waitForFunction(() => !document.querySelector('.group-details'))
+        console.log('PASS details require a click, toggle on a second click and close on mouse leave')
         await mutate(() => { const h = window.harness; h.group = { ...h.group, interval: 1, children: h.group.children.map(m => ({ ...m, showWhenUnavailable: m.id !== 'b' })) } })
         await page.waitForFunction(() => document.querySelector('.carousel-active').textContent.includes('/data3'), null, { timeout: 2500 })
         assert(!(await group.innerText()).includes('Not mounted'))
         console.log('PASS per-child opt-out skips failure without another cycle')
-        await group.hover()
+        await mutate(() => { window.harness.hoverCalls = []; window.harness.detailRequests = [] })
+        await group.click()
         await page.waitForFunction(() => document.querySelector('.group-details')?.textContent.includes('可用'))
+        assert.deepEqual(await page.evaluate(() => window.harness.hoverCalls[0].ids), ['main', 'a', 'b', 'c'])
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls[0].force), true, 'Entering a group bypasses its normal refresh interval')
+        assert.deepEqual(await page.evaluate(() => window.harness.detailRequests[0].options), { force: true, maxAgeMs: 1000, skipPending: true })
         const popupBox = await page.locator('.group-details').boundingBox()
         const groupBox = await group.boundingBox()
         assert(popupBox.y >= 0 && popupBox.y + popupBox.height <= groupBox.y + 1, 'Popover must stay above blurred status bar, inside viewport')
         await page.locator('.group-details').hover()
         assert.equal(await page.locator('.group-details').count(), 1, 'Moving into popup must keep it open')
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls.filter(call => call.force).length), 1, 'Moving from a group label into its popup must not force another sample')
+        await page.waitForFunction(() => window.harness.hoverCalls.some(call => !call.force), null, { timeout: 2000 })
+        assert(await page.evaluate(() => window.harness.hoverCalls.every(call => call.ids.join(',') === 'main,a,b,c')), 'Only the expanded group gets accelerated sampling')
+        console.log('PASS group hover immediately samples its primary values and details, then keeps a one-second cadence')
         assert((await page.locator('.group-details').innerText()).includes('Not mounted'), 'Expanded view must preserve hidden carousel failures')
         assert.equal(await page.locator('.group-details .metric-detail').count(), 3)
         assert.equal((await page.locator('.details-title').innerText()).trim(), '磁盘')
@@ -111,7 +140,7 @@ async function main() {
         await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'overview' } })
         assert((await group.innerText()).includes('总览'))
         assert(!(await group.innerText()).includes('/data1'))
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelector('.group-details')?.textContent.includes('/data1'))
         await mutate(() => { window.harness.detailResults = { main: 'Err: No result', a: 'Err: Exit 2' } })
         await page.waitForFunction(() => document.querySelector('.group-details .detail-error')?.textContent.includes('No detail received'))
@@ -129,24 +158,26 @@ async function main() {
         await page.mouse.move(1040, 650)
         await page.waitForFunction(() => !document.querySelector('.group-details'))
         console.log('PASS overview shows main result and expands the full group')
-        await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'static', layout: 'horizontal' }; window.harness.detailCalls = [] })
-        await page.locator('.metric-group .metric-row').nth(1).hover()
+        await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'static', layout: 'horizontal' }; window.harness.detailCalls = []; window.harness.hoverCalls = [] })
+        await page.locator('.metric-group .metric-row').nth(1).click()
         await page.waitForFunction(() => document.querySelector('.metric-group .metric-detail')?.textContent.includes('可用'))
         assert.equal(await page.locator('.metric-group .metric-detail').count(), 1)
+        assert.deepEqual(await page.evaluate(() => window.harness.hoverCalls[0].ids), ['a'], 'Horizontal groups accelerate only the pointed-at row')
         console.log('PASS horizontal hover expands only its own row')
         await page.mouse.move(1040, 650)
-        await page.locator('.metric-group .metric-row').nth(1).focus()
+        await page.locator('.metric-group .metric-row').nth(1).focus(); await page.keyboard.press('Enter')
         await page.waitForFunction(() => document.querySelector('.metric-group .metric-detail')?.textContent.includes('可用'))
         assert.equal(await page.locator('.metric-group .metric-detail').count(), 1)
         await page.locator('.metric-group .metric-row').nth(1).evaluate(node => node.blur())
         await page.mouse.move(1040, 650)
-        await mutate(() => { window.harness.group = { ...window.harness.group, layout: 'vertical' } })
-        await group.hover()
+        await mutate(() => { window.harness.group = { ...window.harness.group, layout: 'vertical' }; window.harness.hoverCalls = [] })
+        await group.click()
         await page.waitForFunction(() => [...document.querySelectorAll('.metric-group .metric-detail')].filter(x => x.textContent.includes('可用')).length === 3)
+        assert.deepEqual(await page.evaluate(() => window.harness.hoverCalls[0].ids), ['main', 'a', 'b', 'c'], 'Vertical groups accelerate all expanded rows')
         console.log('PASS vertical hover expands every valid row')
         await page.mouse.move(1040, 650)
         const singleBoxBefore = await page.locator('.single').boundingBox()
-        await page.locator('.single').hover()
+        await page.locator('.single').click()
         await page.waitForFunction(() => document.querySelector('.single-details .metric-detail')?.textContent.includes('可用'))
         assert.equal(await page.locator('.single .metric-detail').count(), 0, 'Standalone detail must leave the status bar width unchanged')
         assert(Math.abs((await page.locator('.single').boundingBox()).width - singleBoxBefore.width) < 1)
@@ -165,12 +196,61 @@ async function main() {
         await page.mouse.move(1040, 650)
         console.log('PASS standalone details open above the bar without native tooltip or width changes; group hover modes remain unchanged')
         await mutate(() => { window.harness.detailDelay = 300 })
-        await page.locator('.single').hover()
+        await page.locator('.single').click()
         await page.mouse.move(1040, 650)
         await page.waitForTimeout(400)
         assert.equal(await page.locator('.single .metric-detail').count(), 0)
         assert.equal(await page.locator('.single-details').count(), 0)
         console.log('PASS late detail responses do not reopen a departed hover')
+        await mutate(() => {
+            const h = window.harness
+            h.hoverFixture = { metrics: h.metrics, group: h.group, stats: h.stats }
+            h.detailDelay = 0
+            h.metrics = ['hover-slow', 'hover-fast', 'hover-hidden'].map(id => ({
+                id, label: id, command: 'printf 1', type: 'text', interval: 60,
+                detailCommand: id === 'hover-fast' ? '' : 'printf details',
+            }))
+            h.group = { id: 'hover-empty', mode: 'overview', children: [] }
+            h.stats = { custom: h.metrics.map(m => ({ id: m.id, value: '1', status: 'ok' })) }
+            h.hoverCalls = []; h.detailCalls = []; h.detailRequests = []
+            h.hoverBlockedIds = ['hover-slow']; h.hoverResolvers = {}
+        })
+        const hoverLabels = page.locator('.bar .single')
+        await hoverLabels.nth(0).hover()
+        await page.waitForFunction(() => !!window.harness.hoverResolvers['hover-slow'])
+        await hoverLabels.nth(1).hover()
+        await page.waitForFunction(() => window.harness.hoverCalls.some(call => call.ids.includes('hover-fast')))
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls.find(call => call.ids.includes('hover-fast')).force), true)
+        assert.equal(await page.evaluate(() => window.harness.detailCalls.length), 0, 'A label without a detail command still gets immediate primary-value sampling')
+        await page.evaluate(() => { window.harness.hoverResolvers['hover-slow'](); window.harness.hoverBlockedIds = [] })
+        await hoverLabels.nth(1).focus()
+        await page.waitForFunction(() => window.harness.hoverCalls.some(call => call.ids.includes('hover-fast') && !call.force), null, { timeout: 2000 })
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls.filter(call => call.ids.includes('hover-fast') && call.force).length), 1, 'Focus plus mouse hover must share one immediate refresh')
+        assert.equal(await page.evaluate(() => window.harness.detailCalls.length), 0, 'An old primary-value result must not launch details after the pointer moved elsewhere')
+        await hoverLabels.nth(1).evaluate(node => node.blur())
+        await page.mouse.move(1040, 650)
+        await page.waitForTimeout(150)
+        const departedHoverCalls = await page.evaluate(() => window.harness.hoverCalls.length)
+        await page.waitForTimeout(1200)
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls.length), departedHoverCalls, 'Leaving a label stops its accelerated sampling')
+        console.log('PASS slow primary requests do not block a new hover, plain labels refresh, focus deduplicates and departure stops acceleration')
+        await mutate(() => { window.harness.hoverBlockedIds = ['hover-hidden']; window.harness.hoverCalls = []; window.harness.detailCalls = [] })
+        await hoverLabels.nth(2).hover()
+        await page.waitForFunction(() => !!window.harness.hoverResolvers['hover-hidden'])
+        await page.locator('.bar').evaluate(node => { node.style.display = 'none' })
+        await page.evaluate(() => window.harness.hoverResolvers['hover-hidden']())
+        await page.waitForTimeout(1200)
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls.length), 1, 'A hidden pane must not start another primary sample')
+        assert.equal(await page.evaluate(() => window.harness.detailCalls.length), 0, 'A primary request completing after its pane is hidden must not launch details')
+        await page.mouse.move(1040, 650)
+        await mutate(() => {
+            const h = window.harness
+            document.querySelector('.bar').style.display = ''
+            Object.assign(h, h.hoverFixture)
+            delete h.hoverFixture
+            h.hoverBlockedIds = []; h.hoverResolvers = {}
+        })
+        console.log('PASS hiding a pane during primary sampling prevents follow-up detail commands')
         await mutate(() => {
             const h = window.harness
             h.detailDelay = 0
@@ -208,7 +288,7 @@ async function main() {
             h.stats = { custom: h.stats.custom.map(r => ({ ...r, status: 'unavailable', value: '未挂载' })) }
         })
         assert((await group.innerText()).includes('No available items'))
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelectorAll('.group-details .detail-row').length === 4)
         assert.equal(await page.locator('.group-details .metric-detail').count(), 0)
         await page.mouse.move(1040, 650)
@@ -233,7 +313,7 @@ async function main() {
         assert(await group.locator('.metric-label').evaluate(n => parseFloat(getComputedStyle(n).paddingLeft) >= 12))
         console.log('PASS standalone/group/member disable switches hide output while surviving children retain indentation')
         await mutate(() => { const h = window.harness; h.group = { ...h.group, mode: 'overview' } })
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelector('.group-details'))
         assert.equal(await page.locator('.group-details .detail-row').count(), 1)
         assert(!(await page.locator('.group-details').innerText()).includes('/data2'))
@@ -246,12 +326,107 @@ async function main() {
         await mutate(() => { const h = window.harness; h.stats = { custom: h.stats.custom.map(r => r.id === 'b' ? { ...r, status: 'ok', value: '55' } : r) } })
         await page.waitForFunction(() => document.querySelector('.carousel-active')?.textContent.includes('/data2'), null, { timeout: 2500 })
         assert.equal(await page.locator('.carousel-measure').count(), 2)
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelectorAll('.group-details .detail-row').length === 2)
         assert((await page.locator('.group-details').innerText()).includes('55%'))
         await page.mouse.move(1040, 650)
         await page.waitForFunction(() => !document.querySelector('.group-details'))
         console.log('PASS hidden failures stay out of static/popup/carousel views and return after a successful sample')
+        await mutate(() => {
+            const h = window.harness
+            const metric = id => ({ id, label: id, type: 'text', command: 'printf 1', visibleWhenUnavailable: false })
+            h.metrics = [metric('optional-single')]
+            h.group = { id: 'optional-group', mode: 'static', layout: 'vertical', main: metric('optional-main'),
+                children: [metric('optional-shown'), metric('optional-hidden'), metric('optional-new')] }
+            h.stats = { custom: [] }
+        })
+        assert.equal(await page.locator('.bar .single, .bar .metric-group').count(), 0, 'Unchecked optional labels and groups start hidden')
+        await mutate(() => {
+            const h = window.harness
+            h.stats = { custom: ['optional-single', 'optional-main', 'optional-shown', 'optional-hidden'].map(id => ({
+                id, value: '42', status: id === 'optional-hidden' ? 'unavailable' : 'ok', available: id !== 'optional-hidden',
+            })) }
+        })
+        assert.equal(await page.locator('.bar .single').count(), 1)
+        assert.equal(await group.locator('.metric-row').count(), 2)
+        await mutate(() => {
+            const h = window.harness
+            h.stats = { custom: h.stats.custom.map(row => ({ ...row, value: '-', status: 'pending' })) }
+        })
+        assert.equal(await page.locator('.bar .single').count(), 1)
+        assert.equal(await group.locator('.metric-row').count(), 2, 'Refreshing preserves visible rows and excludes hidden/new rows')
+        await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'overview' } })
+        await group.click()
+        await page.waitForFunction(() => document.querySelectorAll('.group-details .detail-row').length === 2)
+        await page.mouse.move(1040, 650)
+        await page.waitForFunction(() => !document.querySelector('.group-details'))
+        await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'carousel' } })
+        assert.equal(await page.locator('.carousel-measure').count(), 1)
+        await mutate(() => {
+            const h = window.harness
+            h.stats = { custom: h.stats.custom.map(row => ({ ...row, status: 'unavailable', available: false })) }
+        })
+        assert.equal(await page.locator('.bar .single, .bar .metric-group').count(), 0, 'Completed checks update both standalone and whole-group visibility')
+        console.log('PASS optional single/static/popup/carousel visibility survives refresh and changes only with new check decisions')
+        await mutate(() => {
+            const h = window.harness
+            h.hiddenHoverSnapshot = { metrics: h.metrics, group: h.group, stats: h.stats }
+            h.metrics = []
+            const metric = id => ({ id, label: id, type: 'text', command: 'printf 1', interval: 60, visibleWhenUnavailable: false })
+            h.group = { id: 'hidden-hover', label: 'Hidden hover checks', mode: 'overview', layout: 'vertical',
+                main: metric('check-main'), children: ['check-visible', 'check-still', 'check-changing'].map(metric) }
+            h.stats = { custom: ['check-main', 'check-visible', 'check-still', 'check-changing'].map(id => ({
+                id, status: ['check-still', 'check-changing'].includes(id) ? 'unavailable' : 'ok', value: '42',
+            })) }
+            h.hoverCalls = []
+        })
+        await group.click()
+        await page.waitForFunction(() => window.harness.hoverCalls.length > 0)
+        assert.deepEqual(await page.evaluate(() => window.harness.hoverCalls[0].ids), ['check-main', 'check-visible', 'check-still', 'check-changing'], 'Entering a group probes its hidden failed children once')
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls[0].force), true)
+        await page.waitForFunction(() => window.harness.hoverCalls.some(call => !call.force), null, { timeout: 2500 })
+        assert(await page.evaluate(() => window.harness.hoverCalls.filter(call => !call.force).every(call => !call.ids.includes('check-still') && !call.ids.includes('check-changing'))), 'Regular accelerated samples exclude children that remain hidden')
+        await mutate(() => {
+            const h = window.harness
+            h.stats = { custom: h.stats.custom.map(row => row.id === 'check-changing' ? { ...row, status: 'ok' } : row) }
+        })
+        await page.waitForFunction(() => window.harness.hoverCalls.some(call => !call.force && call.ids.includes('check-changing')), null, { timeout: 2500 })
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls.filter(call => call.force).length), 1, 'A recovered visible row does not count as another hover entry')
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls.filter(call => call.ids.includes('check-still')).length), 1, 'A sibling recovery must not retry a child that still fails')
+        const beforeDisappearance = await page.evaluate(() => window.harness.hoverCalls.length)
+        await mutate(() => {
+            const h = window.harness
+            h.stats = { custom: h.stats.custom.map(row => row.id === 'check-changing' ? { ...row, status: 'unavailable' } : row) }
+        })
+        await page.waitForFunction(count => window.harness.hoverCalls.length > count, beforeDisappearance, { timeout: 2500 })
+        assert(await page.evaluate(count => window.harness.hoverCalls.slice(count).every(call => !call.force && !call.ids.includes('check-still') && !call.ids.includes('check-changing')), beforeDisappearance), 'A disappearing row stays hidden without forcing another group probe')
+        await page.mouse.move(1040, 650)
+        await page.waitForFunction(() => !document.querySelector('.group-details'))
+        await group.click()
+        await page.waitForFunction(() => window.harness.hoverCalls.filter(call => call.ids.includes('check-still')).length === 2)
+        assert.deepEqual(await page.evaluate(() => window.harness.hoverCalls.findLast(call => call.ids.includes('check-still')).ids), ['check-main', 'check-visible', 'check-still', 'check-changing'], 'Leaving and re-entering retries both hidden candidates')
+        await page.mouse.move(1040, 650)
+        await page.waitForFunction(() => !document.querySelector('.group-details'))
+        await mutate(() => {
+            const h = window.harness
+            h.group = { ...h.group, mode: 'static', layout: 'horizontal' }
+            h.hoverCalls = []
+        })
+        const hiddenCheckRows = group.locator(':scope > .metric-row')
+        await hiddenCheckRows.nth(0).hover()
+        await page.waitForFunction(() => window.harness.hoverCalls.some(call => call.ids.includes('check-main')))
+        await hiddenCheckRows.nth(1).hover()
+        await page.waitForFunction(() => window.harness.hoverCalls.some(call => call.ids.includes('check-visible')))
+        await hiddenCheckRows.nth(0).hover()
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls.filter(call => call.ids.includes('check-still')).length), 1, 'Moving across horizontal rows does not retry hidden siblings on each row')
+        assert.equal(await page.evaluate(() => window.harness.hoverCalls.filter(call => call.ids.includes('check-changing')).length), 1)
+        await page.mouse.move(1040, 650)
+        await mutate(() => {
+            const h = window.harness, snapshot = h.hiddenHoverSnapshot
+            h.metrics = snapshot.metrics; h.group = snapshot.group; h.stats = snapshot.stats
+            delete h.hiddenHoverSnapshot
+        })
+        console.log('PASS group entry checks hidden candidates once; recovery, disappearance and horizontal row changes preserve the retry boundary')
         await mutate(() => {
             const h = window.harness
             h.ratioPreviewSnapshot = { metrics: h.metrics, group: h.group, stats: h.stats, detailResults: h.detailResults }
@@ -266,7 +441,7 @@ async function main() {
             h.detailResults = { 'disk-total': '551.0/8786.0 GiB', 'disk-root': '38.3/936.4 GiB',
                 'disk-data': '87.3/7392.2 GiB', 'disk-other': '425.4/457.4 GiB' }
         })
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelectorAll('.group-details .ratio-numerator').length === 4)
         const assertRatioColumns = async container => {
             for (const selector of ['.metric-value', '.ratio-numerator', '.ratio-slash', '.ratio-denominator', '.ratio-unit']) {
@@ -287,7 +462,7 @@ async function main() {
         if (process.env.RATIO_SCREENSHOT) await page.screenshot({ path: process.env.RATIO_SCREENSHOT })
         await page.mouse.move(1040, 650)
         await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'static' } })
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelectorAll('.metric-group .ratio-numerator').length === 4)
         await assertRatioColumns(group)
         assert((await group.boundingBox()).height <= 55, 'Four static disk rows stay compact even with expanded capacity details')
@@ -342,7 +517,7 @@ async function main() {
         assert.equal(separator.columnStart, '1')
         assert.equal(separator.columnEnd, '-1')
         assert.notEqual(separator.background, 'rgba(0, 0, 0, 0)', 'Static rows need a visible full-width thin separator')
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelector('.metric-group .metric-detail')?.textContent.includes('累计接收'))
         const networkDetails = group.locator('.metric-detail')
         assert.deepEqual((await networkDetails.allTextContents()).map(value => value.replace(/\s+/g, '')),
@@ -409,13 +584,13 @@ async function main() {
                 assert.equal(entry.border, '2px')
                 const sameLine = entries.filter(other => Math.abs(other.y - entry.y) < 1)
                 assert(sameLine.every(other => Math.abs(other.bottom - entry.bottom) < 1), 'Separators share each flex line height, including wrapped lines')
-                if (entry.single) assert(Math.abs(entry.labelCenter - entry.center) < 1, 'Single labels remain vertically centered beside tall groups')
+                if (entry.single) assert(entry.labelCenter - entry.y < 16, 'Single labels align to the top beside tall groups')
             }
             return entries
         }
         const unexpandedEntries = await assertSeparatorHeights()
         assert(unexpandedEntries[0].height >= 36, 'Single-label separator spans the neighboring three-row group')
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelectorAll('.bar .disk-io-detail').length === 3)
         await assertIoColumns(group)
         assert.deepEqual((await group.locator('.disk-io-detail').first().locator('.io-label').allTextContents()).map(text => text.trim()), ['读取', '写入', '延迟', '队列'])
@@ -432,7 +607,7 @@ async function main() {
         assert(new Set(wrappedEntries.map(entry => Math.round(entry.y))).size > 1, 'Fixture covers multiple wrapped flex lines')
         await page.locator('.bar').evaluate(node => { node.style.width = '' })
         await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'overview' } })
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelectorAll('.group-details .disk-io-detail').length === 3)
         await assertIoColumns(page.locator('.group-details'))
         assert(await page.locator('.group-details').evaluate(node => node.scrollWidth <= Math.ceil(node.getBoundingClientRect().width)), 'Full disk I/O details fit the wide popup without horizontal clipping')
@@ -496,13 +671,13 @@ async function main() {
         }))
         assert(boundaries.every(line => line.width === '2px' && line.style === 'solid' && line.color === 'rgb(174, 185, 201)'), 'Labels/groups have bright opaque 2px separators')
         await mutate(() => { window.harness.group = { ...window.harness.group, layout: 'vertical' } })
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelectorAll('.metric-group .metric-detail').length === 3)
         await assertRuleColors(page.locator('.bar .metric-group > .metric-row'))
         await page.mouse.move(1040, 650)
         await mutate(() => { window.harness.group = { ...window.harness.group, mode: 'overview' } })
         await assertRuleColors(page.locator('.bar .collapsed-row'))
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelector('.group-details .metric-image-icon'))
         await assertRuleColors(page.locator('.group-details .detail-row'))
         await page.locator('.bar').evaluate(node => { node.style.display = 'none' })
@@ -512,7 +687,7 @@ async function main() {
         assert.equal(await page.evaluate(() => window.harness.detailCalls.length), hiddenDetailCalls, 'Hidden pane must stop hover collection even when mouseleave never fires')
         await page.locator('.bar').evaluate(node => { node.style.display = '' })
         await page.mouse.move(1040, 650)
-        await group.hover()
+        await group.click()
         await page.waitForFunction(() => document.querySelector('.group-details .metric-image-icon'))
         await page.evaluate(() => {
             Object.defineProperty(document, 'hidden', { configurable: true, value: true })
@@ -540,6 +715,40 @@ async function main() {
         await assertRuleColors(page.locator('.bar .single'))
         assert.equal(await page.locator('.bar .single .metric-label').evaluate(node => getComputedStyle(node).color), 'rgb(138, 146, 158)')
         if (process.env.RULE_COLORS_SCREENSHOT) await page.screenshot({ path: process.env.RULE_COLORS_SCREENSHOT })
+        await page.mouse.move(1040, 650)
+        await mutate(() => {
+            const h = window.harness
+            const rules = [{ operator: '>=', value: 95, color: '#ff0000' }, { operator: '>=', value: 80, color: '#ffa500' }]
+            const cases = [
+                ['io-low', '200.00', 10], ['io-below-warning', '3.00', 79.99], ['io-warning', '3.00', 80],
+                ['io-below-critical', '3.00', 94.99], ['io-critical', '3.00', 95], ['io-high', '3.00', 96],
+                ['io-no-reference', '200.00', undefined], ['io-ordinary', '200.00', 10],
+            ]
+            const labels = cases.map(([id]) => ({ id, label: id, icon: 'stats-system-disk', type: 'text',
+                command: 'printf 1', detailCommand: 'printf details', suffix: 'MB/s', color: '#00ff00', colorRules: rules,
+                ...(id === 'io-ordinary' ? {} : { valueFormat: 'disk-io-rate' }) }))
+            h.metrics = []
+            h.group = { id: 'io-color-group', label: 'I/O reference colors', mode: 'static', layout: 'vertical',
+                main: labels[0], children: labels.slice(1) }
+            h.stats = { custom: cases.map(([id, value, colorValue]) => ({ id, value, colorValue, status: 'ok' })) }
+            h.detailResults = Object.fromEntries(cases.map(([id]) => [id, 'R 1.00 / W 2.00 MB/s | await 3.0 ms | queue 0.10']))
+        })
+        const ioColorRows = page.locator('.bar .metric-group > .metric-row')
+        await assertRuleColors(ioColorRows)
+        assert.deepEqual(await ioColorRows.locator('.metric-value').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).color)),
+            ['rgb(0, 255, 0)', 'rgb(0, 255, 0)', 'rgb(255, 165, 0)', 'rgb(255, 165, 0)',
+                'rgb(255, 0, 0)', 'rgb(255, 0, 0)', 'rgb(0, 255, 0)', 'rgb(255, 0, 0)'],
+            'I/O rules compare reference percentages at 80/95, omit missing references, and leave ordinary numeric rules unchanged')
+        assert.deepEqual((await ioColorRows.locator('.metric-value').allTextContents()).map(text => text.trim()),
+            ['200.00 MB/s', '3.00 MB/s', '3.00 MB/s', '3.00 MB/s', '3.00 MB/s', '3.00 MB/s', '200.00 MB/s', '200.00 MB/s'])
+        await group.click()
+        await page.waitForFunction(() => document.querySelectorAll('.bar .disk-io-detail').length === 8)
+        assert(await ioColorRows.evaluateAll(nodes => nodes.every(node => {
+            const valueColor = getComputedStyle(node.querySelector('.metric-value')).color
+            return [...node.querySelectorAll('.disk-io-detail .io-number')].every(detail => getComputedStyle(detail).color === valueColor)
+        })), 'All four detail columns inherit their own label throughput color')
+        await page.mouse.move(1040, 650)
+        console.log('PASS disk I/O colors use independent reference percentages with 80/95 boundaries while values remain MB/s')
         await mutate(() => {
             const h = window.harness, snapshot = h.colorPreviewSnapshot
             h.metrics = snapshot.metrics; h.group = snapshot.group; h.stats = snapshot.stats; h.detailResults = snapshot.detailResults
@@ -638,7 +847,7 @@ async function main() {
         }
         await mutate(() => { window.harness.config.store.profiles = window.layoutTestProfiles })
         console.log('PASS expanded layout children, exact-ID linked checks, individual cancellations, search and bottom-only settings')
-        await page.locator('.editor-actions').getByRole('button', { name: 'Cancel', exact: true }).click()
+        await closeEditor()
         await page.waitForFunction(() => !document.querySelector('.new-item-editor'))
         console.log('PASS single-label form only appears after Add Single Label and closes on Cancel')
         await page.getByRole('button', { name: 'Add Group', exact: true }).click()
@@ -655,21 +864,41 @@ async function main() {
         await page.locator('.group-member-child .metric-command textarea').fill('printf 38')
         await page.locator('.group-member-child .detail-command textarea').fill('printf "38GB / 100GB"')
         await page.locator('.add-child-btn').click()
-        await page.locator('.group-member-child .metric-fields input[type="text"]').first().fill('/data')
-        await page.locator('.group-member-child .metric-command textarea').fill('printf 90')
+        await page.locator('.group-member-child').last().locator('.metric-fields input[type="text"]').first().fill('/data')
+        await page.locator('.group-member-child').last().locator('.metric-command textarea').fill('printf 90')
+        const nav = page.locator('.editor-navigator')
+        await nav.locator('.navigator-child').last().click()
+        const located = await page.locator('.group-member-child').last().boundingBox()
+        assert(located.y >= 0 && located.y < 160, 'Navigation places the member heading near the top, not below the viewport')
+        const navBox = await nav.boundingBox()
+        const editorBox = await page.locator('.group-member-child').last().boundingBox()
+        assert(editorBox.width > 650, 'The floating navigator does not subtract width from the editor')
+        assert(navBox.width >= 220 && navBox.width <= 300 && navBox.x + navBox.width === 1084, 'Navigation is bounded and defaults to the viewport right edge')
+        assert(Math.abs(navBox.y + navBox.height / 2 - 360) < 2, 'Navigation stays vertically centered')
+        await page.locator('.group-member-child').last().locator('.metric-command textarea').focus()
+        await page.keyboard.press('Control+s')
+        assert.equal(await page.locator('.group-member-child').last().locator('.member-editor').count(), 0)
+        assert.equal(await page.locator('.member-editor').count(), 2, 'Saving folds only the active child')
+        assert.equal(await nav.count(), 1)
+        const savedTogether = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups[0])
+        assert.deepEqual(savedTogether.children.map(child => child.command), ['printf 38', 'printf 90'], 'Multiple open forms keep independent values')
+        await nav.locator('.navigator-child').last().click()
+        const iconColors = await nav.locator('.configured-icon').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).color))
+        assert(iconColors.every(color => color === 'rgb(0, 255, 0)'), 'Editor icons use the configured default color')
+        if (process.env.EDITOR_SCREENSHOT) await page.screenshot({ path: process.env.EDITOR_SCREENSHOT })
+        console.log('PASS right navigation preserves editor width, aligns member headings, supports multiple drafts and Ctrl+S folds only the active member')
         const mainMember = await page.locator('.group-member-main').boundingBox()
         const childMember = await page.locator('.group-member-child').first().boundingBox()
         assert(childMember.x >= mainMember.x + 16 && childMember.width < mainMember.width)
-        await page.locator('.group-member-child .member-toggle').first().click()
-        assert.equal(await page.locator('.member-editor').count(), 1)
+        assert.equal(await page.locator('.member-editor').count(), 3, 'Main and both child editors remain open together')
         assert.equal(await page.locator('.group-member-child').first().locator('.member-editor').count(), 1)
-        await page.locator('.group-member-child .metric-command textarea').fill('printf 39')
+        await page.locator('.group-member-child').first().locator('.metric-command textarea').fill('printf 39')
         await page.locator('.group-member-child .member-toggle').first().click()
-        assert.equal(await page.locator('.member-editor').count(), 0)
+        assert.equal(await page.locator('.member-editor').count(), 2)
         await page.locator('.group-member-main .member-toggle').click()
         await page.locator('.group-member-child .member-toggle').first().click()
-        assert.equal(await page.locator('.group-member-child .metric-command textarea').inputValue(), 'printf 39')
-        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        assert.equal(await page.locator('.group-member-child').first().locator('.metric-command textarea').inputValue(), 'printf 39')
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click(); await closeEditor()
         await page.locator('.group-card-preview').waitFor()
         assert.equal(await page.locator('.group-card-preview').count(), 1)
         assert.equal(await page.locator('.group-card-toggle').count(), 0)
@@ -709,10 +938,10 @@ async function main() {
         assert.equal(await page.locator('.group-card').count(), 1)
         await page.locator('.main-summary-chip').click()
         assert.equal(await page.locator('.group-member-main .member-editor').count(), 1)
-        await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+        await closeEditor()
         await page.locator('.child-summary-chip').first().click()
         assert.equal(await page.locator('.group-member-child').first().locator('.member-editor').count(), 1)
-        assert.equal(await page.locator('.group-member-child .metric-command textarea').inputValue(), 'printf 39')
+        assert.equal(await page.locator('.group-member-child').first().locator('.metric-command textarea').inputValue(), 'printf 39')
         const childDialogPromise = page.waitForEvent('dialog')
         const childDeleteClick = page.locator('.child-delete').first().click()
         const childDialog = await childDialogPromise
@@ -722,8 +951,8 @@ async function main() {
         assert(childDeleteMessage.includes('Delete this child metric?'))
         assert(childDeleteMessage.includes('系统盘'))
         assert.equal(await page.locator('.group-member-child').count(), 2)
-        assert.equal(await page.locator('.group-member-child .metric-command textarea').inputValue(), 'printf 39')
-        await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+        assert.equal(await page.locator('.group-member-child').first().locator('.metric-command textarea').inputValue(), 'printf 39')
+        await closeEditor()
         console.log('PASS main/child summary buttons are adjacent and open their own editors; lower-right deletion confirms names and cancellation preserves data')
         await page.locator('.group-card-heading').click()
         assert.equal(await page.locator('.group-card .inline-item-editor').count(), 0)
@@ -733,7 +962,7 @@ async function main() {
         assert.equal(await page.locator('.group-member-main .member-toggle').getAttribute('aria-expanded'), 'false')
         assert.equal(await page.locator('.new-item-editor').count(), 0)
         await page.locator('.group-member-child .member-toggle').first().click()
-        assert.equal(await page.locator('.group-member-child .metric-command textarea').inputValue(), 'printf 39')
+        assert.equal(await page.locator('.group-member-child').first().locator('.metric-command textarea').inputValue(), 'printf 39')
         console.log('PASS group Edit button opens inline editor; title does not toggle; child accordions retain drafts')
         for (const selector of ['.settings-section.single-labels-section', '.settings-section.metric-groups-section', '.preset-library', '.builtin-metrics']) {
             assert.equal(await page.locator(selector).count(), 1, `One visible section for ${selector}`)
@@ -776,7 +1005,7 @@ async function main() {
         await assertVisibleBorders(childEditor, 'disabled child member')
         await childEditor.locator('.member-enabled').click()
         assert.equal(await childEditor.getByPlaceholder('Threshold / Value', { exact: true }).inputValue(), '20')
-        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click(); await closeEditor()
         const savedChild = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups[0].children[0])
         assert.equal(savedChild.visibleWhenUnavailable, true)
         assert.equal(savedChild.showWhenUnavailable, false)
@@ -806,6 +1035,27 @@ async function main() {
         assert.equal(toggledSingle.command, 'printf 99')
         assert.deepEqual(toggledSingle.colorRules, [{ operator: '>=', value: '90', color: '#ff0000' }])
         console.log('PASS standalone/group enable switches preserve commands, children and color rules')
+        await mutate(() => {
+            const conf = window.harness.config.store.plugin.serverStats
+            conf.customMetrics = [{ ...conf.customMetrics[0], valueFormat: 'disk-io-rate', suffix: 'MB/s',
+                command: 'printf TABBY-IO:3.00:96.00' }]
+        })
+        const ioSettingsCard = page.locator('.custom-metric-item').filter({ has: page.locator('strong[title="Toggle test"]') })
+        await ioSettingsCard.locator('button[title="Edit"]').click()
+        await page.locator('.io-color-help').waitFor()
+        assert.match(await page.locator('.io-color-help').innerText(), /percent of reference bandwidth/)
+        assert.match(await page.locator('.io-color-help').innerText(), /displayed value remains MB\/s/)
+        await page.locator('.inline-item-editor .metric-fields input[type="text"]').first().fill('I/O edited')
+        await page.locator('.inline-item-editor').getByRole('button', { name: 'Save', exact: true }).click()
+        const savedIo = await page.evaluate(() => window.harness.config.store.plugin.serverStats.customMetrics[0])
+        assert.equal(savedIo.valueFormat, 'disk-io-rate')
+        assert.equal(savedIo.label, 'I/O edited')
+        assert.equal(savedIo.suffix, 'MB/s')
+        await page.evaluate(saved => { window.harness.config.store.plugin.serverStats.customMetrics = [saved]; window.tick() }, toggledSingle)
+        await ioSettingsCard.locator('button[title="Edit"]').click()
+        assert.equal(await page.locator('.io-color-help').count(), 0, 'Ordinary labels do not claim percentage-based color thresholds')
+        await closeEditor()
+        console.log('PASS I/O settings explain percent-based color rules and preserve the value format on save')
         const ramBuiltin = page.locator('.builtin-card[data-builtin="ram"]')
         await ramBuiltin.locator('.builtin-enabled').click()
         await page.waitForFunction(() => document.querySelector('.builtin-card[data-builtin="ram"] .builtin-enabled')?.getAttribute('aria-pressed') === 'false')
@@ -899,9 +1149,11 @@ async function main() {
         assert.equal(await uptimePreset.locator('.preset-add').isDisabled(), false, 'Deleting the single label allows adding that preset again')
         console.log('PASS single preset Add prevents immediate repeats and remains blocked after rename/disable until deletion')
         await page.locator('.preset-search').fill('GPU')
-        const gpuPreset = page.locator('.preset-card').filter({ hasText: 'GPU memory' }).filter({ hasText: 'Metric Group' })
+        const gpuPreset = page.locator('.preset-card').filter({ has: page.locator('.preset-card-header strong', { hasText: /^GPU usage$/ }) }).filter({ hasText: 'Metric Group' })
+        const gpuFreePreset = page.locator('.preset-card').filter({ has: page.locator('.preset-card-header strong', { hasText: /^GPU free$/ }) }).filter({ hasText: 'Metric Group' })
         await gpuPreset.waitFor()
         assert.equal(await gpuPreset.count(), 1)
+        assert.equal(await gpuFreePreset.count(), 1, 'Used and free GPU memory are separate available group presets')
         if (process.env.PRESETS_SCREENSHOT) {
             await mutate(() => { window.harness.config.store.language = 'zh-CN'; window.harness.previewChinese = true })
             await page.locator('.preset-library').screenshot({ path: process.env.PRESETS_SCREENSHOT })
@@ -913,6 +1165,7 @@ async function main() {
             'Two immediate Add events must create exactly one metric group')
         await page.waitForFunction(button => button.disabled, await gpuPreset.locator('.preset-add').elementHandle(), { timeout: 5000 })
         assert.equal(await gpuPreset.locator('.preset-add').isDisabled(), true)
+        assert.equal(await gpuFreePreset.locator('.preset-add').isDisabled(), false, 'Adding GPU usage must not mark GPU free as already added')
         assert.equal((await gpuPreset.locator('.preset-add').innerText()).trim(), 'Already added')
         const importedGpu = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.at(-1))
         assert.equal(importedGpu.main.type, 'text')
@@ -921,6 +1174,8 @@ async function main() {
         assert.equal(importedGpu.displayScope.mode, 'all')
         assert(importedGpu.children.every(m => m.visibleWhenUnavailable === false && m.showWhenUnavailable === false))
         assert(importedGpu.main.command.includes('memory.used,memory.total,memory.free'))
+        assert(importedGpu.main.command.includes('used*100/total'))
+        assert(importedGpu.main.detailCommand.includes('used/1024,total/1024'))
         assert.equal(importedGpu.presetMetadata.source.license, 'MIT')
         await mutate(() => {
             const h = window.harness, group = h.config.store.plugin.serverStats.metricGroups.at(-1)
@@ -928,7 +1183,7 @@ async function main() {
             group.label = 'Renamed disabled GPU'; group.enabled = false
             h.config.store.language = 'zh-CN'; h.previewChinese = true
         })
-        const localizedGpuPreset = page.locator('.preset-card').filter({ hasText: 'GPU 显存' }).filter({ hasText: '标签组' })
+        const localizedGpuPreset = page.locator('.preset-card').filter({ has: page.locator('.preset-card-header strong', { hasText: /^GPU用量$/ }) }).filter({ hasText: '标签组' })
         assert.equal(await localizedGpuPreset.locator('.preset-add').isDisabled(), true)
         assert.equal((await localizedGpuPreset.locator('.preset-add').innerText()).trim(), '已添加')
         await localizedGpuPreset.locator('.preset-add').evaluate(button => { button.click(); button.click() })
@@ -953,8 +1208,10 @@ async function main() {
         const importedDisk = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.at(-1))
         assert.equal(importedDisk.displayScope.mode, 'selected')
         assert.deepEqual(importedDisk.displayScope.profileIds, [])
-        assert.equal(importedDisk.children.length, 3)
+        assert.equal(importedDisk.children.length, 5)
         assert.equal(importedDisk.children[0].label, '系统盘')
+        assert.deepEqual(importedDisk.children.slice(3).map(child => child.label), ['/data3', '/data4'])
+        assert(importedDisk.children.slice(3).every(child => child.visibleWhenUnavailable === false && child.showWhenUnavailable === false), 'Optional P3 mounts stay hidden and out of carousel when absent')
         assert((await page.locator('.preset-message').innerText()).includes('P3(ai)'))
         assert.equal(externalRequests.length, 0, externalRequests.join('\n'))
         console.log('PASS offline presets add all eight GPU labels and keep unmatched disk bindings explicitly restricted')
@@ -1093,15 +1350,16 @@ async function main() {
         assert.doesNotMatch(exported, /private-local-profile-id/)
         const exportedLibrary = JSON.parse(exported)
         assert.deepEqual(exportedLibrary.find(p => p.kind === 'metric' && p.label === 'Toggle test').profileNames, ['Shared connection'])
-        const exportedGpu = exportedLibrary.find(p => p.kind === 'group' && p.group.children.length === 8)
+        const exportedGpu = exportedLibrary.find(p => p.kind === 'group' && p.labels?.zh === 'GPU用量')
         assert.equal(exportedGpu.source.license, 'MIT')
-        assert.equal(exportedGpu.labels.zh, 'GPU 显存')
+        assert.equal(exportedGpu.labels.zh, 'GPU用量')
+        assert.equal(exportedGpu.labels.en, 'GPU usage')
         assert(exportedGpu.descriptions.en.includes('VRAM'))
         const groupsBeforeImport = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.length)
         await page.locator('.preset-library input[type="file"]').setInputFiles({ name: 'shared-presets.json', mimeType: 'application/json', buffer: Buffer.from(exported) })
         await page.waitForFunction(() => document.querySelector('.preset-message')?.textContent.includes('Library loaded'))
         assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.length), groupsBeforeImport)
-        const reloadedGpuPresets = page.locator('.preset-card').filter({ hasText: 'GPU memory' }).filter({ hasText: 'Metric Group' })
+        const reloadedGpuPresets = page.locator('.preset-card').filter({ has: page.locator('.preset-card-header strong', { hasText: /^GPU usage$/ }) }).filter({ hasText: 'Metric Group' })
         assert((await reloadedGpuPresets.count()) > 0)
         for (const button of await reloadedGpuPresets.locator('.preset-add').all()) {
             assert.equal(await button.isDisabled(), true, 'An exported/reimported copy of an installed preset must still be marked added')
@@ -1113,7 +1371,8 @@ async function main() {
         assert.equal(await page.locator('.add-single-btn').innerText(), '添加单标签')
         assert.equal((await page.locator('.preset-library-header h4').innerText()).trim(), '预设库')
         await page.locator('.preset-search').fill('GPU')
-        assert((await page.locator('.preset-list').innerText()).includes('GPU 显存'))
+        assert((await page.locator('.preset-list').innerText()).includes('GPU用量'))
+        assert((await page.locator('.preset-list').innerText()).includes('GPU余量'))
         await page.locator('.add-single-btn').click()
         await page.locator('.icon-picker-toggle').click()
         await page.locator('.icon-search').fill('显存')
@@ -1123,8 +1382,9 @@ async function main() {
         assert.equal(await page.locator('.add-single-btn').innerText(), 'Add Single Label')
         assert.equal((await page.locator('.preset-library-header h4').innerText()).trim(), 'Preset Library')
         assert.equal(await page.locator('.icon-picker-item .icon-preset-label').innerText(), 'GPU memory')
-        assert((await page.locator('.preset-list').innerText()).includes('GPU memory'))
-        await page.locator('.editor-actions').getByRole('button', { name: 'Cancel', exact: true }).click()
+        assert((await page.locator('.preset-list').innerText()).includes('GPU usage'))
+        assert((await page.locator('.preset-list').innerText()).includes('GPU free'))
+        await closeEditor()
         console.log('PASS English/Chinese switching localizes new controls, preset metadata and Chinese icon aliases')
         await mutate(() => { window.harness.showSettings = false; window.harness.showScopeDemo = true })
         const panes = page.locator('.scope-pane')
@@ -1157,6 +1417,44 @@ async function main() {
         const toggles = page.locator('[data-testid="pane-status-toggle"]')
         await page.waitForFunction(() => document.querySelectorAll('visibility-pane .stats-container').length === 3)
         assert.equal(await toggles.count(), 3)
+        const barBeforeCorner = await visibilityPanes.nth(0).locator('.stats-container').boundingBox()
+        assert.equal(await toggles.nth(1).getAttribute('data-corner'), 'bottom-right')
+        await visibilityPanes.nth(1).locator('server-stats-metric-strip').evaluate(node => node.dataset.preserved = 'yes')
+        for (const corner of ['top-left', 'top-right', 'bottom-left', 'bottom-right']) {
+            await toggles.nth(0).click()
+            await visibilityPanes.nth(0).locator('[data-icon-corner="' + corner + '"]').click()
+            const bounds = await visibilityPanes.nth(0).boundingBox()
+            const button = await toggles.nth(0).boundingBox()
+            assert(Math.abs((corner.endsWith('left') ? button.x - bounds.x : bounds.x + bounds.width - button.x - button.width) - 5) < 3)
+            assert(Math.abs(corner.startsWith('top') ? button.y - bounds.y - 5 : bounds.y + bounds.height - button.y - button.height - 3) < 3)
+            const bar = await visibilityPanes.nth(0).locator('.stats-container').boundingBox()
+            assert(Math.abs(bar.y - barBeforeCorner.y) < 1, 'Only the icon moves; the metric row stays at the bottom')
+            assert.equal(await toggles.nth(1).getAttribute('data-corner'), 'bottom-right', 'Sibling panes keep their own position')
+            assert.equal(await visibilityPanes.nth(1).locator('server-stats-metric-strip').getAttribute('data-preserved'), 'yes',
+                'The sibling metric strip must remain mounted during corner saves')
+            await toggles.nth(0).click()
+            const menu = await visibilityPanes.nth(0).locator('.pane-status-menu').boundingBox()
+            assert(menu.y >= 0 && menu.y + menu.height <= 720, 'Menus remain inside the viewport at every corner')
+            await page.keyboard.press('Escape')
+        }
+        console.log('PASS four icon corners preserve the bottom metric row and default to bottom-right')
+        const alignedStrip = visibilityPanes.nth(0).locator('server-stats-metric-strip')
+        await alignedStrip.evaluate(node => { node.style.minHeight = '70px'; node.dataset.alignmentPreserved = 'yes' })
+        for (const alignment of ['center', 'top']) {
+            await toggles.nth(0).click()
+            await visibilityPanes.nth(0).locator(`[data-alignment="${alignment}"]`).click()
+            const row = await alignedStrip.locator('.single').boundingBox()
+            const label = await alignedStrip.locator('.single .metric-label').boundingBox()
+            assert(Math.abs(alignment === 'center' ? label.y + label.height / 2 - row.y - row.height / 2 : label.y - row.y) < 2)
+            assert.equal(await alignedStrip.getAttribute('data-alignment-preserved'), 'yes', 'Alignment changes preserve the mounted strip')
+            assert.equal(await visibilityPanes.nth(1).locator('.center-aligned').count(), 0, 'Sibling panes retain their alignment')
+            await toggles.nth(0).click()
+            assert.equal(await visibilityPanes.nth(0).locator(`[data-alignment="${alignment}"]`).getAttribute('aria-checked'), 'true')
+            await page.keyboard.press('Escape')
+        }
+        await alignedStrip.evaluate(node => { node.style.minHeight = '' })
+        console.log('PASS icon menu switches top/center alignment with correct geometry, checked state and independent unchanged sibling strips')
+
         await mutate(() => { window.harness.focusFollowsMouse = true })
         await toggles.nth(0).click()
         const triggerBounds = await toggles.nth(0).boundingBox()
@@ -1193,7 +1491,7 @@ async function main() {
             assert(host.height <= 1, 'hidden status bar must not reserve a blank bottom row')
             const pane = await visibilityPanes.nth(i).boundingBox()
             const button = await toggles.nth(i).boundingBox()
-            assert(button.x >= pane.x && button.x <= pane.x + 12, 'toggle stays at the pane left edge')
+            assert(button.x + button.width <= pane.x + pane.width && button.x + button.width >= pane.x + pane.width - 12, 'toggle stays at the pane right edge')
             assert(button.y + button.height <= pane.y + pane.height && button.y + button.height >= pane.y + pane.height - 8, 'toggle stays at the pane bottom edge')
         }
         await mutate(() => { window.harness.showVisibilityDemo = false })
@@ -1207,7 +1505,7 @@ async function main() {
         assert.equal(await toggles.nth(2).getAttribute('aria-label'), '当前分屏状态栏选项')
         if (process.env.VISIBILITY_SCREENSHOT) await page.locator('.visibility-demo').screenshot({ path: process.env.VISIBILITY_SCREENSHOT })
         await toggles.nth(0).click()
-        assert.deepEqual(await visibilityPanes.nth(0).locator('.pane-status-menu button').allTextContents(), ['显示', '✓隐藏', '概览', '轮播显示', '静态显示'])
+        assert.deepEqual((await visibilityPanes.nth(0).locator('.pane-status-menu button').allTextContents()).map(text => text.trim()), ['显示', '✓隐藏', '概览', '轮播显示', '静态显示', '左上', '右上', '左下', '✓右下', '✓顶部对齐', '居中对齐'])
         const optionBoxes = await visibilityPanes.nth(0).locator('.pane-status-menu button').evaluateAll(nodes => nodes.map(node => {
             const rect = node.getBoundingClientRect(); return { x: rect.x, y: rect.y, bottom: rect.bottom };
         }))
@@ -1218,7 +1516,7 @@ async function main() {
         assert.equal(await visibilityPanes.nth(0).locator('.stats-container').count(), 1)
         assert.equal(await visibilityPanes.nth(1).locator('.stats-container').count(), 0)
         assert.equal(await visibilityPanes.nth(2).locator('.stats-container').count(), 1)
-        console.log('PASS independent lower-left pane menus collapse row height, preserve off/off/on on recreation and reopen individually')
+        console.log('PASS independent corner pane menus collapse row height, preserve off/off/on on recreation and reopen individually')
         await mutate(() => {
             const h = window.harness;
             h.previewChinese = false;
@@ -1236,7 +1534,7 @@ async function main() {
         const paneGroups = i => visibilityPanes.nth(i).locator('.metric-group')
         assert.equal(await paneGroups(0).locator('.carousel-slot').count(), 1, 'original group modes are used before overriding')
         await toggles.nth(0).click()
-        assert.deepEqual(await visibilityPanes.nth(0).locator('.pane-status-menu button').allTextContents(), ['✓Show', 'Hide', 'Overview', 'Carousel', 'Static'])
+        assert.deepEqual((await visibilityPanes.nth(0).locator('.pane-status-menu button').allTextContents()).map(text => text.trim()), ['✓Show', 'Hide', 'Overview', 'Carousel', 'Static', 'Top left', 'Top right', 'Bottom left', '✓Bottom right', '✓Align top', 'Align center'])
         await visibilityPanes.nth(0).locator('.pane-menu-static').click()
         assert.equal(await paneGroups(0).locator('.collapsed-slot').count(), 0)
         assert.equal(await paneGroups(0).locator('.metric-row').count(), 4)
@@ -1259,7 +1557,7 @@ async function main() {
         await page.keyboard.press('ArrowDown')
         assert.equal(await visibilityPanes.nth(2).locator('.pane-menu-show').evaluate(node => document.activeElement === node), true)
         await page.keyboard.press('End')
-        assert.equal(await visibilityPanes.nth(2).locator('.pane-menu-static').evaluate(node => document.activeElement === node), true)
+        assert.equal(await visibilityPanes.nth(2).locator('[data-alignment="center"]').evaluate(node => document.activeElement === node), true)
         await page.keyboard.press('Home')
         await page.keyboard.press('ArrowDown')
         await page.keyboard.press('ArrowDown')
@@ -1293,7 +1591,7 @@ async function main() {
         await page.locator('.child-copy').first().click()
         assert.equal(await page.locator('.group-member-child').count(), 2)
         assert((await page.locator('.group-member-child .member-toggle').nth(1).innerText()).includes('(Copy)'))
-        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click(); await closeEditor()
         assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups[1].children.length), 2)
         await mutate(() => { window.harness.config.store.language = 'zh-CN' })
         assert.equal((await page.locator('.tutorial-button').innerText()).trim(), '使用教程（PDF）')
@@ -1349,7 +1647,7 @@ async function main() {
         await page.locator('.group-member-child .check-command textarea').fill('mountpoint -q /data2')
         await page.locator('.group-member-child .metric-command textarea').fill('df -Pk /data2')
         await page.locator('.group-member-child .detail-command textarea').fill('df -Ph /data2')
-        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click(); await closeEditor()
         await page.waitForFunction(() => document.querySelector('visibility-pane .metric-group')?.textContent.includes('/data2'))
         assert(!(await savedPanes.nth(0).innerText()).includes('/lsn_disk1'), 'saving removes the old child label without reopening the pane')
         const editedDisk = await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups[0].children[0])
@@ -1360,12 +1658,12 @@ async function main() {
         console.log('PASS saving a same-ID static child replaces its label and all three configured commands in the open pane')
         await page.locator('.group-edit').click()
         await page.locator('.scope-option[title="p2"] input').check()
-        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click(); await closeEditor()
         await page.waitForFunction(() => document.querySelectorAll('visibility-pane .metric-group').length === 2)
         assert((await savedPanes.nth(1).innerText()).includes('/data2'), 'new association appears in the already-open second pane')
         await page.locator('.group-edit').click()
         await page.locator('.scope-option[title="p1"] input').uncheck()
-        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click(); await closeEditor()
         assert.equal(await savedPanes.nth(0).locator('.metric-group').count(), 0, 'removing an association removes the group from its old pane')
         assert.equal(await savedPanes.nth(1).locator('.metric-group').count(), 1)
         await page.locator('.group-enabled').click()
@@ -1376,20 +1674,38 @@ async function main() {
         await page.locator('.group-edit').click()
         page.once('dialog', dialog => dialog.accept())
         await page.locator('.child-delete').click()
-        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click(); await closeEditor()
         assert(!(await savedPanes.nth(1).innerText()).includes('/data2'), 'deleted child stops displaying after Save Group')
         assert((await savedPanes.nth(1).innerText()).includes('Disk total'))
         await page.locator('.group-edit').click()
         await page.locator('.add-child-btn').click()
         await page.locator('.group-member-child .metric-fields input[type="text"]').first().fill('/new-data')
         await page.locator('.group-member-child .metric-command textarea').fill('printf 7')
-        await page.getByRole('button', { name: 'Save Group', exact: true }).click()
+        await page.getByRole('button', { name: 'Save Group', exact: true }).click(); await closeEditor()
         assert((await savedPanes.nth(1).innerText()).includes('/new-data'), 'newly saved child appears without reopening the pane')
         page.once('dialog', dialog => dialog.accept())
         await page.locator('.group-delete').click()
         assert.equal(await savedPanes.locator('.metric-group').count(), 0, 'deleted group immediately leaves every pane')
         assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.metricGroups.length), 0)
         console.log('PASS saving child additions/deletions and deleting a group updates existing static strips automatically')
+        await page.locator('.add-single-btn').click()
+        const singleEditor = page.locator('.new-item-editor')
+        await singleEditor.locator('.metric-fields input[type="text"]').first().fill('Shortcut single')
+        await singleEditor.locator('.metric-command textarea').fill('printf single')
+        await page.keyboard.press('Control+s')
+        assert.equal(await page.locator('.metric-fields').count(), 0)
+        assert.equal(await page.locator('.editor-navigator').count(), 1)
+        await page.locator('.navigator-main').click()
+        assert.equal(await page.locator('.metric-command textarea').inputValue(), 'printf single')
+        await page.locator('.navigator-close').click()
+        await page.locator('.continue-editing').click()
+        await page.locator('.metric-command textarea').fill('printf discarded')
+        await page.locator('.navigator-close').click()
+        await page.locator('.discard-close').click()
+        assert.equal(await page.locator('.editor-navigator').count(), 0)
+        assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.customMetrics.find(metric => metric.label === 'Shortcut single').command), 'printf single')
+        console.log('PASS single-label navigation, Ctrl+S and save/discard/continue close choices preserve stored data')
+        await require('./browser/overlay-regression.cjs')(page, mutate)
         assert.equal(errors.length, 0, errors.join('\n'))
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)) }
 }

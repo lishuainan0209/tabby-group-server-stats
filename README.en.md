@@ -2,7 +2,7 @@
 
 [中文](README.md) | English
 
-SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.8.0**, adding per-pane display menus, group/child duplication, capacity thousands separators and offline PDF tutorials.
+SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.8.1**, preserving collection caches on display changes and label visibility during refreshes.
 
 Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
@@ -37,7 +37,7 @@ See [iostat](https://man7.org/linux/man-pages/man1/iostat.1.html) and [Linux I/O
 - **Independent copies:** duplicate an entire group or a child within its group, then adjust device paths, GPU indices and commands.
 - **Per-pane display menus:** choose Show, Hide, Overview, Carousel or Static from a vertical lower-left menu; choosing a mode also shows the bar, and each pane remembers its selection.
 - **Offline PDF manuals:** a highlighted **Tutorial (PDF)** button opens the Chinese or English manual with the system's default PDF application, covering pane menus, label editing, presets and a disk-group walkthrough.
-- **Offline and GitHub library:** 20 bundled presets—12 standalone labels and 8 groups—with imports from this fork, JSON import/export and search; repeated clicks do not add another copy of an existing preset.
+- **Offline and GitHub library:** 37 bundled presets—13 standalone labels and 24 groups—with imports from this fork, JSON import/export and search; repeated clicks do not add another copy of an existing preset.
 - **Clear section and card borders:** separate built-ins, presets, standalone labels and groups; compact line separators between displayed groups.
 - **English/Chinese UI and 26 original monitoring icons:** searchable categories, existing icon support and custom SVGs.
 
@@ -76,7 +76,7 @@ printf '%s\n' "$data" | awk 'NR==2 {print "available " $4 " / used " $3}'
 
 Set the unavailable message to “Not mounted”. Checking the mount point prevents an unmounted disk's remaining directory from reporting its parent filesystem instead. A failed check skips both the primary and detail commands. Commands run inside the corresponding pane's session with that connection user's permissions and require the appropriate tools on the target.
 
-Details follow the label's refresh interval, or the global interval when unset: 10 seconds by default, with a minimum of 1 second. Repeated mouse events do not rerun a cached command. A bounded SSH completion acknowledgment protects output from fast-closing channels without automatically retrying user commands. Detail errors appear separately in red and preserve a healthy primary value; successful empty detail output stays empty.
+Entering a label immediately requests its value and details, bypassing the normal long cache interval. While hovered, it refreshes about once per second; leaving restores the configured interval without changing saved settings. Standalone and horizontal static labels accelerate only the pointed-at item; overview, carousel and vertical static groups accelerate their expanded visible items. Labels without detail commands also refresh their primary values, and moving into the popup keeps the faster cadence. Hidden children with failed checks get one extra probe when entering their group. Failed items remain hidden and their independent commands are excluded from accelerated polling; normal polling retains its retry interval of at least 60 seconds. Recovered items reappear and join fast refresh. Aggregate labels still perform their own lightweight candidate-mount checks. Repeated mouse/focus events reuse in-flight requests; slow commands are not restarted while running, so actual refresh speed depends on command duration. Hidden panes and background documents stop new collection. A bounded SSH completion acknowledgment protects output from fast-closing channels without automatically retrying user commands. Detail errors appear separately in red and preserve a healthy primary value; successful empty detail output stays empty.
 
 ## Groups and visibility
 
@@ -124,22 +124,25 @@ GitHub and JSON imports only preview entries: they do not execute commands or ad
 
 **Add each preset once.** Newly added standalone labels and groups record their source and stable preset ID. Renaming or disabling an item does not allow another copy to be added from the same preset. Legacy configuration without source markers is checked using commands and display scope rather than its name alone. This protection does not automatically delete historical duplicates: back up local configuration before removing unwanted copies.
 
-The 12 standalone presets cover uptime, temperature, system load, logged-in users, Docker containers, GPU memory, SSH sessions, SSH latency, I/O wait, CPU steal, failed services and service state. The 8 groups are:
+The 13 standalone presets cover uptime, temperature, system load, logged-in users, Docker containers, GPU usage and free memory, SSH sessions, SSH latency, I/O wait, CPU steal, failed services and service state. The 24 groups include seven sets of disk free-capacity, usage and I/O presets, plus GPU usage, GPU free and CPU load. Their disk paths are:
 
 **Laboratory-specific presets: P0磁盘, P1磁盘, P1容器磁盘, P2磁盘, P3磁盘 and P4磁盘 are for the author's laboratory only. Other users: please do not download or use these presets.** Their mount paths and saved connection names are specific to the author's laboratory; they are not generic server templates. This usage-scope notice does not apply to the general GPU or CPU-load presets and does not change the rights granted by the MIT license.
 
 | Group | Main label and children | Suggested saved connections |
 | --- | --- | --- |
-| P0磁盘 | Aggregate free capacity; system `/`, then `/data` | P0(ai), P0(s_lsn) |
+| P0磁盘 | System `/`, `/data`; future candidates `/data2`–`/data4` | P0(ai), P0(s_lsn) |
 | P1磁盘 | Aggregate free capacity; system `/` child only | P1(ai) |
 | P1容器磁盘 | Aggregate free capacity; system `/`, then `/public` | P1(s_lsn) |
-| P2磁盘 | Aggregate free capacity; system `/`, then `/data` | P2(ai), P2(s_lsn) |
-| P3磁盘 | Aggregate free capacity; system `/`, then `/data` and `/data2` | P3(ai), P3(s_lsn) |
-| P4磁盘 | Aggregate free capacity; system `/`, then `/data` | P4(ai), P4(s_lsn) |
-| GPU memory | Aggregate GPU memory; eight children GPU 0–7 | All panes |
+| P2磁盘 | System `/`, `/data`; future candidates `/data2`–`/data4` | P2(ai), P2(s_lsn) |
+| P3磁盘 | System `/`, `/data`, `/data2`; optional `/data3`, `/data4` | P3(ai), P3(s_lsn) |
+| P4磁盘 | System `/`, `/data`; optional `/data2`–`/data12` | P4(ai), P4(s_lsn) |
+| NAS磁盘 | System `/`; optional `/volume1`–`/volume4` | NAS |
+| GPU usage / GPU free | Aggregate GPU memory; eight children GPU 0–7 | All panes |
 | CPU load | Thread count; 1-minute and 5-minute load | All panes |
 
-Each disk group's main label shows **aggregate free GB** across its readable system and mounted data filesystems, deduplicating filesystems so bind mounts are not counted twice. The system disk is the first child, followed by data mounts; hover shows free/total capacity. Missing mounts are omitted from the aggregate while their child labels retain a notice by default. No readable valid filesystem produces an error, not a misleading zero.
+Each free-capacity group's main label shows **aggregate free GB** across its readable system and mounted data filesystems, deduplicating filesystems so bind mounts are not counted twice. The system disk is the first child, followed by data mounts; hover shows free/total capacity. The corresponding usage presets show used percentages and used/total capacity. I/O presets use the same candidate paths.
+
+New optional mounts hide when their prerequisite check fails, are excluded from carousel rotation and valid-mount totals, and return on a later successful sample after mounting. Existing system/data mounts retain failure notices. With no readable valid filesystem the aggregate reports an error. P0/P2 paths `/data2`–`/data4` are reserved for future mounts: **they are not a claim that these paths are mounted or evidence of either server's physical drive-bay count**. NAS presets bind to the personal NAS connection and are outside the laboratory-only set.
 
 The **Users** preset counts system login records from `who`, including normal tty, pts and console sessions. Hover groups and sorts counts by username, for example `alice ×2, bob ×1`. Empty records produce a primary value of `0` and a detail of `-`; missing tools or execution failures remain errors. This is neither the current connection's username nor a count of every TCP or background SSH connection.
 
@@ -259,3 +262,28 @@ Report problems or suggest improvements through [this project's Issues](https://
 - Fix a configuration migration incompatibility that left the settings page blank, and persist built-in ordering and first-time edits across restarts.
 
 The library offers GPU usage/free presets and P0–P4 disk usage/free groups. GPU values are VRAM percentages and details follow the chosen direction; free below 20% is red, below 50% orange. Disk usage reads the df Used column (excluding reserved space), shows used percentage and used/total details, and turns orange above 80% or red above 90%. Disk free retains free GB and its existing capacity thresholds.
+
+### 1.8.1 I/O reference colors
+
+Readings remain the sum of read plus write throughput across unique readable block devices during the approximately one-second sample, not a per-disk average. Colors compare this rate with a reference sequential bandwidth: green below 80%, orange from 80%, red from 95%. Aggregate references include only currently readable devices; duplicate mount aliases use the smaller reference once, and absent future mounts do not inflate the denominator. Manufacturer decimal MB/s is converted to the existing base-1024 display units.
+
+Verified on 2026-11-08 with ordinary-user read-only access: P3 root is a ZHITAI TiPlus7100 1TB (7000 MB/s reference), /data is WD80EFPX-68C4ZN0 8TB (215), /data2 is ST8000NM017B-2TJ103 8TB (255); P1 container /public maps to a TiPlus7100 2TB NVMe partition (7000). P0 root is reported nonrotational behind PERC H355, so its unknown physical model uses a provisional 500 MB/s SSD-class reference. Other unknown disks and future mounts use a conservative 180 MB/s 4/8 TB HDD reference. P0/P2 physical models are obscured by PERC H355/H330; the controller name is not the drive model. P1 exposes a WD42EJRX 4TB but its relationship to the container's root ZFS dataset is unconfirmed. Existing ordinary keys could not authenticate P4/NAS. These fallback references are assumptions, not measured drive performance.
+
+This is a sequential-throughput reference, not health, saturation or utilization: random I/O may be busy at low MB/s. All four detail columns inherit their row's throughput color; latency/queue are not independently classified by these thresholds. Sources: [WD Red Plus](https://documents.westerndigital.com/content/dam/doc-library/en_us/assets/public/western-digital/product/internal-drives/wd-red-plus-hdd/data-sheet-western-digital-wd-red-plus-hdd.pdf), [Seagate Exos 7E10](https://www.seagate.com/www-content/product-content/enterprise-hdd-fam/exos-7e10/_shared/docs/200440800e.pdf), [YMTC TiPlus7100](https://www.ymtc.com/cn/news/49.html). The 80/95% thresholds are this plugin's display policy, not manufacturer fault thresholds.
+
+
+### 1.8.1 Preserve visibility during refresh
+
+Moving an icon or changing pane display preferences preserves connection caches, in-flight work and hidden-item retry timers. Every label configured to hide when unavailable, including group mains and children, starts hidden and retains its last check decision throughout refreshes. Complete results update visibility; connection errors do not reveal hidden labels. Edited commands discard old readings while retaining known visibility. New sessions and different binding contexts check independently. Groups disappear when all members are hidden.
+
+### 1.8.1 Icon position
+
+The pane control menu offers top-left, top-right, bottom-left and bottom-right (default). Position persists per pane. Only the icon moves; metric labels remain in the bottom bar. Hiding the bar keeps the icon in its selected corner.
+
+### 1.8.1 Local editor update (2026-11-12)
+
+Labels align to the top and group main titles are bold. Hover still accelerates collection; clicking immediately expands a collecting placeholder, then fills in the response. Existing details remain visible during refresh. Another click or moving away closes them. The editor adapts to available width between 640px and 1440px, with horizontal scrolling below its minimum. The draggable navigator defaults to the right center, adapts between 220px and 300px, and scrolls long lists internally. It can overlay menus or the editor without consuming form width; its arrow returns it to the right side. Navigation scrolls member headings into view. Multiple members can stay open with independent drafts. Ctrl+S saves all drafts in the current group and folds only the active member. Single labels also have navigation and shortcut saving. Closing offers save, discard or continue editing. Delete buttons identify their targets; editor icons use the configured default color.
+
+The 43 bundled disk I/O prerequisite commands are about 43.5% shorter in total with the same mount and counter validation. Sampling, deduplication, mapping-change checks and colors are unchanged. Startup migrates only exact old generated checks, preserving customized scripts.
+
+The pane icon menu offers top or center label alignment (top by default), saved independently per pane. Switching preserves collectors and mounted strips; separators retain the full row height.

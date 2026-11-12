@@ -3,6 +3,10 @@ import type { CustomMetric, CustomMetricGroup } from './config'
 export interface DisplayResult {
     id: string
     value: string
+    /** Optional percentage used for I/O reference-bandwidth color rules. */
+    colorValue?: number
+    /** Last completed prerequisite decision, retained while refreshing. */
+    available?: boolean
     status?: 'ok' | 'unavailable' | 'error' | 'pending'
 }
 
@@ -87,9 +91,15 @@ export function metricStatus(result?: DisplayResult): string {
 }
 
 /** Shared by single labels, static groups and expanded popups. */
+export function metricIsAvailable(result?: DisplayResult): boolean {
+    return result?.available ?? ['ok', 'error'].includes(metricStatus(result))
+}
+
 export function metricIsVisible(metric: CustomMetric | undefined, results: DisplayResult[]): boolean {
-    return !!metric && metric.enabled !== false && (metric.visibleWhenUnavailable !== false ||
-        metricStatus(results.find(result => result.id === metric.id)) !== 'unavailable')
+    if (!metric || metric.enabled === false) return false
+    if (metric.visibleWhenUnavailable !== false) return true
+    const result = results.find(result => result.id === metric.id)
+    return metricIsAvailable(result)
 }
 
 export function visibleGroupMetrics(group: CustomMetricGroup, results: DisplayResult[]): CustomMetric[] {
@@ -101,7 +111,7 @@ export function visibleGroupMetrics(group: CustomMetricGroup, results: DisplayRe
 export function carouselChildren(group: CustomMetricGroup, results: DisplayResult[]): CustomMetric[] {
     if (group.enabled === false) return []
     return (group.children || []).filter(metric => metricIsVisible(metric, results) &&
-        (metric.showWhenUnavailable !== false || metricStatus(results.find(result => result.id === metric.id)) !== 'unavailable'))
+        (metric.showWhenUnavailable !== false || metricIsAvailable(results.find(result => result.id === metric.id))))
 }
 
 export function nextCarouselId(group: CustomMetricGroup, results: DisplayResult[], currentId?: string): string | undefined {

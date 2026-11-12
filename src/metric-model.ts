@@ -22,6 +22,8 @@ export interface CustomMetric {
     enabled?: boolean
     label?: string
     command: string
+    /** Decode the disk I/O value protocol; color thresholds then use reference-bandwidth percent. */
+    valueFormat?: 'disk-io-rate'
     type: 'progress' | 'text'
     icon?: string
     color?: string
@@ -35,7 +37,7 @@ export interface CustomMetric {
     checkExpected?: string
     unavailableText?: string
     detailCommand?: string
-    /** False hides a failed prerequisite in every display, without hiding command errors. */
+    /** False starts hidden and retains the last check decision throughout refreshes. */
     visibleWhenUnavailable?: boolean
     /** Only carousel filtering uses this flag. Omission preserves visible failure notices. */
     showWhenUnavailable?: boolean
