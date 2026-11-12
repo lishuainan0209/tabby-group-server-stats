@@ -44,6 +44,11 @@ async function main() {
         await page.goto(`http://127.0.0.1:${server.address().port}`)
         await page.waitForFunction(() => window.ready, null, { timeout: 15000 })
         const mutate = async fn => page.evaluate(`(${fn})(); window.tick()`)
+        if (process.argv.includes('--click-only')) {
+            await require('./browser/click-stability.cjs')(page)
+            assert.deepEqual(errors, [])
+            return
+        }
         if (process.argv.includes('--overlay-only')) {
             await require('./browser/overlay-regression.cjs')(page, mutate)
             assert.deepEqual(errors, [])
@@ -1505,7 +1510,7 @@ async function main() {
         assert.equal(await toggles.nth(2).getAttribute('aria-label'), '当前分屏状态栏选项')
         if (process.env.VISIBILITY_SCREENSHOT) await page.locator('.visibility-demo').screenshot({ path: process.env.VISIBILITY_SCREENSHOT })
         await toggles.nth(0).click()
-        assert.deepEqual((await visibilityPanes.nth(0).locator('.pane-status-menu button').allTextContents()).map(text => text.trim()), ['显示', '✓隐藏', '概览', '轮播显示', '静态显示', '左上', '右上', '左下', '✓右下', '✓顶部对齐', '居中对齐'])
+        assert.deepEqual((await visibilityPanes.nth(0).locator('.pane-status-menu button').allTextContents()).map(text => text.trim()), ['显示', '✓隐藏', '概览', '轮播显示', '静态显示', '图标左上', '图标右上', '图标左下', '✓图标右下', '✓顶部对齐', '居中对齐'])
         const optionBoxes = await visibilityPanes.nth(0).locator('.pane-status-menu button').evaluateAll(nodes => nodes.map(node => {
             const rect = node.getBoundingClientRect(); return { x: rect.x, y: rect.y, bottom: rect.bottom };
         }))
@@ -1534,7 +1539,7 @@ async function main() {
         const paneGroups = i => visibilityPanes.nth(i).locator('.metric-group')
         assert.equal(await paneGroups(0).locator('.carousel-slot').count(), 1, 'original group modes are used before overriding')
         await toggles.nth(0).click()
-        assert.deepEqual((await visibilityPanes.nth(0).locator('.pane-status-menu button').allTextContents()).map(text => text.trim()), ['✓Show', 'Hide', 'Overview', 'Carousel', 'Static', 'Top left', 'Top right', 'Bottom left', '✓Bottom right', '✓Align top', 'Align center'])
+        assert.deepEqual((await visibilityPanes.nth(0).locator('.pane-status-menu button').allTextContents()).map(text => text.trim()), ['✓Show', 'Hide', 'Overview', 'Carousel', 'Static', 'Icon top left', 'Icon top right', 'Icon bottom left', '✓Icon bottom right', '✓Align top', 'Align center'])
         await visibilityPanes.nth(0).locator('.pane-menu-static').click()
         assert.equal(await paneGroups(0).locator('.collapsed-slot').count(), 0)
         assert.equal(await paneGroups(0).locator('.metric-row').count(), 4)
@@ -1706,6 +1711,7 @@ async function main() {
         assert.equal(await page.evaluate(() => window.harness.config.store.plugin.serverStats.customMetrics.find(metric => metric.label === 'Shortcut single').command), 'printf single')
         console.log('PASS single-label navigation, Ctrl+S and save/discard/continue close choices preserve stored data')
         await require('./browser/overlay-regression.cjs')(page, mutate)
+        await require('./browser/click-stability.cjs')(page)
         assert.equal(errors.length, 0, errors.join('\n'))
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)) }
 }

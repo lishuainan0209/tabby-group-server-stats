@@ -79,7 +79,7 @@ import { METRIC_COLORS } from '../metric-colors'
         <ng-container *ngIf="group.mode === 'static'">
           <div *ngFor="let metric of allMetrics(group); trackBy: trackId" class="metric-row" tabindex="0" [class.child-row]="metric.id !== group.main?.id" [class.main-row]="metric.id === group.main?.id"
                (click)="toggleGroupDetails(group, $event, metric)" (keydown.enter)="toggleGroupDetails(group, $event, metric)" (keydown.space)="toggleGroupDetails(group, $event, metric)"
-               (mouseenter)="enterChild(group, metric)" (mouseleave)="leaveMetric(metric)"
+               (mouseenter)="enterChild(group, metric, true, $event)" (mouseleave)="leaveMetric(metric)"
                (focusin)="enterChild(group, metric)" (focusout)="leaveMetric(metric)">
             <ng-container *ngTemplateOutlet="value; context: { $implicit: metric, expanded: expanded(group, metric) }"></ng-container>
           </div>
@@ -407,10 +407,40 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         return group.layout === 'vertical' ? this.expandedTarget === 'group:' + group.id : this.expandedTarget === 'metric:' + metric.id
     }
     expandedTarget = ''
+    private expandedAnchor: HTMLElement | null = null
+    private expandedPointer: { x: number; y: number } | null = null
+    private rememberExpansion(event: Event, group?: CustomMetricGroup) {
+        const element = event.currentTarget as HTMLElement
+        this.expandedAnchor = group && (group.mode !== 'static' || group.layout === 'vertical') ? element.closest('.metric-group') : element
+        this.expandedPointer = event.type === 'click' ? { x: (event as MouseEvent).clientX, y: (event as MouseEvent).clientY } : null
+    }
+    // Inline expansion can wrap the strip and move it away from a stationary
+    // pointer. Only actual pointer movement should dismiss a mouse-opened view.
+    private stationaryEntry(event?: Event): boolean {
+        return !!this.expandedTarget && !!this.expandedPointer && event?.type === 'mouseenter' &&
+            (event as MouseEvent).clientX === this.expandedPointer.x && (event as MouseEvent).clientY === this.expandedPointer.y
+    }
+    @HostListener('document:mousemove', ['$event'])
+    onPointerMove(event: MouseEvent) {
+        if (!this.expandedTarget || !this.expandedPointer) return
+        if (event.clientX === this.expandedPointer.x && event.clientY === this.expandedPointer.y) return
+        this.expandedPointer = { x: event.clientX, y: event.clientY }
+        const target = event.target as Node
+        clearTimeout(this.closeTimer)
+        if (this.expandedAnchor?.contains(target) || this.portal?.contains(target)) return
+        if (!this.portal) { this.closeHover(); this.cdr.markForCheck(); return }
+        this.closeTimer = setTimeout(() => { this.closeHover(); this.cdr.markForCheck() }, 100)
+    }
+    @HostListener('document:keydown.tab')
+    onKeyboardNavigation() { this.expandedPointer = null }
+    @HostListener('document:mouseleave')
+    @HostListener('window:blur')
+    onWindowLeave() { this.closeHover(); this.cdr.markForCheck() }
     toggleSingleDetails(metric: CustomMetric, event: Event) {
         event.preventDefault(); event.stopPropagation()
         this.enterSingle(metric, event, false)
         this.expandedTarget = this.expandedTarget === 'metric:' + metric.id ? '' : 'metric:' + metric.id
+        this.rememberExpansion(event)
         this.cdr.detectChanges()
         void this.refreshDetails()
     }
@@ -420,11 +450,13 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         if (metric) this.enterChild(group, metric, false)
         const target = group.mode === 'static' && group.layout !== 'vertical' && metric ? 'metric:' + metric.id : 'group:' + group.id
         this.expandedTarget = this.expandedTarget === target ? '' : target
+        this.rememberExpansion(event, group)
         this.cdr.detectChanges()
         void this.refreshDetails()
     }
     enterMetric(metric: CustomMetric, refresh = true) { this.hoveredMetric = metric.id; if (refresh) void this.refreshDetails() }
     enterSingle(metric: CustomMetric, event: Event, refresh = true) {
+        if (this.stationaryEntry(event) && this.expandedTarget !== 'metric:' + metric.id) return
         clearTimeout(this.closeTimer)
         if (this.hoveredMetric !== metric.id || this.hoveredGroup) this.expandedTarget = ''
         this.hoveredGroup = null
@@ -435,25 +467,29 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
     keepSingle(metric: CustomMetric) { clearTimeout(this.closeTimer); this.enterMetric(metric) }
     leaveSingle(metric: CustomMetric) {
+        if (this.expandedTarget && this.expandedPointer) return
         this.closeTimer = setTimeout(() => {
             if (this.singlePopup?.nativeElement.matches(':hover')) return
             if (this.hoveredMetric === metric.id && !this.hoveredGroup) { this.closeHover(); this.cdr.markForCheck() }
         }, 100)
     }
     leaveMetric(metric: CustomMetric) {
+        if (this.expandedTarget && this.expandedPointer) return
         if (this.expandedTarget === 'metric:' + metric.id) this.expandedTarget = ''
         if (this.hoveredMetric === metric.id) {
             this.hoveredMetric = null
             this.invalidateHover()
         }
     }
-    enterChild(group: CustomMetricGroup, metric: CustomMetric, refresh = true) {
+    enterChild(group: CustomMetricGroup, metric: CustomMetric, refresh = true, event?: Event) {
+        if (this.stationaryEntry(event) && this.expandedTarget !== 'metric:' + metric.id) return
         if (group.layout !== 'vertical') {
             this.hoveredGroup = group.id
             this.enterMetric(metric, refresh)
         }
     }
     enterGroup(group: CustomMetricGroup, event: Event, refresh = true) {
+        if (this.stationaryEntry(event) && this.hoveredGroup !== group.id) return
         clearTimeout(this.closeTimer)
         if (this.hoveredGroup !== group.id) this.expandedTarget = ''
         if (this.hoveredGroup !== group.id || group.mode !== 'static' || group.layout === 'vertical') this.hoveredMetric = null
@@ -464,6 +500,7 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
     keepGroup(group: CustomMetricGroup) { clearTimeout(this.closeTimer); this.hoveredGroup = group.id; void this.refreshDetails() }
     leaveGroup(group: CustomMetricGroup) {
+        if (this.expandedTarget && this.expandedPointer) return
         this.closeTimer = setTimeout(() => {
             if (this.hoveredGroup === group.id) { this.closeHover(); this.cdr.markForCheck() }
         }, group.mode === 'static' ? 0 : 100)
@@ -473,6 +510,8 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
     @HostListener('document:keydown.escape') closeHover() {
         this.expandedTarget = ''
+        this.expandedAnchor = null
+        this.expandedPointer = null
         clearTimeout(this.closeTimer)
         this.hoveredMetric = null
         this.hoveredGroup = null

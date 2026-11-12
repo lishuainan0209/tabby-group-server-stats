@@ -2,7 +2,7 @@
 
 [中文](README.md) | English
 
-SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.8.1**, preserving collection caches on display changes and label visibility during refreshes.
+SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.8.2**, preserving collection caches on display changes and label visibility during refreshes.
 
 Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
@@ -287,3 +287,7 @@ Labels align to the top and group main titles are bold. Hover still accelerates 
 The 43 bundled disk I/O prerequisite commands are about 43.5% shorter in total with the same mount and counter validation. Sampling, deduplication, mapping-change checks and colors are unchanged. Startup migrates only exact old generated checks, preserving customized scripts.
 
 The pane icon menu offers top or center label alignment (top by default), saved independently per pane. Switching preserves collectors and mounted strips; separators retain the full row height.
+
+### 1.8.2 Detail dismissal fix
+
+Mouse-opened details stay open when the terminal regains keyboard focus or inline details reflow the bottom bar. Actual pointer departure, another click, Escape or leaving the window still closes them. Tab navigation retains focus-based dismissal.

@@ -127,8 +127,8 @@ export class ServerStatsBottomBarComponent implements OnInit, OnDestroy {
     iconCorner = 'bottom-right'
     paneAlignment = 'top'
     readonly iconCorners = [
-        { id: 'top-left', label: 'Top left' }, { id: 'top-right', label: 'Top right' },
-        { id: 'bottom-left', label: 'Bottom left' }, { id: 'bottom-right', label: 'Bottom right' },
+        { id: 'top-left', label: 'Icon top left' }, { id: 'top-right', label: 'Icon top right' },
+        { id: 'bottom-left', label: 'Icon bottom left' }, { id: 'bottom-right', label: 'Icon bottom right' },
     ]
     @ViewChild('paneToggle') private paneToggle?: ElementRef<HTMLButtonElement>
     @ViewChild('paneMenu') private paneMenu?: ElementRef<HTMLElement>
