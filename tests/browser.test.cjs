@@ -44,6 +44,26 @@ async function main() {
         await page.goto(`http://127.0.0.1:${server.address().port}`)
         await page.waitForFunction(() => window.ready, null, { timeout: 15000 })
         const mutate = async fn => page.evaluate(`(${fn})(); window.tick()`)
+        if (process.argv.includes('--inactive-only')) {
+            await require('./browser/inactive-tab.cjs')(page)
+            assert.deepEqual(errors, [])
+            return
+        }
+        if (process.argv.includes('--owner-scroll-only')) {
+            await require('./browser/editor-owner-scroll.cjs')(page)
+            assert.deepEqual(errors, [])
+            return
+        }
+        if (process.argv.includes('--network-only')) {
+            await require('./browser/network-overview.cjs')(page)
+            assert.deepEqual(errors, [])
+            return
+        }
+        if (process.argv.includes('--carousel-only')) {
+            await require('./browser/carousel-layout.cjs')(page)
+            assert.deepEqual(errors, [])
+            return
+        }
         if (process.argv.includes('--click-only')) {
             await require('./browser/click-stability.cjs')(page)
             assert.deepEqual(errors, [])
@@ -1088,16 +1108,16 @@ async function main() {
         await netBuiltin.locator('.inline-item-editor').waitFor()
         assert.equal(await netBuiltin.locator('.member-editor').count(), 0, 'Built-in group Edit also starts collapsed')
         assert.equal(await netBuiltin.locator('.group-member-child').count(), 2)
-        assert.equal(await netBuiltin.locator('.group-member-main .member-enabled').getAttribute('aria-pressed'), 'false')
+        assert.equal(await netBuiltin.locator('.group-member-main .member-enabled').getAttribute('aria-pressed'), 'true')
         await netBuiltin.locator('.group-member-child .member-toggle').first().click()
         await netBuiltin.locator('.group-member-child .metric-command textarea').fill('printf 8.5')
         await netBuiltin.getByRole('button', { name: 'Save Group', exact: true }).click()
         const savedNetwork = await page.evaluate(() => window.harness.config.store.plugin.serverStats.defaultMetricOverrides.net)
         assert.equal(savedNetwork.children[0].command, 'printf 8.5')
         assert.equal(savedNetwork.children[0].suffix, ' KiB/s')
-        assert.equal(savedNetwork.main.enabled, false)
+        assert.notEqual(savedNetwork.main.enabled, false)
         await netBuiltin.locator('.builtin-reset').click()
-        console.log('PASS built-in network uses the same group editor and preserves its two-direction layout')
+        console.log('PASS built-in network uses the same group editor and preserves its total plus two directions')
         const builtinOrder = async () => page.locator('.builtin-card').evaluateAll(cards => cards.map(card => card.getAttribute('data-builtin')))
         assert.deepEqual(await builtinOrder(), ['ram', 'net', 'load'])
         assert.equal(await page.locator('.builtin-card').first().locator('.builtin-move-up').isDisabled(), true)
@@ -1712,6 +1732,14 @@ async function main() {
         console.log('PASS single-label navigation, Ctrl+S and save/discard/continue close choices preserve stored data')
         await require('./browser/overlay-regression.cjs')(page, mutate)
         await require('./browser/click-stability.cjs')(page)
+        assert.equal(errors.length, 0, errors.join('\n'))
+        await require('./browser/carousel-layout.cjs')(page)
+        assert.equal(errors.length, 0, errors.join('\n'))
+        await require('./browser/inactive-tab.cjs')(page)
+        assert.equal(errors.length, 0, errors.join('\n'))
+        await require('./browser/editor-owner-scroll.cjs')(page)
+        assert.equal(errors.length, 0, errors.join('\n'))
+        await require('./browser/network-overview.cjs')(page)
         assert.equal(errors.length, 0, errors.join('\n'))
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)) }
 }

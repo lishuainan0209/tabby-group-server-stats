@@ -209,8 +209,8 @@ test('host config fixture enforces structural getters, mutable maps and raw-back
 test('settings constructor migrates a fresh host ConfigProxy without assigning structural objects', () => {
   const fixture = hostSettingsFixture();
   const conf = fixture.config.store.plugin.serverStats;
-  assert.equal(conf.builtinDefaultsVersion, 1);
-  assert.equal(fixture.raw.plugin.serverStats.builtinDefaultsVersion, 1);
+  assert.equal(conf.builtinDefaultsVersion, 2);
+  assert.equal(fixture.raw.plugin.serverStats.builtinDefaultsVersion, 2);
   assert.equal(fixture.editor.builtinKeys.join(','), 'ram,net,load');
   assert.equal(conf.defaultMetrics.ram, true);
   assert.equal(conf.defaultMetrics.net, true);

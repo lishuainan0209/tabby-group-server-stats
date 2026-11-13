@@ -130,8 +130,10 @@ const macEnv = { MAC_BEFORE: macTable(gib, 2 * gib), MAC_AFTER: macTable(gib + 1
 test('macOS reads named byte columns once per link, excluding address aliases and loopback', () => {
     assert.equal(run(createNetworkRateCommand('rx'), macMock, macEnv).stdout.trim(), '0.800000')
     assert.equal(run(createNetworkRateCommand('tx'), macMock, macEnv).stdout.trim(), '1.60')
+    assert.equal(run(createNetworkRateCommand('total'), macMock, macEnv).stdout.trim(), '2.40')
     assert.equal(run(createNetworkDetailCommand('rx'), macMock, macEnv).stdout.trim(), 'Received total: 1.000 GB (since interface reset; en0)')
     assert.equal(run(createNetworkDetailCommand('tx'), macMock, macEnv).stdout.trim(), 'Sent total: 2.000 GB (since interface reset; en0)')
+    assert.equal(run(createNetworkDetailCommand('total'), macMock, macEnv).stdout.trim(), 'Combined total: 3.000 GB (since interface reset; en0)')
 })
 
 test('macOS supports low rates, resets, missing high-resolution clock and no-route fallback', () => {

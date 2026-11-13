@@ -574,7 +574,7 @@ test('built-in overrides are independent drafts, preserve stable IDs and honor l
     assert.equal(visible.customMetrics[0].id, 'builtin-ram')
     assert.equal(visible.customMetrics[0].icon, '')
     assert.equal(visible.customMetrics[0].displayScope.mode, 'selected')
-    assert.equal(visible.metricGroups[0].main.enabled, false)
+    assert.notEqual(visible.metricGroups[0].main.enabled, false)
     assert.equal(visible.metricGroups[0].children[0].icon, '')
     assert.equal(getBuiltinDefinition('ram', conf).icon, 'stats-memory')
     assert.equal(getBuiltinDefinitions({ defaultMetrics: {} }).customMetrics.length, 0)

@@ -961,8 +961,41 @@ export class ServerStatsSettingsComponent implements AfterViewInit, AfterViewChe
     private navigatorDrag: { pointerId: number; x: number; y: number; handle: HTMLElement } | null = null;
     private settingsBody: HTMLElement | null = null;
     private bodyStyles: { name: string; value: string; priority: string }[] = [];
+    private navigatorVisibilityObserver: MutationObserver | null = null;
+    private navigatorAncestors: HTMLElement[] = [];
+
+    private watchNavigatorOwner() {
+        // Keep watching the original containers while Tabby detaches a cached
+        // view, so reinserting it into the same container is observed as well.
+        if (!this.element?.nativeElement.isConnected) return;
+        const ancestors: HTMLElement[] = [];
+        for (let node = this.element?.nativeElement; node; node = node.parentElement) ancestors.push(node);
+        if (ancestors.length === this.navigatorAncestors.length && ancestors.every((node, i) => node === this.navigatorAncestors[i])) return;
+        this.navigatorVisibilityObserver?.disconnect();
+        this.navigatorAncestors = ancestors;
+        this.navigatorVisibilityObserver ??= new MutationObserver(() => {
+            this.watchNavigatorOwner();
+            this.syncNavigatorVisibility();
+        });
+        for (const node of ancestors) this.navigatorVisibilityObserver.observe(node, {
+            attributes: true, attributeFilter: ['class', 'style', 'hidden'], childList: true,
+        });
+    }
+
+    private syncNavigatorVisibility() {
+        const panel = this.navigatorPortal, owner = this.element?.nativeElement;
+        if (!panel || !owner) return;
+        // Tabby moves inactive tabs to left:-1000%; they still have layout boxes.
+        const owningTab = owner.closest('.content-tab');
+        const visible = (!owningTab || owningTab.classList.contains('content-tab-active')) &&
+            owner.isConnected && owner.getClientRects().length > 0 && getComputedStyle(owner).visibility !== 'hidden';
+        panel.style.display = visible ? '' : 'none';
+        if (!visible) this.navigatorDrag = null;
+        else this.positionNavigator();
+    }
 
     ngAfterViewInit() {
+        this.watchNavigatorOwner();
         // Tabby caps every settings provider at 600px. Widen only this provider's
         // container, then restore it when navigating to another settings page.
         this.settingsBody = this.element?.nativeElement.closest('settings-tab-body') || null;
@@ -985,13 +1018,14 @@ export class ServerStatsSettingsComponent implements AfterViewInit, AfterViewChe
             document.body.appendChild(panel);
         }
         this.navigatorPortal = panel;
-        this.positionNavigator();
+        this.watchNavigatorOwner();
+        this.syncNavigatorVisibility();
     }
 
     @HostListener('window:resize')
     positionNavigator() {
         const panel = this.navigatorPortal;
-        if (!panel) return;
+        if (!panel || panel.style.display === 'none') return;
         const { width, height } = panel.getBoundingClientRect();
         const desired = this.navigatorPosition || { left: window.innerWidth - width - 16, top: (window.innerHeight - height) / 2 };
         const left = Math.max(8, Math.min(desired.left, window.innerWidth - width - 8));
@@ -1021,7 +1055,10 @@ export class ServerStatsSettingsComponent implements AfterViewInit, AfterViewChe
     }
     resetNavigatorPosition() { this.navigatorPosition = null; this.positionNavigator(); }
     ngOnDestroy() {
+        this.navigatorVisibilityObserver?.disconnect();
+        this.navigatorVisibilityObserver = null; this.navigatorAncestors = [];
         this.navigatorPortal?.remove(); this.navigatorPortal = null; this.navigatorDrag = null;
+        this.cancelEdit(); // Closing the owning settings view discards its drafts.
         for (const item of this.bodyStyles) this.settingsBody?.style.setProperty(item.name, item.value, item.priority);
     }
     defaultMetric: Partial<CustomMetric> = {
@@ -1087,7 +1124,10 @@ export class ServerStatsSettingsComponent implements AfterViewInit, AfterViewChe
         // the top of the actual scroll container instead of its bottom edge.
         if (typeof document === 'undefined') return;
         setTimeout(() => {
-            const editor = document.getElementById(id);
+            const owner = this.element?.nativeElement;
+            if (!owner?.isConnected) return;
+            // Cached settings instances can contain the same metric IDs.
+            const editor = Array.from(owner.querySelectorAll<HTMLElement>('[id]')).find(node => node.id === id);
             (editor?.closest('.group-member') || editor)?.scrollIntoView({ block: 'start', behavior: 'auto' });
         });
     }

@@ -115,6 +115,60 @@ test('fresh defaults collect only memory, network and CPU load', () => {
     assert.equal(migrateLegacyBuiltinConfig(conf), false)
 })
 
+test('network overview displays the collected combined main before and after its first result', () => {
+    const definitions = getBuiltinDefinitions()
+    const network = definitions.metricGroups.find(group => group.id === 'builtin-net')
+    network.mode = 'overview'
+    const collected = model.allMetrics(definitions)
+    assert(collected.some(metric => metric.id === network.main.id), 'The overview must have a collection command')
+    assert.equal(network.main.command, builtins.createNetworkRateCommand('total'))
+    const strip = new Strip({}, {}, {}, {})
+    Object.assign(strip, { groups: [network], metrics: [], stats: { custom: [] } })
+    assert.equal(strip.collapsedMetric(network).id, 'builtin-net-main', 'Pending total keeps its placeholder')
+    strip.stats = { custom: [{ id: 'builtin-net-main', value: '6.40', status: 'ok' }] }
+    assert.equal(strip.collapsedMetric(network).id, 'builtin-net-main')
+    assert.deepEqual(ids(strip.visibleGroups), ['builtin-net'])
+})
+
+test('network migration enables an untouched legacy total once and preserves group and child edits', () => {
+    const network = getBuiltinDefaults().net
+    network.main.enabled = false
+    network.mode = 'overview'
+    network.label = 'My network'
+    network.children[0].label = 'Incoming'
+    network.children[0].command = 'printf 42'
+    const conf = { builtinDefaultsVersion: 1, defaultMetricOverrides: { net: network } }
+    const children = JSON.stringify(network.children)
+    assert.equal(migrateLegacyBuiltinConfig(conf), true)
+    assert.equal(conf.builtinDefaultsVersion, 2)
+    assert.equal(network.main.enabled, true)
+    assert.equal(network.mode, 'overview')
+    assert.equal(network.label, 'My network')
+    assert.equal(JSON.stringify(network.children), children)
+    network.main.enabled = false
+    const saved = JSON.stringify(conf)
+    assert.equal(migrateLegacyBuiltinConfig(conf), false)
+    assert.equal(JSON.stringify(conf), saved, 'A later deliberate disable must survive startup')
+})
+
+test('network migration preserves customized main commands, appearance, scope and explicit group disabling', () => {
+    for (const edit of [{ command: 'printf 42' }, { color: '#123456' }, { label: 'VPN' },
+        { displayScope: { mode: 'selected', profileIds: ['vpn'] } }, { detailCommand: 'printf custom' }]) {
+        const network = getBuiltinDefaults().net
+        Object.assign(network.main, { enabled: false }, edit)
+        const conf = { builtinDefaultsVersion: 1, defaultMetricOverrides: { net: network } }
+        const saved = JSON.stringify(network)
+        assert.equal(migrateLegacyBuiltinConfig(conf), true)
+        assert.equal(JSON.stringify(network), saved)
+    }
+    const conf = { builtinDefaultsVersion: 1, defaultMetrics: { net: false },
+        defaultMetricOverrides: { net: { ...getBuiltinDefaults().net, enabled: false } } }
+    migrateLegacyBuiltinConfig(conf)
+    assert.equal(conf.defaultMetrics.net, false)
+    assert.equal(conf.defaultMetricOverrides.net.enabled, false)
+    assert.equal(model.allMetrics(getBuiltinDefinitions(conf)).length, 0)
+})
+
 test('legacy enabled and edited built-ins survive as independent custom labels exactly once', () => {
     const existing = { id: 'legacy-builtin-cpu', label: 'Kept', command: 'printf kept', type: 'text' }
     const disk = { ...getBuiltinDefaults().disk, label: 'Archive', command: 'printf 91',

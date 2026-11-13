@@ -72,6 +72,7 @@ class VisibilityPane implements AfterViewInit, OnDestroy {
         <nav class="host-sidebar" *ngIf="hostedSettings">设置<br>终端<br>插件<br>服务器状态</nav>
         <div class="host-content"><settings-tab-body><server-stats-settings *ngIf="showSettingsContent"></server-stats-settings></settings-tab-body></div>
       </div>
+      <div class="other-settings" *ngIf="showOtherSettings"><settings-tab-body><server-stats-settings></server-stats-settings></settings-tab-body></div>
       <section class="visibility-demo" *ngIf="showVisibilityDemo"><visibility-pane *ngFor="let pane of visibilityPanes" [session]="pane"></visibility-pane></section>`,
     styles: [`.host-settings { display:flex; position:fixed; inset:34px 0 0; z-index:20; background:#11151c; } .host-sidebar { flex:0 0 222px; padding:20px; border-right:1px solid #ffffff30; line-height:3; } .host-settings .host-content { flex:1; min-width:0; overflow:auto; padding:20px 30px; transform:translateZ(0); } .terminal { height: 200px; margin-top: 20px; background: #101218; padding: 18px; color: #82dba0; font: 14px monospace; } .bar { padding: 8px 14px; background:#171a22; backdrop-filter:blur(8px); border-top: 1px solid #ffffff30; } h2 { font-size: 22px; } p { color: #98a4b5; } .scope-panes { display:flex; gap:12px; } .scope-pane { flex:1; min-width:0; padding:12px; background:#171c25; border:1px solid #ffffff25; border-radius:6px; } .scope-terminal { color:#82dba0; height:70px; font:12px monospace; } h4 { margin:0 0 18px; }`]
 })
@@ -90,6 +91,7 @@ class Harness {
     detailResults: Record<string, string> = {}
     previewChinese = false
     showSettings = false
+    showOtherSettings = false
     hostedSettings = false
     showSettingsContent = true
     showScopeDemo = false

@@ -32,6 +32,17 @@ module.exports = async function clickStability(page) {
         await pane.locator('.visibility-terminal').evaluate(node => node.focus())
         await page.waitForTimeout(150)
         assert(await expanded.count() > 0, `${mode}: terminal focus must not dismiss mouse-opened details`)
+        if (['single', 'overview', 'carousel'].includes(mode)) {
+            const a = await label.boundingBox(), p = await expanded.boundingBox()
+            const x = Math.max(a.x, p.x) + 3
+            const y = p.y < a.y ? (p.y + p.height + a.y) / 2 : (a.y + a.height + p.y) / 2
+            await page.mouse.move(x, y)
+            await page.waitForTimeout(300)
+            assert(await expanded.count() > 0, `${mode}: the gap leading into details belongs to the same interaction region`)
+        }
+        await expanded.first().hover()
+        await page.waitForTimeout(300)
+        assert(await expanded.count() > 0, `${mode}: moving onto details must keep them open`)
         await label.click()
         assert.equal(await expanded.count(), 0, `${mode}: second click still closes`)
         await label.click()

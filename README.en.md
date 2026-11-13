@@ -2,7 +2,7 @@
 
 [中文](README.md) | English
 
-SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.8.2**, preserving collection caches on display changes and label visibility during refreshes.
+SSH server monitoring for [Tabby](https://github.com/Eugeny/tabby): CPU load, memory, disk capacity, network rates and GPU memory metrics. Add custom shell commands, hover details and metric groups with overview, carousel or static layouts. The current source version is **1.8.3**, preserving collection caches on display changes and label visibility during refreshes.
 
 Fork author and maintainer: [lishuainan0209](https://github.com/lishuainan0209). This is an MIT-licensed fork of [Akkariin's tabby-server-stats](https://github.com/kasuganosoras/tabby-server-stats). The version number alone does not mean that the package has been published to npm.
 
@@ -291,3 +291,13 @@ The pane icon menu offers top or center label alignment (top by default), saved 
 ### 1.8.2 Detail dismissal fix
 
 Mouse-opened details stay open when the terminal regains keyboard focus or inline details reflow the bottom bar. Actual pointer departure, another click, Escape or leaving the window still closes them. Tab navigation retains focus-based dismissal.
+
+### 1.8.3 Detail interaction, carousel and network overview fixes
+
+The label, its expanded details and the connecting popup gap form one interaction region. Moving into details or pausing in that gap keeps them open; leaving the region or clicking the label again closes them.
+
+The editor navigator only appears while its owning settings view is visible. Switching away hides it; returning to that same view restores the draft. Closing the settings view discards unsaved editor drafts and removes its navigator without saving. The navigator's own Close button still offers save/discard choices.
+
+Carousel sizing now matches bold visible labels and remeasures after font changes, preventing unnecessary line breaks while retaining stable rotation widths and narrow-window wrapping. Network overview defaults to the combined receive and transmit rate measured over one sampling window. A one-time migration enables unchanged legacy default main labels while preserving custom settings and later manual disabling.
+
+Inactive Tabby tabs close detail popups and stop accelerated polling without reopening on return. Editor navigation stays within its owning settings view even when multiple views edit the same group.

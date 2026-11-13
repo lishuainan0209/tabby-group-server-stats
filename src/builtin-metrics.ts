@@ -152,7 +152,7 @@ export function getBuiltinDefaults(): BuiltinDefinitions {
             command: `data=$(df -Pk / 2>/dev/null) || exit 1; printf '%s\\n' "$data" | awk 'NR==2 {gsub(/%/,"",$5); print $5; found=1} END {if(!found) exit 1}'`,
             detailCommand: `data=$(df -Pk / 2>/dev/null) || exit 1; printf '%s\\n' "$data" | awk 'NR==2 {printf "%.1f/%.1f GB available\\n",$4/1048576,$2/1048576; found=1} END {if(!found) exit 1}'` },
         net: { id: 'builtin-net', label: 'Network', mode: 'static', layout: 'vertical',
-            main: { ...netMetric('builtin-net-main', 'Network', 'total', 'stats-network'), enabled: false },
+            main: netMetric('builtin-net-main', 'Network', 'total', 'stats-network'),
             children: [netMetric('builtin-net-rx', 'Download', 'rx', 'stats-network-download'), netMetric('builtin-net-tx', 'Upload', 'tx', 'stats-network-upload')] },
         load: createCpuLoadGroup()
     }
@@ -201,6 +201,22 @@ function isExistingCpuLoadGroup(group: CustomMetricGroup): boolean {
 
 /** One-time, lossless upgrade; the caller saves config only when this returns true. */
 export function migrateLegacyBuiltinConfig(conf: BuiltinConfig): boolean {
+    if ((conf.builtinDefaultsVersion || 0) >= 2) return false
+    migrateLegacyCpuDiskConfig(conf)
+    const main = conf.defaultMetricOverrides?.net?.main
+    const factory = getBuiltinDefaults().net.main
+    // Old settings saved the disabled factory main with the rest of the group.
+    // Upgrade only that stock main; keep custom commands, appearance and scope.
+    // A versioned migration also respects any later deliberate disable action.
+    if (main?.enabled === false && Object.entries(main).every(([key, value]) =>
+        key === 'enabled' || JSON.stringify(value) === JSON.stringify(factory[key as keyof CustomMetric]))) {
+        main.enabled = true
+    }
+    conf.builtinDefaultsVersion = 2
+    return true
+}
+
+function migrateLegacyCpuDiskConfig(conf: BuiltinConfig): boolean {
     if ((conf.builtinDefaultsVersion || 0) >= 1) return false
     // Tabby exposes structural config objects through getter-only properties.
     // Read only declared flags: spreading its proxy also copies internal helpers.

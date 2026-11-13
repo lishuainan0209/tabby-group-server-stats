@@ -118,7 +118,7 @@ import { METRIC_COLORS } from '../metric-colors'
     `,
     styles: [`
       :host { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px 6px; min-width: 0; font-size: 11px; color: #ddd; }
-      .main-row .metric-label, .collapsed-row .metric-label { font-weight: 700; }
+      .main-row .metric-label, .collapsed-row .metric-label, .carousel-measure .metric-label { font-weight: 700; }
       .single.metric-row { align-items: flex-start; }
       .single, .metric-group { border-right: 2px solid #aeb9c9; padding-right: 6px; align-self: stretch; }
       .metric-row { display: inline-flex; align-items: center; gap: 6px; min-height: 18px; max-width: 100%; }
@@ -196,7 +196,8 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     @ViewChild('singlePopup') singlePopup?: ElementRef<HTMLElement>
     @ViewChildren('carouselSlot') carouselSlots?: QueryList<ElementRef<HTMLElement>>
     private portal: HTMLElement | null = null
-    private carouselWidths = new Map<string, { width: number; settled: boolean }>()
+    private carouselWidths = new Map<string, { width: number; settled: boolean; typography: string }>()
+    private readonly onFontsLoaded = () => { this.carouselWidths.clear(); if (!this.destroyed) this.cdr.markForCheck() }
     details: Record<string, string> = {}
     hoveredMetric: string | null = null
     hoveredGroup: string | null = null
@@ -240,6 +241,7 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     }
 
     ngOnInit() {
+        document.fonts?.addEventListener('loadingdone', this.onFontsLoaded)
         void this.refreshDetails()
         this.zone.runOutsideAngular(() => {
             this.timer = setInterval(() => {
@@ -286,14 +288,25 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
             if (!id) continue
             const group = this.groups.find(item => item.id === id)
             if (!group) continue
+            // Measure with the same bold label styling as the visible row. A
+            // font/theme change invalidates the width, ordinary data updates do not.
+            const row = slot.querySelector<HTMLElement>('.carousel-measure')
+            const label = row?.querySelector<HTMLElement>('.metric-label')
+            const value = row?.querySelector<HTMLElement>('.metric-value')
+            if (!row || !label || !value) continue
+            const typography = [row, label, value].map(node => {
+                const style = getComputedStyle(node)
+                return [style.font, style.letterSpacing, style.gap].join('|')
+            }).join(';')
             let saved = this.carouselWidths.get(id)
+            if (saved?.typography !== typography) saved = undefined
             if (!saved?.settled) {
                 const widths = Array.from(slot.querySelectorAll<HTMLElement>('.carousel-measure')).map(row => row.getBoundingClientRect().width)
                 const measured = Math.ceil(Math.max(0, ...widths))
                 if (!measured) continue
                 // Reserve the longest child once the initial values arrive. Future
                 // longer values wrap inside this width, so the bar never jumps.
-                saved = { width: Math.max(saved?.width || 0, measured), settled: group.children.filter(metric => metric.enabled !== false).every(metric => this.status(metric) !== 'pending') }
+                saved = { width: Math.max(saved?.width || 0, measured), typography, settled: group.children.filter(metric => metric.enabled !== false).every(metric => this.status(metric) !== 'pending') }
                 this.carouselWidths.set(id, saved)
             }
             slot.style.setProperty('--carousel-width', `${saved.width}px`)
@@ -427,9 +440,19 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
         this.expandedPointer = { x: event.clientX, y: event.clientY }
         const target = event.target as Node
         clearTimeout(this.closeTimer)
-        if (this.expandedAnchor?.contains(target) || this.portal?.contains(target)) return
+        if (this.expandedAnchor?.contains(target) || this.portal?.contains(target) || this.inDetailBridge(event.clientX, event.clientY)) return
         if (!this.portal) { this.closeHover(); this.cdr.markForCheck(); return }
         this.closeTimer = setTimeout(() => { this.closeHover(); this.cdr.markForCheck() }, 100)
+    }
+    private inDetailBridge(x: number, y: number): boolean {
+        // The popup sits six pixels away from its label. This narrow connecting
+        // corridor is part of the interaction area, even if the pointer pauses.
+        if (!this.portal || !this.expandedAnchor) return false
+        const a = this.expandedAnchor.getBoundingClientRect(), p = this.portal.getBoundingClientRect()
+        const left = Math.min(a.left, p.left), right = Math.max(a.right, p.right)
+        const top = p.bottom <= a.top ? p.bottom : a.bottom
+        const bottom = p.bottom <= a.top ? a.top : p.top
+        return x >= left && x <= right && y >= top && y <= bottom
     }
     @HostListener('document:keydown.tab')
     onKeyboardNavigation() { this.expandedPointer = null }
@@ -525,6 +548,8 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
     private isHostVisible(): boolean {
         if (typeof document !== 'undefined' && document.hidden) return false
         const element = this.host?.nativeElement
+        const owningTab = element?.closest?.('.content-tab')
+        if (owningTab && !owningTab.classList.contains('content-tab-active')) return false
         return !element?.getClientRects || element.getClientRects().length > 0
     }
     @HostListener('window:resize')
@@ -590,5 +615,5 @@ export class MetricStripComponent implements OnInit, OnChanges, OnDestroy, After
             }
         } finally { this.detailRequests.delete(requestKey) }
     }
-    ngOnDestroy() { this.destroyed = true; this.generation++; clearInterval(this.timer); clearTimeout(this.closeTimer); this.portal?.remove() }
+    ngOnDestroy() { this.destroyed = true; this.generation++; clearInterval(this.timer); clearTimeout(this.closeTimer); this.portal?.remove(); document.fonts?.removeEventListener('loadingdone', this.onFontsLoaded) }
 }
