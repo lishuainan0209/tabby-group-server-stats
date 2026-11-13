@@ -20,6 +20,17 @@ module.exports = async function carouselLayout(page) {
         assert(Math.abs(a.y + a.height / 2 - b.y - b.height / 2) < 2, `Label and reading must stay on one line: ${JSON.stringify({ a, b })}`)
     }
     await oneLine()
+    for (const mode of ['overview', 'carousel']) {
+        await page.evaluate(mode => { window.harness.group = { ...window.harness.group, mode }; window.tick() }, mode)
+        const slot = await group.locator('.collapsed-slot').boundingBox()
+        const row = await group.locator('.collapsed-row').boundingBox()
+        assert(Math.abs(slot.height - row.height) < 1, `${mode}: inline baseline must not add empty space below the row`)
+        assert(Math.abs((await group.boundingBox()).y - row.y) < 1, `${mode}: top alignment stays at the group top`)
+        await page.locator('.bar server-stats-metric-strip').evaluate(node => { node.classList.add('center-aligned'); node.style.height = '60px' })
+        const outer = await group.boundingBox(), centered = await group.locator('.collapsed-row').boundingBox()
+        assert(Math.abs(outer.y + outer.height / 2 - centered.y - centered.height / 2) < 1, `${mode}: center the actual visible row`)
+        await page.locator('.bar server-stats-metric-strip').evaluate(node => { node.classList.remove('center-aligned'); node.style.height = '' })
+    }
     const width = (await group.boundingBox()).width
     await page.waitForFunction(() => document.querySelector('.carousel-active').textContent.includes('GPU 1'))
     await oneLine()

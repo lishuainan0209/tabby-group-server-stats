@@ -123,10 +123,12 @@ import { METRIC_COLORS } from '../metric-colors'
       .single, .metric-group { border-right: 2px solid #aeb9c9; padding-right: 6px; align-self: stretch; }
       .metric-row { display: inline-flex; align-items: center; gap: 6px; min-height: 18px; max-width: 100%; }
       .metric-row:focus-visible, .metric-group:focus-visible { outline: 1px solid #5baaff; outline-offset: 3px; }
-      .metric-label { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+      /* A standalone row and a collapsed group must share the same text box,
+         even when the host theme's line-height differs from the monospace font. */
+      .metric-label { display: inline-flex; gap: 4px; align-items: center; line-height: 18px; white-space: nowrap; }
       .metric-label svg, .metric-label img, .metric-image-icon { width: 12px; height: 12px; flex: 0 0 12px; fill: currentColor; object-fit: contain; }
       .metric-image-icon { display: inline-block; background: currentColor; mask-size: contain; mask-position: center; mask-repeat: no-repeat; -webkit-mask-size: contain; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat; }
-      .metric-value { font: 600 11px monospace; font-variant-numeric: tabular-nums; text-align: right; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .metric-value { font: 600 11px/18px monospace; font-variant-numeric: tabular-nums; text-align: right; white-space: pre-wrap; overflow-wrap: anywhere; }
       .metric-detail { font: 11px monospace; font-variant-numeric: tabular-nums; text-align: right; color: #d1d7e0; white-space: pre-wrap; overflow-wrap: anywhere; }
       .metric-detail.detail-pending { min-width: 8em; color: #aeb9c9 !important; }
       .numeric-ratio { display: inline-grid; grid-template-columns: var(--ratio-left-width, max-content) 1ch var(--ratio-right-width, max-content) var(--ratio-unit-width, max-content); align-items: baseline; white-space: pre; }
@@ -150,7 +152,7 @@ import { METRIC_COLORS } from '../metric-colors'
       .metric-group { display: inline-flex; gap: 6px; align-items: flex-start; position: relative; cursor: default; min-width: 0; max-width: 100%; box-sizing: border-box; }
       .metric-group:not(.vertical) > .metric-row + .metric-row { border-left: 1px solid #8b99ad; padding-left: 6px; }
       .metric-group:not(.vertical) > .metric-row { align-self: stretch; }
-      .collapsed-slot { min-width: 0; }
+      .collapsed-slot { display: flex; align-items: flex-start; min-width: 0; }
       .carousel-slot { flex: 0 1 auto; width: var(--carousel-width, max-content); max-width: calc(100vw - 48px); }
       .carousel-measures { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
       .carousel-measure { position: absolute; visibility: hidden; pointer-events: none; width: max-content; max-width: none; }
@@ -169,16 +171,17 @@ import { METRIC_COLORS } from '../metric-colors'
       .metric-group.vertical .metric-reading { grid-column: 2; }
       .metric-group.vertical .metric-detail { grid-column: 3; }
       .metric-group.vertical .child-row .metric-label { padding-left: 12px; }
-      .expand-hint { color: #8493a5; font-size: 9px; }
+      .expand-hint { color: #8493a5; font-size: 9px; line-height: 18px; }
       .group-details { position: fixed; z-index: 100000; box-sizing: border-box; width: max-content; background: #181c23; border: 1px solid #ffffff32; border-radius: 8px; padding: 10px 12px; box-shadow: 0 5px 24px #0009; overflow: auto; color: #ddd; }
       .details-title { font-size: 15px; font-weight: 600; padding-bottom: 7px; border-bottom: 1px solid #ffffff40; margin-bottom: 7px; }
       .detail-grid { display: grid; grid-template-columns: minmax(0, max-content) max-content minmax(0, max-content); align-items: center; gap: 4px 6px; }
       .detail-row { display: contents; }
-      .detail-row .metric-label { grid-column: 1; min-width: 0; font-size: 14px; white-space: normal; overflow-wrap: anywhere; }
+      .detail-row .metric-label { grid-column: 1; min-width: 0; font-size: 14px; line-height: inherit; white-space: normal; overflow-wrap: anywhere; }
       .detail-row.child-row .metric-label { padding-left: 16px; }
       .detail-row .metric-label svg, .detail-row .metric-label img, .detail-row .metric-image-icon { width: 15px; height: 15px; flex: 0 0 15px; }
       .detail-row .metric-reading { grid-column: 2; }
       .detail-row .metric-value, .detail-row .metric-detail { font-size: 13px; }
+      .detail-row .metric-value { line-height: normal; }
       .detail-row .metric-detail { grid-column: 3; min-width: 0; }
       .detail-error { font-weight: 500; }
       .empty { color: #c7a66c; }

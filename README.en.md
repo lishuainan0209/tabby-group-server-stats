@@ -294,6 +294,8 @@ Mouse-opened details stay open when the terminal regains keyboard focus or inlin
 
 ### 1.8.3 Detail interaction, carousel and network overview fixes
 
+Standalone labels and overview/carousel groups now share a consistent text line height. Removing collapsed-container baseline space and aligning labels, readings, icons and meters fixes mixed-row vertical offsets while preserving top/center preferences.
+
 The label, its expanded details and the connecting popup gap form one interaction region. Moving into details or pausing in that gap keeps them open; leaving the region or clicking the label again closes them.
 
 The editor navigator only appears while its owning settings view is visible. Switching away hides it; returning to that same view restores the draft. Closing the settings view discards unsaved editor drafts and removes its navigator without saving. The navigator's own Close button still offers save/discard choices.

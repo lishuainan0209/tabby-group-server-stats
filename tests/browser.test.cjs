@@ -27,7 +27,7 @@ async function main() {
     })
     const browser = await chromium.launch({ channel: process.env.TEST_BROWSER_CHANNEL || 'msedge', headless: true })
     try {
-        const page = await browser.newPage({ viewport: { width: 1100, height: 720 } })
+        const page = await browser.newPage({ viewport: { width: 1100, height: 720 }, deviceScaleFactor: Number(process.env.TEST_DEVICE_SCALE || 1) })
         const errors = []
         const externalRequests = []
         const githubPresetUrl = 'https://raw.githubusercontent.com/lishuainan0209/tabby-group-server-stats/main/presets.json'
@@ -44,6 +44,11 @@ async function main() {
         await page.goto(`http://127.0.0.1:${server.address().port}`)
         await page.waitForFunction(() => window.ready, null, { timeout: 15000 })
         const mutate = async fn => page.evaluate(`(${fn})(); window.tick()`)
+        if (process.argv.includes('--mixed-alignment-only')) {
+            await require('./browser/mixed-alignment.cjs')(page)
+            assert.deepEqual(errors, [])
+            return
+        }
         if (process.argv.includes('--inactive-only')) {
             await require('./browser/inactive-tab.cjs')(page)
             assert.deepEqual(errors, [])
@@ -1740,6 +1745,8 @@ async function main() {
         await require('./browser/editor-owner-scroll.cjs')(page)
         assert.equal(errors.length, 0, errors.join('\n'))
         await require('./browser/network-overview.cjs')(page)
+        assert.equal(errors.length, 0, errors.join('\n'))
+        await require('./browser/mixed-alignment.cjs')(page)
         assert.equal(errors.length, 0, errors.join('\n'))
     } finally { await browser.close(); await new Promise(resolve => server.close(resolve)) }
 }
